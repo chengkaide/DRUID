@@ -1,0 +1,63 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 有了这个文件，druid 就从一个"某个目录里的脚本"变成一个可被 pip 管理的包。
+#
+#   pip install -e .    开发模式安装，改代码立即生效，同时注册两个命令
+#
+# 装完之后在**任何目录**都能直接敲：
+#
+#   druid-reduce --dir 某批次目录 --plot      命令行批处理
+#   druid-gui                                 打开网页界面
+#
+# 这一步是"独立启动"的关键：命令被注册到 Python 的 Scripts 目录，
+# 不再依赖"必须先 cd 到某个特定路径"。
+#
+# 不装也能用：在包根目录（含 druid/ 的那一层）直接
+#   python -m druid.cli.reduce_batch --dir ... 
+# 或者双击 启动数据处理工具.bat。
+# ═══════════════════════════════════════════════════════════════════════════
+
+[project]
+name = "druid"
+version = "2.0.0"
+description = "LA-ICP-MS 锆石 U-Pb 同位素数据还原工具（DRUID）"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "内部研究用途" }
+authors = [{ name = "云龙锡矿项目组" }]
+# 关键词便于将来在内部索引里检索
+keywords = ["LA-ICP-MS", "U-Pb", "zircon", "geochronology", "depth-profile"]
+
+# 运行时依赖。刻意只列真正用到的，避免为了装它先拉几十个无用包。
+# 注意：scipy 不需要 —— 年龄方程的不动点迭代和二分法都是自己写的。
+dependencies = [
+    "numpy>=1.21",
+    "pandas>=1.3",
+    "matplotlib>=3.4",
+    "openpyxl>=3.0",
+    "xlrd>=2.0",
+]
+
+[project.optional-dependencies]
+# 网页界面只用标准库（http.server），这里留空位便于将来扩展
+webui = []
+
+[project.scripts]
+# pip 安装后自动生成的可执行入口
+druid-reduce = "druid.cli.reduce_batch:main"
+druid-gui    = "druid.cli.serve_ui:main"
+
+[tool.setuptools.packages.find]
+include = ["druid*"]
+exclude = ["tests*"]
+
+[tool.setuptools.package-data]
+# 网页界面的静态资源不是 .py，必须显式声明，否则 pip 安装后丢三落四
+druid = [
+    "webui/static/*.html",
+    "webui/static/*.js",
+    "webui/static/*.css",
+]

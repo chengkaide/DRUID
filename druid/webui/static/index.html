@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<!--
+  druid Web 界面 —— 单页结构
+  ========================
+  刻意用原生 HTML/CSS/JS，不引任何前端框架、不搞 npm 构建：
+    · 一键启动脚本不必先 yarn install，拷到任何机器上双击就能开；
+    · 将来离线环境也不会因为 CDN 拉不到 Vue/React 而白屏。
+  所有的交互逻辑在 app.js 里。
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>锆石 U-Pb 数据处理工具</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <h1>锆石 U-Pb 数据处理工具</h1>
+    <div class="sub">LA-ICP-MS 原始信号 → 年龄结果表 + 深度剖面年龄域</div>
+    <div class="addr" id="srvAddr">本地服务</div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- ═══ ① 数据源 ══════════════════════════════════════════════════════ -->
+  <section class="step" id="s1">
+    <h2><span class="num">1</span>选择数据批次</h2>
+
+    <div class="pick-row">
+      <div class="pick" id="btnBrowseDir">
+        <strong>浏览本机文件夹</strong>
+        <span>数据已经在某个磁盘目录里，一层层点进去选</span>
+      </div>
+      <div class="pick" id="btnBrowseDirect">
+        <strong>直接粘贴路径</strong>
+        <span>已经知道完整路径，直接填进去</span>
+      </div>
+    </div>
+
+    <div class="drop" id="dropZone">
+      也可以把 CSV / LIST 文件拖到这里上传（会临时拼成一个批次目录）
+    </div>
+
+    <div class="chosen" id="chosenBox" hidden>
+      <div class="path" id="chosenPath"></div>
+      <div class="facts" id="facts"></div>
+      <div class="problems" id="problems" hidden>
+        <ul id="problemList"></ul>
+      </div>
+    </div>
+
+    <div class="acts" style="margin-top:10px">
+      <button id="btnInspect" hidden>重新检查该目录</button>
+    </div>
+  </section>
+
+  <!-- ═══ ② 参数 ════════════════════════════════════════════════════════ -->
+  <section class="step dim" id="s2">
+    <h2><span class="num">2</span>处理参数<span style="font-size:12.5px;color:var(--ink-3);font-weight:400">（保持默认即可）</span></h2>
+
+    <div class="grid">
+      <div class="field">
+        <label>整段比值方法</label>
+        <select id="pBulk">
+          <option value="simple">simple —— 整段单一校正因子（推荐）</option>
+          <option value="ftau">ftau —— 逐窗口 F(τ) 深度校正</option>
+        </select>
+        <div class="hint">本矿区两批次实测 simple 更准，两者相差约 5 Ma</div>
+      </div>
+
+      <div class="field">
+        <label>主标（用于归一化）</label>
+        <input type="text" id="pPrimary" value="91500">
+        <div class="hint">决定 F 校正因子</div>
+      </div>
+
+      <div class="field">
+        <label>监控标样（用于 QC）</label>
+        <input type="text" id="pSecondary" value="Ple">
+        <div class="hint">不参与归一化，只做质量检查与二次校正</div>
+      </div>
+    </div>
+
+    <div class="row-checks">
+      <label class="check"><input type="checkbox" id="pPlot" checked> 生成深度剖面图</label>
+      <label class="check"><input type="checkbox" id="pDepth" checked> 做深度剖面年龄域判别</label>
+    </div>
+
+    <details class="adv">
+      <summary>高级参数（一般不需要动）</summary>
+      <div class="grid">
+        <div class="field">
+          <label>204Pb 显著性门槛（σ）</label>
+          <input type="number" id="pNSigma" value="2.0" step="0.5" min="0">
+          <div class="hint">越大越不容易触发普通铅校正</div>
+        </div>
+        <div class="field">
+          <label>滑动窗口宽度（s）</label>
+          <input type="number" id="pWin" value="4.0" step="0.5">
+        </div>
+        <div class="field">
+          <label>滑动步长（s）</label>
+          <input type="number" id="pStep" value="1.0" step="0.5">
+        </div>
+        <div class="field">
+          <label>剥蚀段两端裁切（s）</label>
+          <input type="number" id="pTrim" value="1.5" step="0.5">
+          <div class="hint">避开开关激光的瞬态信号</div>
+        </div>
+        <div class="field">
+          <label>气体空白取样时长（s）</label>
+          <input type="number" id="pBlank" value="15.0" step="1">
+        </div>
+        <div class="field">
+          <label>死时间校正（ns）</label>
+          <input type="number" id="pDead" value="0" step="0.0001">
+          <div class="hint">0 = 不校正（默认）；已标定值 14.7645</div>
+        </div>
+        <div class="field">
+          <label>结果 Excel 路径（可选）</label>
+          <input type="text" id="pOut" placeholder="默认与数据放在同一目录">
+        </div>
+      </div>
+    </details>
+  </section>
+
+  <!-- ═══ ③ 运行 ════════════════════════════════════════════════════════ -->
+  <section class="step dim" id="s3">
+    <h2><span class="num">3</span>开始处理</h2>
+    <div class="run-row">
+      <button class="primary" id="btnRun" disabled>开始处理</button>
+      <div class="bar"><i id="barFill"></i></div>
+      <span class="pct" id="pctTxt">0%</span>
+      <span class="clock" id="clockTxt"></span>
+    </div>
+    <div class="note" id="runNote">选好数据目录后即可开始。处理期间不要关闭这个标签页。</div>
+  </section>
+
+  <!-- ═══ ④ 日志 ════════════════════════════════════════════════════════ -->
+  <section class="step" id="s4">
+    <h2><span class="num">4</span>运行日志</h2>
+    <div class="term-head">
+      <span style="font-size:12.5px;color:var(--ink-3)">实时输出，和命令行窗口看到的一致</span>
+      <span id="logState" style="font-size:12px;color:var(--ink-3)"></span>
+    </div>
+    <div class="term" id="term"><span class="line empty">等待开始…</span></div>
+  </section>
+
+  <!-- ═══ ⑤ 产物 ════════════════════════════════════════════════════════ -->
+  <section class="step dim" id="s5">
+    <h2><span class="num">5</span>结果</h2>
+    <div class="stats" id="stats" hidden></div>
+    <div id="outputs"></div>
+    <div class="note" id="outNote">处理完成后在这里下载或打开结果。</div>
+  </section>
+
+</div>
+
+<!-- ═══ 目录浏览弹窗 ═══════════════════════════════════════════════════ -->
+<div class="mask" id="mask">
+  <div class="modal">
+    <header>
+      <h3>选择批次目录</h3>
+      <button class="ghost" id="btnCloseDir">关闭</button>
+    </header>
+    <div class="body">
+      <div class="crumb" id="crumb">…</div>
+      <div class="dlist" id="dlist"></div>
+    </div>
+    <footer>
+      <button id="btnUp">上一级</button>
+      <button id="btnDrives">回到磁盘根目录</button>
+      <button class="primary" id="btnPickThis">选择当前目录</button>
+    </footer>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

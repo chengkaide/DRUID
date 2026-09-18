@@ -1,0 +1,19 @@
+# 统一行尾，避免不同机器/平台之间反复整文件"改动"。
+#
+# .bat 必须是 CRLF：cmd.exe 解析批处理时不认 LF，行尾错了会出现
+# "命令明明在文件里、运行时却读不到"这种极难排查的现象。
+# 显式写 eol=crlf 之后，无论在哪个平台 clone，检出到工作区的都是 CRLF。
+#
+# 其余文本入库统一为 LF（text=auto 由 git 判断是否二进制）。
+
+* text=auto
+
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.spec text eol=lf
+
+# 二进制，不做任何换行转换
+*.xlsx binary
+*.xls  binary
+*.png  binary
+*.pdf  binary

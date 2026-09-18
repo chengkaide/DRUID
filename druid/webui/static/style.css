@@ -1,0 +1,240 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   druid Web 界面样式
+   --------------------------------------------------------------------------
+   设计取向：给做实验的人用的工具，不是给投资人看的落地页。
+   · 浅色底 + 蓝色主色，长时间盯着看不累
+   · 关键操作（开始处理）要足够大，误触的代价远大于按钮难看
+   · 日志区用深色：因为它显示的本来就是终端输出，视觉上应该像终端
+   ══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --bg: #f5f6f8;
+  --card: #ffffff;
+  --ink: #1f2937;
+  --ink-2: #4b5563;
+  --ink-3: #9ca3af;
+  --line: #e5e7eb;
+  --brand: #2563eb;
+  --brand-soft: #eff6ff;
+  --ok: #16a34a;
+  --ok-soft: #f0fdf4;
+  --warn: #b45309;
+  --warn-soft: #fffbeb;
+  --err: #dc2626;
+  --err-soft: #fef2f2;
+  --radius: 10px;
+  --mono: "Cascadia Mono", "Consolas", "Courier New", ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC",
+               "Hiragino Sans GB", system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.wrap { max-width: 940px; margin: 0 auto; padding: 0 20px 64px; }
+
+/* ── 页头 ─────────────────────────────────────────────────────────────── */
+header {
+  background: linear-gradient(180deg, #1e3a8a 0%, #1d4ed8 100%);
+  color: #fff;
+  padding: 22px 0 26px;
+  margin-bottom: 22px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.12);
+}
+header .wrap { padding-bottom: 0; }
+header h1 { margin: 0; font-size: 19px; font-weight: 600; letter-spacing: .3px; }
+header .sub { margin-top: 4px; font-size: 13px; opacity: .82; font-weight: 400; }
+header .addr {
+  margin-top: 10px; display: inline-block; font-family: var(--mono);
+  font-size: 12px; background: rgba(255,255,255,.16);
+  padding: 3px 9px; border-radius: 5px;
+}
+
+/* ── 步骤卡片 ─────────────────────────────────────────────────────────── */
+.step {
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 18px 20px; margin-bottom: 16px;
+}
+.step h2 {
+  margin: 0 0 14px; font-size: 15px; font-weight: 600;
+  display: flex; align-items: center; gap: 9px;
+}
+.num {
+  width: 22px; height: 22px; flex: 0 0 22px; border-radius: 50%;
+  background: var(--brand); color: #fff; font-size: 12px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-weight: 600;
+}
+.step.dim { opacity: .45; }
+
+/* ── 数据源：两个入口 ─────────────────────────────────────────────────── */
+.pick-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.pick {
+  flex: 1 1 260px; border: 1.5px dashed var(--line); border-radius: 8px;
+  padding: 16px 14px; cursor: pointer; background: #fafbfc;
+  transition: all .15s; text-align: left;
+}
+.pick:hover { border-color: var(--brand); background: var(--brand-soft); }
+.pick strong { display: block; font-size: 14px; margin-bottom: 3px; }
+.pick span { font-size: 12px; color: var(--ink-3); }
+.pick.hot { border-color: var(--brand); background: var(--brand-soft); }
+
+/* 拖拽上传区域 */
+.drop {
+  margin-top: 12px; border: 1.5px dashed var(--line); border-radius: 8px;
+  padding: 22px; text-align: center; color: var(--ink-3); font-size: 13px;
+  background: #fafbfc; transition: all .15s;
+}
+.drop.hot { border-color: var(--brand); background: var(--brand-soft); color: var(--brand); }
+
+/* 已选目录显示 */
+.chosen {
+  margin-top: 12px; background: #fafbfc; border: 1px solid var(--line);
+  border-radius: 8px; padding: 12px 14px;
+}
+.chosen .path {
+  font-family: var(--mono); font-size: 13px; word-break: break-all;
+  color: var(--ink);
+}
+.chosen .acts { margin-top: 8px; display: flex; gap: 8px; }
+
+/* ── 探测结果：绿勾 / 红叉 ────────────────────────────────────────────── */
+.facts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.fact {
+  background: var(--ok-soft); border: 1px solid #bbf7d0; color: #166534;
+  border-radius: 6px; padding: 4px 10px; font-size: 12.5px;
+}
+.fact.bad { background: var(--err-soft); border-color: #fecaca; color: #991b1b; }
+.fact.warn { background: var(--warn-soft); border-color: #fde68a; color: #92400e; }
+.fact b { font-weight: 600; }
+
+.problems { margin-top: 10px; padding: 10px 12px; background: var(--err-soft);
+            border: 1px solid #fecaca; border-radius: 8px; color: #991b1b; font-size: 13px; }
+.problems li { margin-left: 16px; }
+
+/* ── 表单 ─────────────────────────────────────────────────────────────── */
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px 18px; }
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field label { font-size: 12.5px; color: var(--ink-2); font-weight: 500; }
+.field .hint { font-size: 11.5px; color: var(--ink-3); }
+input[type=text], input[type=number], select {
+  border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px;
+  font-size: 13.5px; font-family: inherit; color: var(--ink); background: #fff;
+  width: 100%;
+}
+input:focus, select:focus { outline: 2px solid var(--brand-soft); border-color: var(--brand); }
+.row-checks { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 14px; }
+.check { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; cursor: pointer; }
+.check input { width: 15px; height: 15px; accent-color: var(--brand); cursor: pointer; }
+
+details.adv { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; }
+details.adv summary { cursor: pointer; font-size: 13px; color: var(--brand); user-select: none; }
+details.adv summary:hover { text-decoration: underline; }
+details.adv .grid { margin-top: 12px; }
+
+/* ── 按钮 ─────────────────────────────────────────────────────────────── */
+button {
+  font-family: inherit; font-size: 13px; cursor: pointer;
+  border-radius: 6px; border: 1px solid var(--line);
+  background: #fff; color: var(--ink); padding: 6px 13px;
+  transition: all .12s;
+}
+button:hover:not(:disabled) { border-color: var(--brand); color: var(--brand); }
+button:disabled { opacity: .5; cursor: not-allowed; }
+button.primary {
+  background: var(--brand); border-color: var(--brand); color: #fff;
+  font-size: 15px; padding: 11px 30px; font-weight: 600; border-radius: 8px;
+}
+button.primary:hover:not(:disabled) { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
+button.ghost { background: transparent; }
+
+.run-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.bar { flex: 1 1 200px; height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; min-width: 140px; }
+.bar > i { display: block; height: 100%; background: var(--brand); width: 0; transition: width .35s ease; }
+.bar > i.done { background: var(--ok); }
+.bar > i.err { background: var(--err); }
+.pct { font-family: var(--mono); font-size: 13px; color: var(--ink-2); min-width: 42px; }
+.clock { font-family: var(--mono); font-size: 12px; color: var(--ink-3); }
+
+/* ── 日志终端 ─────────────────────────────────────────────────────────── */
+.term {
+  background: #0f172a; color: #d1d5db; border-radius: 8px; padding: 12px 14px;
+  font-family: var(--mono); font-size: 12.5px; line-height: 1.62;
+  height: 300px; overflow-y: auto; white-space: pre-wrap; word-break: break-all;
+}
+.term .line.empty { color: #64748b; }
+.term .stage { color: #7dd3fc; font-weight: 600; }
+.term .bad { color: #fca5a5; }
+.term .good { color: #86efac; }
+.term-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+
+/* ── 产物 ─────────────────────────────────────────────────────────────── */
+.out {
+  display: flex; align-items: center; gap: 12px; padding: 11px 13px;
+  border: 1px solid var(--line); border-radius: 8px; margin-bottom: 9px; background: #fafbfc;
+}
+.out .ico {
+  width: 32px; height: 32px; flex: 0 0 32px; border-radius: 6px;
+  background: var(--brand-soft); color: var(--brand);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.out .meta { flex: 1; min-width: 0; }
+.out .meta .n { font-size: 13.5px; font-weight: 500; }
+.out .meta .p { font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); word-break: break-all; }
+.out .gacts { display: flex; gap: 7px; }
+
+/* 结果摘要小卡片 */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.stat { background: #fafbfc; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.stat .k { font-size: 11.5px; color: var(--ink-3); }
+.stat .v { font-size: 18px; font-weight: 600; color: var(--ink); font-family: var(--mono); }
+.stat .v.ok { color: var(--ok); }
+.stat .v.bad { color: var(--err); }
+
+/* ── 目录浏览弹窗 ─────────────────────────────────────────────────────── */
+.mask {
+  position: absolute; inset: 0; background: rgba(15,23,42,.45);
+  display: none; z-index: 50; padding: 40px 20px; overflow: auto;
+}
+.mask.show { display: block; }
+.modal {
+  background: #fff; border-radius: 12px; max-width: 660px; margin: 0 auto;
+  overflow: hidden; box-shadow: 0 12px 40px rgba(0,0,0,.22);
+}
+.modal header {
+  background: #fff; color: var(--ink); padding: 14px 18px; margin: 0;
+  border-bottom: 1px solid var(--line); box-shadow: none;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.modal header h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.modal .body { padding: 14px 18px; }
+.crumb {
+  font-family: var(--mono); font-size: 12.5px; color: var(--ink-2);
+  background: #f3f4f6; padding: 7px 10px; border-radius: 6px; margin-bottom: 12px;
+  word-break: break-all;
+}
+.dlist { max-height: 380px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; }
+.drow {
+  display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+  border-bottom: 1px solid #f3f4f6; cursor: pointer;
+}
+.drow:last-child { border-bottom: none; }
+.drow:hover { background: var(--brand-soft); }
+.drow .nm { flex: 1; font-size: 13.5px; }
+.drow .tg { font-size: 11.5px; color: var(--ink-3); font-family: var(--mono); }
+.drow.batch .nm { color: var(--brand); font-weight: 600; }
+.modal footer { padding: 12px 18px; border-top: 1px solid var(--line); display: flex; gap: 8px; justify-content: flex-end; background: #fafbfc; }
+
+.spin { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--line);
+        border-top-color: var(--brand); border-radius: 50%; animation: sp .8s linear infinite; }
+@keyframes sp { to { transform: rotate(360deg); } }
+
+.note { font-size: 12px; color: var(--ink-3); margin-top: 10px; }
+a { color: var(--brand); }
