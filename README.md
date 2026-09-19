@@ -7,6 +7,11 @@
 **标样质控表**与**逐深度的年龄剖面**；其中逐窗口剖面可以直接交给
 [ADEPT](../ADEPT) 做坪年龄与 MSWD 判定。
 
+> **在线文档 → <https://chengkaide.github.io/DRUID/>**
+> 　含《[从一块岩石到一个年龄](https://chengkaide.github.io/DRUID/from-first-principles.html)》
+> （从衰变原理讲到 MSWD，9 章 10 图）与
+> 《[两个工具的联系与数据流](https://chengkaide.github.io/DRUID/druid-adept-dataflow.html)》。
+
 名字取 "Depth-Resolved" 不是修辞：本工具与只做整段积分的常规流程最大的区别，
 是它把每个测点当成一条**随时间（即随坑深）变化的信号**来处理——分馏按深度校正、
 年龄域按深度划分。ADEPT 负责在这条剖面之上挑坪，两者是同一条链的两端。
