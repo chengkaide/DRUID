@@ -198,12 +198,19 @@ def test_no_identifying_strings_in_tracked_files():
     这条测试是防止回流：以后谁顺手贴一条真实路径进来，CI 立刻拦下。
 
     ⚠ 本文件自己必须把那些模式写出来，所以把自己排除在外。
+
+    ⚠ 扫描范围包含**尚未 git add 的新文件**（`--others --exclude-standard`）。
+    只用 `ls-files` 会留一个真实的盲区：新写的文档在提交前是"未跟踪"状态，
+    本地跑这条测试会通过、CI 上才失败 —— 这个盲区真的发生过一次：一份新文档
+    的说明文字里混进了真实样品号，本地全绿，推送后 CI 立刻拦下。
     """
     import subprocess
 
-    files = subprocess.run(["git", "-c", "core.quotePath=false", "ls-files"],
-                           cwd=str(ROOT), capture_output=True, text=True,
-                           encoding="utf-8").stdout
+    files = subprocess.run(
+        ["git", "-c", "core.quotePath=false",
+         "ls-files", "--cached", "--others", "--exclude-standard"],
+        cwd=str(ROOT), capture_output=True, text=True,
+        encoding="utf-8").stdout
     if not files.strip():
         return                    # 不是 git 仓库（例如从源码包解开的），跳过
 
