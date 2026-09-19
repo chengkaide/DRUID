@@ -111,6 +111,42 @@ def test_webui_static_assets_exist_and_are_declared():
             f"package-data 没声明 webui/static/*{Path(name).suffix}")
 
 
+def test_bat_files_are_crlf_on_disk():
+    """
+    批处理必须是 CRLF。cmd.exe 按行读，LF 结尾的 .bat 会出现"命令明明写在
+    文件里、运行时却读不到"这种极难排查的故障 —— 而双击那个 .bat 的人
+    （实验室里日常用它启动工具）没有任何办法自己排查。
+
+    ⚠ 为什么这件事值得专门测：
+    `.gitattributes` 里的 `*.bat text eol=crlf` **只在 checkout 时生效**。
+    如果谁用编辑器或某个脚本按 LF 存了一次，`git status` 依然报"干净"
+    —— 因为入库时会规范化，内容被认为没变。于是这个错误可以一直潜伏到
+    有人真的去双击它。git 自己看不见，只能直接看磁盘上的字节。
+    """
+    bats = sorted(ROOT.glob("*.bat")) + sorted(ROOT.glob("*.cmd"))
+    assert bats, "一个 .bat/.cmd 都没有 —— 启动脚本不该消失"
+
+    for p in bats:
+        data = p.read_bytes()
+        assert b"\r\n" in data, f"{p.name} 没有任何 CRLF 行尾"
+        lone_lf = data.replace(b"\r\n", b"").count(b"\n")
+        assert lone_lf == 0, f"{p.name} 里有 {lone_lf} 行只有 LF —— cmd.exe 可能读不到"
+
+
+def test_bat_files_stay_ascii():
+    """
+    cmd.exe 按当前代码页解析批处理，中文注释会变乱码。而解释器路径里
+    恰好含中文用户名，所以中文路径必须靠运行时变量（%USERPROFILE%、%~dp0）抵达，
+    不能写死在文件里。
+    """
+    for p in sorted(ROOT.glob("*.bat")) + sorted(ROOT.glob("*.cmd")):
+        data = p.read_bytes()
+        bad = [(i, b) for i, b in enumerate(data) if b > 127]
+        assert not bad, (
+            f"{p.name} 第 {bad[0][0]} 字节起出现非 ASCII（{bytes(x for _, x in bad[:8])!r}）"
+            " —— 中文注释在 cmd.exe 里会变成乱码")
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # 三、每个子模块都导得进来
 # ═════════════════════════════════════════════════════════════════════════════

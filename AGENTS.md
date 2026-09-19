@@ -135,6 +135,25 @@ workflow.py  编排层：BatchConfig 集中所有可调参数 + 十步 run_batch
 - **`.bat` 必须保持纯 ASCII**：cmd.exe 按当前代码页解析，中文注释会变乱码；
   而解释器路径含中文用户名。所有中文路径靠运行时变量（`%USERPROFILE%`、`%~dp0`）抵达。
   `.gitattributes` 已把 `*.bat` 钉成 CRLF。
+
+  ⚠ **而且它真的漂移过。** 属性只在 **checkout** 时生效：一次
+  `git filter-branch`（它会重写后重置工作区）就把两个 `.bat` 变成了纯 LF，
+  而 `git status` **什么都没报** —— 因为入库时会规范化，git 认为内容没变。
+  这种错误会一路潜伏到实验室里有人双击那个 `.bat` 才发现。
+  `tests/test_packaging.py` 现在直接看磁盘字节，就是为了接住这类漂移。
+
+- **`git status` 长期显示 ` M 启动数据处理工具.bat` 是噪音，不用管。**
+  这台机器上 `core.autocrlf=true`（来自 WorkBuddy 自带的 PortableGit，**不要去改它**），
+  而 `.gitattributes` 又声明了 `eol=crlf`，两者叠加会让 git 把这两个文件判成
+  "stat 脏"。内容其实一致：`git diff` 对它们没有任何输出。
+  想确认无害就比哈希：
+
+  ```bash
+  git rev-parse :打包成exe.bat                    # 索引里现在是什么
+  git hash-object --path=打包成exe.bat 打包成exe.bat   # git add 之后会变成什么
+  ```
+
+  两个哈希相同 → `git add` 是 no-op，提交它不会污染仓库。
 - **`结果/` 曾经被纳管进版本控制**：98 个文件（87 个原始 Qtegra CSV + 11 个结果表），
   而且都在**初始提交**里。等到要发布时，`git rm` 当前提交已经没用，只能重写全部
   历史才剔干净。规律：**工具的仓库不装某一次分析的数据。** 要留档就存
