@@ -1,7 +1,7 @@
 # DRUID
 
 **D**epth-**R**esolved **U**–Pb **I**sotope **D**ata reduction
-—— LA-ICP-MS 锆石 U-Pb 定年数据还原工具
+—— LA-ICP-MS 锆石 U-Pb 定年数据处理工具
 
 把 Qtegra/iCAP 导出的原始计数率（cps）时间序列，还原成**带不确定度的年龄**、
 **标样质控表**与**逐深度的年龄剖面**；其中逐窗口剖面可以直接交给
