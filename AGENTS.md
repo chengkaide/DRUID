@@ -142,18 +142,26 @@ workflow.py  编排层：BatchConfig 集中所有可调参数 + 十步 run_batch
   这种错误会一路潜伏到实验室里有人双击那个 `.bat` 才发现。
   `tests/test_packaging.py` 现在直接看磁盘字节，就是为了接住这类漂移。
 
-- **`git status` 长期显示 ` M 启动数据处理工具.bat` 是噪音，不用管。**
-  这台机器上 `core.autocrlf=true`（来自 WorkBuddy 自带的 PortableGit，**不要去改它**），
-  而 `.gitattributes` 又声明了 `eol=crlf`，两者叠加会让 git 把这两个文件判成
-  "stat 脏"。内容其实一致：`git diff` 对它们没有任何输出。
-  想确认无害就比哈希：
+- **`git status` 有时会把两个 `.bat` 报成 ` M`，那是 stat 噪音。**
+  这台机器 `core.autocrlf=true`（来自 WorkBuddy 自带的 PortableGit，
+  **不要去改它**），与 `.gitattributes` 的 `eol=crlf` 叠加后，只要文件被
+  git 之外的东西重写过一次，`git status` 就会按 stat 判成"改过"。
+  内容其实一致：`git diff` 对它们没有任何输出。
 
-  ```bash
-  git rev-parse :打包成exe.bat                    # 索引里现在是什么
-  git hash-object --path=打包成exe.bat 打包成exe.bat   # git add 之后会变成什么
-  ```
+  两件事要记住：
 
-  两个哈希相同 → `git add` 是 no-op，提交它不会污染仓库。
+  1. **`git add` 这两个文件是 no-op**，但它会刷新 stat，` M` 就消失了。
+     想确认无害就比哈希：
+
+     ```bash
+     git rev-parse :打包成exe.bat                       # 索引里现在是什么
+     git hash-object --path=打包成exe.bat 打包成exe.bat # git add 之后会变成什么
+     ```
+
+     两个哈希相同 → 不改变仓库内容。
+  2. **这个 stat 脏状态会挡住 `git filter-branch`**，报
+     `Cannot rewrite branches: You have unstaged changes.`。
+     重写历史之前先 `git add` 一遍（或 `git update-index --refresh`）把工作区刷干净。
 - **`结果/` 曾经被纳管进版本控制**：98 个文件（87 个原始 Qtegra CSV + 11 个结果表），
   而且都在**初始提交**里。等到要发布时，`git rm` 当前提交已经没用，只能重写全部
   历史才剔干净。规律：**工具的仓库不装某一次分析的数据。** 要留档就存
