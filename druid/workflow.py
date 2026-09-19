@@ -37,6 +37,7 @@ from typing import List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
+from .console import ensure_utf8_streams
 from .core.constants import (
     L238,
     ROLE_GLASS,
@@ -785,6 +786,12 @@ def run_batch(cfg: BatchConfig) -> BatchResult:
     BatchResult，其中 results 是主结果表，qc 是标样质控表，
     domains 是多域剖面明细，info 记录了本次运行的全部关键量。
     """
+    # 流水线全程用中文打印进度。Windows 上把输出重定向到文件时，
+    # Python 会用 locale 编码（cp1252 之类）编码 stdout，第一句 print 就抛
+    # UnicodeEncodeError —— 而且是在算完之后、准备写结果的时候。
+    # 放在这里（而不是只在 CLI 入口）是因为作为库被调用时同样会踩到。
+    ensure_utf8_streams()
+
     # ①② 装载
     spots, seq, skipped = load_batch(cfg)
     if not spots:

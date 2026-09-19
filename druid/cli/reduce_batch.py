@@ -37,6 +37,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from druid import __version__
+from druid.console import ensure_utf8_streams
 from druid.io.report import export_batch
 from druid.workflow import BatchConfig, run_batch
 
@@ -119,6 +120,12 @@ def _summary_lines(result) -> list:
 
 
 def main(argv=None) -> int:
+    # 这个命令的输出全是中文。Windows 上把输出重定向到文件/管道时，
+    # Python 会用 locale 编码（cp1252 之类）编码 stdout，一句 print 就抛
+    # UnicodeEncodeError 把进程带走 —— 而且是在跑完批处理、准备打印结果的时候。
+    # 在入口把流切到 UTF-8 一次解决，别在每个 print 上包 try。
+    ensure_utf8_streams()
+
     args = build_parser().parse_args(argv)
 
     cfg = BatchConfig(

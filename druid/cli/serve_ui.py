@@ -27,6 +27,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from druid import __version__
+from druid.console import ensure_utf8_streams
 from druid.webui.server import serve
 
 
@@ -45,6 +46,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv=None) -> int:
+    # 启动横幅是中文；Windows 上重定向输出时同样会踩到编码问题，
+    # 详见 druid/console.py 的说明。
+    ensure_utf8_streams()
+
     args = build_parser().parse_args(argv)
 
     print(f"druid v{__version__}   正在启动网页界面…")

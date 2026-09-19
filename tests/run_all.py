@@ -21,6 +21,11 @@ import _selftest                                                # noqa: E402
 
 
 def main() -> int:
+    # 本文件与 _selftest 的输出含中文；Windows 上重定向时会踩编码坑，
+    # 见 druid/console.py 的说明。CI 的 windows job 就是这么挂的。
+    from druid.console import ensure_utf8_streams
+    ensure_utf8_streams()
+
     modules = sorted(p.stem for p in HERE.glob("test_*.py"))
     if not modules:
         print("没找到任何 test_*.py")

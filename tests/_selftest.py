@@ -18,6 +18,12 @@ from __future__ import annotations
 
 def run(namespace: dict) -> int:
     """执行 namespace 里所有 test_* 函数，返回进程退出码（0 = 全过）。"""
+    # 下面的输出里有中文。Windows 上把输出重定向到文件/管道时，stdout 会用
+    # locale 编码（cp1252 之类），第一句 print 就 UnicodeEncodeError 把进程带走。
+    # 这个坑在 CI 的 windows job 上真实发生过，见 druid/console.py。
+    from druid.console import ensure_utf8_streams
+    ensure_utf8_streams()
+
     tests = [(n, f) for n, f in sorted(namespace.items())
              if n.startswith("test_") and callable(f)]
     failed = 0

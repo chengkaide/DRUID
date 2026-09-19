@@ -226,5 +226,37 @@ def test_no_identifying_strings_in_tracked_files():
     assert not hits, "仓库里出现了可识别信息，请改成中性示例：" + "; ".join(hits)
 
 
+def test_ensure_utf8_streams_survives_a_cp1252_console():
+    """
+    Windows 上把输出**重定向到文件/管道**时，Python 用 locale 编码
+    （英文系统上是 cp1252）编码 stdout，于是第一句中文 print 就
+    `UnicodeEncodeError: 'charmap' codec can't encode characters` 把进程带走。
+
+    这不是假想问题：CI 的 windows job 就是这么挂的 —— ubuntu 全过，
+    windows 在"不装 pytest 那条自检路"上失败，因为 pytest 自己的报告器
+    处理了编码，而 `tests/run_all.py` 直接 print。
+    而且它发生在**跑完批处理、准备打印结果**的时候，最难受的时机。
+
+    `druid.console.ensure_utf8_streams()` 在入口把流切成 UTF-8 解决它。
+    """
+    import io
+
+    from druid.console import ensure_utf8_streams
+
+    # errors 默认是 strict，所以修复前这一句必然抛
+    buf = io.TextIOWrapper(io.BytesIO(), encoding="cp1252")
+    ensure_utf8_streams(buf)
+    buf.write("通过 ✓")                       # 修复前：UnicodeEncodeError
+    buf.flush()
+    assert buf.encoding.lower().replace("-", "") == "utf8", buf.encoding
+
+    # 幂等
+    ensure_utf8_streams(buf)
+
+    # 对没有 reconfigure 的对象要静默跳过（io.StringIO、pytest 的捕获对象）
+    ensure_utf8_streams(io.StringIO())
+    ensure_utf8_streams()                     # 默认参数 = 真实的 stdout/stderr
+
+
 if __name__ == "__main__":
     raise SystemExit(_selftest.run(globals()))

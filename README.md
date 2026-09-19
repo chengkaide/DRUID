@@ -324,6 +324,18 @@ druid/
 
 ## 八、变更记录
 
+### 2.2.1
+
+- **修掉一个只在 Windows + 输出重定向时出现的崩溃。** 本工具的进度与摘要输出
+  全是中文；把 stdout 重定向到文件或管道时，Python 用 locale 编码
+  （英文系统上是 cp1252）编码它，第一句 `print("...通过")` 就抛
+  `UnicodeEncodeError: 'charmap' codec can't encode characters`，
+  进程直接死 —— 而且是在**跑完批处理、准备打印结果**的时候。
+  现在 `druid/console.py` 在 CLI 入口与 `run_batch()` 里把输出流切成 UTF-8
+  （`errors="replace"` 兜底：真编不出来也只丢一个字符，不中断流程）。
+  交互式控制台一般不踩这个坑（Python 对控制台用宽字符 API），
+  所以本地开发很难遇到 —— CI 的 windows job 是第一个撞上的。
+
 ### 2.2.0
 
 - **序列表支持 `.csv` / `.tsv` 文本格式**（原来只认 `.xls` / `.xlsx`），

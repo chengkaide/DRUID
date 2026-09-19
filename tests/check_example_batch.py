@@ -52,6 +52,10 @@ TOL_PCT = 1e-4         # 百分点
 
 
 def main() -> int:
+    # 这里的输出含中文；Windows 上重定向时会踩编码坑（见 druid/console.py）
+    from druid.console import ensure_utf8_streams
+    ensure_utf8_streams()
+
     if not BATCH.is_dir():
         print(f"找不到示例批次 {BATCH}")
         print("（它应该在仓库里：examples/EX2022A/ —— 见 .gitignore 的说明）")

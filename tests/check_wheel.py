@@ -64,6 +64,17 @@ def check(wheel: Path) -> list:
 
 
 def main(argv) -> int:
+    # 本文件只依赖标准库（不装包也要能检查 wheel），所以不 import druid，
+    # 内联三行做同一件事：Windows 上重定向输出时把流切成 UTF-8，
+    # 否则中文输出直接 UnicodeEncodeError。完整说明见 druid/console.py。
+    for _s in (sys.stdout, sys.stderr):
+        _rc = getattr(_s, "reconfigure", None)
+        if _rc is not None:
+            try:
+                _rc(encoding="utf-8", errors="replace")
+            except (ValueError, OSError):
+                pass
+
     if len(argv) > 1:
         target = Path(argv[1])
     else:

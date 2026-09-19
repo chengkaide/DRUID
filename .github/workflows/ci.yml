@@ -26,6 +26,12 @@ env:
   MPLBACKEND: Agg
   # 让输出立刻刷出来 —— 万一某一步被中途掐掉，日志里也能看到停在哪儿。
   PYTHONUNBUFFERED: "1"
+  # 这个包的输出全是中文。CI 上 stdout 是管道，Windows runner 的 locale 编码
+  # 是 cp1252，中文 print 会直接 UnicodeEncodeError。
+  # 根因已经在 druid/console.py 里修掉了（入口把流转成 UTF-8），
+  # 这里再设一道是给**不经过那些入口**的东西兜底（比如 pytest 的失败汇报、
+  # 第三方工具的输出）。2026-09-19 的 windows job 就是被这个坑刷红的。
+  PYTHONUTF8: "1"
 
 jobs:
   test:

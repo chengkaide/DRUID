@@ -50,10 +50,19 @@ druid —— 激光剥蚀 ICP-MS（LA-ICP-MS）锆石 U-Pb 定年数据还原包
 """
 from __future__ import annotations
 
-__version__ = "2.2.0"
+__version__ = "2.2.1"
 
 # 版本说明
 # --------
+# 2.2.1 修掉一个只在 Windows + 输出重定向时出现的崩溃：
+#   本包的进度与摘要输出全是中文。把 stdout 重定向到文件/管道时，
+#   Python 用 locale 编码（英文系统上是 cp1252）编码它，第一句
+#   `print("...通过")` 就抛 UnicodeEncodeError 把进程带走 ——
+#   而且是在跑完批处理、准备打印结果的时刻，最难受的时机。
+#   现在 `druid/console.py` 在入口把输出流切成 UTF-8（errors="replace"）。
+#   交互式控制台不一定会踩到（Python 对控制台用宽字符 API），
+#   所以本地开发几乎遇不到 —— CI 的 windows job 是第一个撞上的。
+#
 # 2.0.0 起由原先的 _legacy/*.py 单文件脚本重构为分层子包，
 # 旧脚本保留在 druid/_legacy/ 下仅供对照，不再参与运行。
 #
