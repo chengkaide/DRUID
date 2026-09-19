@@ -1,163 +1,313 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>DRUID — LA-ICP-MS 锆石 U-Pb 定年数据处理</title>
-<meta name="description" content="把 Qtegra/iCAP 导出的原始计数率时间序列，还原成带不确定度的年龄与逐深度剖面。含从物理原理到结果解读的完整文档。">
+<meta name="description" content="DRUID: Depth-Resolved U–Pb Isotope Data reduction。把 Qtegra/iCAP 导出的 cps 时间序列还原为带不确定度的年龄、标样质控与逐深度年龄剖面，直接对接 ADEPT 判定坪年龄与 MSWD。">
 <style>
-  :root{
-    --ink:#2C2C2A; --ink2:#5F5E5A; --ink3:#888780;
-    --line:#D3D1C7; --bg:#FFFFFF; --panel:#F7F6F3; --panel2:#EFEEE9;
-    --pur:#534AB7; --purbg:#EEEDFE; --purline:#AFA9EC;
-    --tea:#0F6E56; --teabg:#E1F5EE; --tealine:#9FE1CB;
-    --amb:#854F0B; --ambbg:#FAEEDA; --ambline:#FAC775;
-  }
-  *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--ink);
-       font-family:"Microsoft YaHei","PingFang SC","Hiragino Sans GB",system-ui,sans-serif;
-       font-size:15px;line-height:1.78;-webkit-font-smoothing:antialiased}
-  .wrap{max-width:900px;margin:0 auto;padding:64px 32px 80px}
-  header{margin:0 0 40px}
-  h1{font-size:34px;font-weight:600;margin:0 0 6px;letter-spacing:-.02em}
-  .expand{color:var(--pur);font-size:14px;font-weight:500;margin:0 0 2px;letter-spacing:.01em}
-  .lead{color:var(--ink2);font-size:16px;margin:14px 0 0;max-width:660px}
-  .flow{margin:44px 0 52px}
-  h2{font-size:19px;font-weight:600;margin:0 0 6px}
-  .h2sub{color:var(--ink2);font-size:13.5px;margin:0 0 20px}
-  .cards{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:0 0 56px}
-  @media (max-width:720px){.cards{grid-template-columns:1fr}}
-  a.card{display:block;text-decoration:none;color:inherit;border:1px solid var(--line);
-         border-radius:14px;padding:22px 24px;background:var(--panel);
-         transition:border-color .15s,transform .15s}
-  a.card:hover{border-color:var(--purline);transform:translateY(-2px)}
-  .card .kicker{font-size:11.5px;font-weight:600;letter-spacing:.06em;
-                text-transform:uppercase;color:var(--pur);margin:0 0 8px}
-  .card h3{font-size:16.5px;font-weight:600;margin:0 0 8px}
-  .card p{margin:0;color:var(--ink2);font-size:13.5px;line-height:1.7}
-  .card .meta{margin-top:12px;font-size:12px;color:var(--ink3)}
-  pre{background:var(--panel);border:1px solid var(--line);border-radius:12px;
-      padding:16px 18px;overflow-x:auto;margin:0 0 10px}
-  code{font-family:"Cascadia Mono",Consolas,"Courier New",monospace;font-size:13px;
-       line-height:1.75;color:var(--ink)}
-  .hint{color:var(--ink3);font-size:12.5px;margin:0 0 44px}
-  .facts{border-top:1px solid var(--line);padding-top:26px;margin-top:8px;
-         display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
-  @media (max-width:720px){.facts{grid-template-columns:1fr}}
-  .fact .n{font-size:21px;font-weight:600;color:var(--pur);line-height:1.3}
-  .fact .d{font-size:13px;color:var(--ink2);margin-top:2px}
-  footer{margin-top:56px;padding-top:22px;border-top:1px solid var(--line);
-         color:var(--ink3);font-size:12.5px;line-height:1.8}
-  footer a{color:var(--ink2);text-decoration:none;border-bottom:1px solid var(--line)}
-  footer a:hover{color:var(--pur);border-bottom-color:var(--purline)}
+:root{
+  --bg:#0d1512; --bg2:#111d18; --bg3:#16241e; --card:#132019;
+  --line:#26402f; --line2:#35573f;
+  --txt:#e6f0e9; --dim:#9db8a8; --faint:#6d8a79;
+  --acc:#e8b04b; --acc2:#f2c86d; --grn:#5fb87a; --grn2:#8fd4a4;
+  --code-bg:#0a120e;
+  --mono:"Cascadia Code","JetBrains Mono",Consolas,"Courier New",monospace;
+  --sans:"Segoe UI","Microsoft YaHei","PingFang SC",system-ui,sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--txt);font-family:var(--sans);line-height:1.75;font-size:16px}
+a{color:var(--acc);text-decoration:none}
+a:hover{color:var(--acc2);text-decoration:underline}
+code{font-family:var(--mono);font-size:.9em;background:#1b2d23;padding:.12em .45em;border-radius:4px;color:#d9c98f}
+pre{font-family:var(--mono);background:var(--code-bg);border:1px solid var(--line);border-radius:10px;padding:18px 22px;overflow-x:auto;font-size:13.5px;line-height:1.65;color:#cfe3d5}
+pre .c{color:var(--faint)} pre .k{color:var(--acc)} pre .s{color:var(--grn2)}
+.wrap{max-width:1080px;margin:0 auto;padding:0 28px}
+section{padding:72px 0}
+h2{font-size:30px;font-weight:700;letter-spacing:.5px;margin-bottom:8px}
+h2 .num{color:var(--acc);font-family:var(--mono);font-size:22px;margin-right:10px}
+.sub{color:var(--dim);margin-bottom:40px;font-size:16px}
+/* ---- nav ---- */
+nav{position:sticky;top:0;z-index:50;background:rgba(13,21,18,.88);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+nav .wrap{display:flex;align-items:center;gap:26px;height:56px}
+.logo{font-weight:800;font-size:19px;letter-spacing:2.5px;color:var(--txt)}
+.logo b{color:var(--acc)}
+.logo small{font-family:var(--mono);font-weight:400;font-size:11px;color:var(--faint);margin-left:8px;letter-spacing:0}
+nav .links{margin-left:auto;display:flex;gap:22px;font-size:14px}
+nav .links a{color:var(--dim)}
+nav .links a:hover{color:var(--acc2);text-decoration:none}
+@media(max-width:760px){nav .links{display:none}}
+/* ---- hero ---- */
+.hero{padding:96px 0 80px;background:
+  radial-gradient(1100px 480px at 72% -10%, rgba(95,184,122,.14), transparent 60%),
+  radial-gradient(800px 400px at 15% 20%, rgba(232,176,75,.10), transparent 60%),
+  var(--bg)}
+.hero .en{font-family:var(--mono);font-size:13.5px;color:var(--grn2);letter-spacing:1.5px;margin-bottom:18px}
+.hero h1{font-size:56px;font-weight:800;letter-spacing:3px;line-height:1.15}
+.hero h1 .em{color:var(--acc)}
+.hero .tag{font-size:19px;color:var(--dim);max-width:760px;margin:22px 0 30px}
+.hero .tag b{color:var(--txt)}
+.badges{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:36px}
+.badge{font-family:var(--mono);font-size:12.5px;padding:5px 13px;border:1px solid var(--line2);border-radius:999px;color:var(--dim);background:rgba(19,32,25,.6)}
+.badge i{color:var(--grn);font-style:normal}
+.cta{display:flex;gap:14px;flex-wrap:wrap}
+.btn{padding:12px 26px;border-radius:8px;font-weight:600;font-size:15px;border:1px solid var(--acc);transition:.2s}
+.btn:hover{text-decoration:none;transform:translateY(-2px)}
+.btn.pri{background:var(--acc);color:#171108}
+.btn.sec{background:transparent;color:var(--acc)}
+/* ---- doc cards ---- */
+.cards2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+@media(max-width:860px){.cards2{grid-template-columns:1fr}}
+a.doc{display:block;text-decoration:none;color:inherit;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:26px 24px;transition:.2s}
+a.doc:hover{border-color:var(--acc);transform:translateY(-3px)}
+.doc .kicker{font-size:12px;font-weight:600;letter-spacing:1px;color:var(--grn);margin-bottom:8px}
+.doc h3{font-size:18px;margin-bottom:10px;color:var(--txt)}
+.doc p{font-size:14.5px;color:var(--dim)}
+.doc .meta{margin-top:14px;font-size:12.5px;color:var(--faint);font-family:var(--mono)}
+/* ---- pipeline ---- */
+.pipe{background:var(--bg2);border:1px solid var(--line);border-radius:14px;padding:30px 26px;margin-top:14px}
+/* ---- cards ---- */
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+@media(max-width:860px){.cards{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:26px 24px;transition:.2s}
+.card:hover{border-color:var(--line2);transform:translateY(-3px)}
+.card .no{font-family:var(--mono);color:var(--acc);font-size:13px;margin-bottom:8px;letter-spacing:1px}
+.card h3{font-size:17.5px;margin-bottom:12px;line-height:1.5}
+.card p{font-size:14.5px;color:var(--dim)}
+.card p b{color:var(--grn2)}
+/* ---- outputs ---- */
+.outgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px}
+.out{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:20px}
+.out h4{font-family:var(--mono);font-size:15px;color:var(--acc);margin-bottom:8px}
+.out p{font-size:13.5px;color:var(--dim)}
+.notebox{border-left:3px solid var(--acc);background:rgba(232,176,75,.07);padding:16px 20px;border-radius:0 10px 10px 0;margin-top:28px;font-size:14.5px;color:var(--dim)}
+.notebox b{color:var(--acc2)}
+/* ---- limits ---- */
+.limit{display:flex;gap:16px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:20px 22px;margin-bottom:16px}
+.limit .ic{color:var(--acc);font-family:var(--mono);font-size:15px;flex-shrink:0;padding-top:2px}
+.limit h4{font-size:15.5px;margin-bottom:6px}
+.limit p{font-size:14px;color:var(--dim)}
+/* ---- facts ---- */
+.facts{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;border-top:1px solid var(--line);padding-top:30px;margin-top:10px}
+@media(max-width:720px){.facts{grid-template-columns:1fr}}
+.fact .n{font-size:26px;font-weight:700;color:var(--acc);font-family:var(--mono)}
+.fact .d{font-size:13.5px;color:var(--dim);margin-top:4px}
+/* ---- footer ---- */
+footer{border-top:1px solid var(--line);padding:40px 0 56px;color:var(--faint);font-size:13.5px}
+footer .row{display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px}
+/* reveal */
+.rv{opacity:0;transform:translateY(18px);transition:opacity .6s ease,transform .6s ease}
+.rv.in{opacity:1;transform:none}
+.flow-lbl{font-family:var(--mono);font-size:12px;fill:var(--dim)}
 </style>
 </head>
 <body>
-<div class="wrap">
 
-<header>
-  <p class="expand">Depth-Resolved U–Pb Isotope Data reduction</p>
-  <h1>DRUID</h1>
-  <p class="lead">
-    把 LA-ICP-MS 导出的原始计数率（cps）时间序列，还原成<b>带不确定度的年龄</b>、
+<nav><div class="wrap">
+  <div class="logo">DR<b>UI</b>D<small>v2.2.2</small></div>
+  <div class="links">
+    <a href="#docs">文档</a><a href="#why">为什么不同</a><a href="#principles">设计原则</a>
+    <a href="#output">输出</a><a href="#adept">ADEPT 接口</a>
+    <a href="#start">快速开始</a><a href="#limits">已知限制</a>
+  </div>
+</div></nav>
+
+<header class="hero"><div class="wrap">
+  <div class="en">Depth-Resolved U–Pb Isotope Data reduction</div>
+  <h1>DR<span class="em">UI</span>D<br>随坑深变化的锆石年龄</h1>
+  <p class="tag">把 LA-ICP-MS 导出的原始计数率（cps）时间序列，还原成<b>带不确定度的年龄</b>、
     <b>标样质控表</b>与<b>逐深度的年龄剖面</b>——然后交给
-    <a href="https://github.com/chengkaide/ADEPT">ADEPT</a> 判定坪年龄与 MSWD。
-  </p>
-</header>
+    <a href="https://github.com/chengkaide/ADEPT">ADEPT</a> 判定坪年龄与 MSWD。<b>DRUID 测出来，ADEPT 读出来。</b></p>
+  <div class="badges">
+    <span class="badge">依赖 <i>numpy / pandas / matplotlib / openpyxl / xlrd</i></span>
+    <span class="badge"><i>无 scipy</i> — 统计内核自实现</span>
+    <span class="badge">网页界面 <i>纯标准库</i>，无 npm 无构建</span>
+    <span class="badge">CI <i>4 平台 × Python 版本</i></span>
+    <span class="badge">自检 <i>30 项</i> + 端到端数值回归</span>
+  </div>
+  <div class="cta">
+    <a class="btn pri" href="#start">快速开始</a>
+    <a class="btn sec" href="https://github.com/chengkaide/DRUID">GitHub 仓库</a>
+  </div>
+</div></header>
 
-<div class="flow">
-<svg viewBox="0 0 900 128" role="img" aria-label="数据流：原始信号经 DRUID 得到逐窗口年龄，再经 ADEPT 得到坪年龄与 MSWD"
-     font-family="Microsoft YaHei,PingFang SC,system-ui,sans-serif">
-  <rect x="0" y="0" width="900" height="128" rx="12" fill="#F7F6F3"/>
-  <!-- 节点 -->
-  <rect x="34" y="32" width="146" height="60" rx="10" fill="#EFEEE9" stroke="#D3D1C7" stroke-width="1.5"/>
-  <text x="107" y="58" fill="#5F5E5A" font-size="13" text-anchor="middle">Qtegra 导出</text>
-  <text x="107" y="78" fill="#888780" font-size="12" text-anchor="middle">cps 时间序列</text>
+<!-- ============ 文档 ============ -->
+<section id="docs"><div class="wrap">
+  <h2><span class="num">01</span>从这里开始</h2>
+  <p class="sub">两份文档都是单文件自包含（图表全内嵌），离线也能打开。</p>
+  <div class="cards2 rv">
+    <a class="doc" href="from-first-principles.html">
+      <p class="kicker">第一次接触请读这份</p>
+      <h3>从一块岩石到一个年龄</h3>
+      <p>从"放射性为什么能当时钟"一路讲到"MSWD 该怎么读"，<b>不需要任何前置知识</b>。
+        每一步都说明为什么这么做、做错了会往哪个方向偏，并给出已知的局限。</p>
+      <p class="meta">9 章 · 10 张图解 · 约 25 分钟</p>
+    </a>
+    <a class="doc" href="druid-adept-dataflow.html">
+      <p class="kicker">已知原理，想看分工</p>
+      <h3>两个工具的联系与数据流</h3>
+      <p>DRUID 与 ADEPT 各负责什么、数据在它们之间如何变化、边界上到底传了什么。
+        含一张真实测点的剖面图与实测数值对照。</p>
+      <p class="meta">8 节 · 含接口约定</p>
+    </a>
+  </div>
+</div></section>
 
-  <rect x="222" y="32" width="146" height="60" rx="10" fill="#EEEDFE" stroke="#AFA9EC" stroke-width="1.8"/>
-  <text x="295" y="58" fill="#534AB7" font-size="14" font-weight="600" text-anchor="middle">DRUID</text>
-  <text x="295" y="78" fill="#5F5E5A" font-size="12" text-anchor="middle">还原 · 校正</text>
+<!-- ============ 为什么不同 ============ -->
+<section id="why" style="background:var(--bg2)"><div class="wrap">
+  <h2><span class="num">02</span>名字取 Depth-Resolved，不是修辞</h2>
+  <p class="sub">与只做整段积分的常规流程最大的区别：每个测点被当成一条<b>随时间（即随坑深）变化的信号</b>来处理——分馏按深度校正、年龄域按深度划分。</p>
+  <div class="pipe rv">
+    <svg viewBox="0 0 1000 300" width="100%" role="img" aria-label="DRUID 流水线">
+      <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#5fb87a"/></marker></defs>
+      <rect x="20" y="60" width="150" height="60" rx="10" fill="#132019" stroke="#35573f"/>
+      <text x="95" y="85" text-anchor="middle" fill="#e6f0e9" font-size="15" font-weight="600">Qtegra CSV</text>
+      <text x="95" y="107" text-anchor="middle" class="flow-lbl">cps 时间序列</text>
+      <rect x="230" y="20" width="480" height="220" rx="14" fill="none" stroke="#e8b04b" stroke-width="1.5" stroke-dasharray="6 4"/>
+      <text x="250" y="44" fill="#e8b04b" font-size="15" font-weight="700" font-family="monospace">DRUID</text>
+      <g font-size="13" fill="#cfe3d5">
+        <rect x="250" y="58" width="210" height="44" rx="8" fill="#16241e" stroke="#26402f"/>
+        <text x="262" y="76" class="flow-lbl">①—②</text><text x="262" y="94" fill="#cfe3d5">剥蚀区间 · 扣空白</text>
+        <rect x="480" y="58" width="210" height="44" rx="8" fill="#16241e" stroke="#26402f"/>
+        <text x="492" y="76" class="flow-lbl">③—⑥</text><text x="492" y="94" fill="#cfe3d5">Hg/普通铅校正 · 夹逼归一化</text>
+        <rect x="250" y="120" width="210" height="44" rx="8" fill="#16241e" stroke="#26402f"/>
+        <text x="262" y="138" class="flow-lbl">⑤⑦</text><text x="262" y="156" fill="#cfe3d5">F(τ) 深度分馏校正 · σ<tspan font-size="9" dy="3">ext</tspan></text>
+        <rect x="480" y="120" width="210" height="44" rx="8" fill="#16241e" stroke="#26402f"/>
+        <text x="492" y="138" class="flow-lbl">⑧—⑩</text><text x="492" y="156" fill="#cfe3d5">年龄 + BIC 年龄域 + 标样 QC</text>
+        <text x="250" y="200" fill="#9db8a8" font-size="12.5">整段年龄 + 逐窗口年龄剖面（含 1σ，jackknife + 外部重现性）</text>
+      </g>
+      <line x1="170" y1="90" x2="226" y2="90" stroke="#5fb87a" stroke-width="1.5" marker-end="url(#ar)"/>
+      <rect x="770" y="60" width="140" height="60" rx="10" fill="#132019" stroke="#35573f"/>
+      <text x="840" y="85" text-anchor="middle" fill="#e6f0e9" font-size="15" font-weight="600">结果.xlsx</text>
+      <text x="840" y="107" text-anchor="middle" class="flow-lbl">五个工作表</text>
+      <line x1="710" y1="90" x2="766" y2="90" stroke="#5fb87a" stroke-width="1.5" marker-end="url(#ar)"/>
+      <line x1="840" y1="120" x2="840" y2="196" stroke="#e8b04b" stroke-width="1.5" marker-end="url(#ar)"/>
+      <text x="848" y="160" class="flow-lbl">「剖面窗口」表</text>
+      <rect x="770" y="200" width="140" height="60" rx="10" fill="#1b2d23" stroke="#e8b04b"/>
+      <text x="840" y="225" text-anchor="middle" fill="#e8b04b" font-size="15" font-weight="700" font-family="monospace">ADEPT</text>
+      <text x="840" y="247" text-anchor="middle" class="flow-lbl">坪年龄 + MSWD</text>
+      <text x="95" y="200" fill="#6d8a79" font-size="12.5">十步流水线，每一步的参数都写进结果表</text>
+      <text x="95" y="220" fill="#6d8a79" font-size="12.5">的「运行参数」页，半年后可回溯。</text>
+    </svg>
+  </div>
+</div></section>
 
-  <rect x="410" y="32" width="146" height="60" rx="10" fill="#E1F5EE" stroke="#9FE1CB" stroke-width="1.8"/>
-  <text x="483" y="58" fill="#0F6E56" font-size="13" font-weight="600" text-anchor="middle">逐窗口年龄</text>
-  <text x="483" y="78" fill="#5F5E5A" font-size="12" text-anchor="middle">含 1σ</text>
+<!-- ============ 三条设计原则 ============ -->
+<section id="principles"><div class="wrap">
+  <h2><span class="num">03</span>三条不轻易改动的设计</h2>
+  <p class="sub">每条都来自实测数据的教训。违背它们不会报错，只会悄悄给出错误的年龄。</p>
+  <div class="cards rv">
+    <div class="card"><div class="no">原则 1</div>
+      <h3>204Pb 普通铅校正必须做显著性检验</h3>
+      <p>204Pb 只有几~几十 cps，204Hg 本底可达数百 cps，做差后的残余往往就是噪声。
+        不显著却强行扣除，等于<b>把噪声当普通铅扣掉</b>——对计数本来就少的 207Pb 是灾难性的。</p></div>
+    <div class="card"><div class="no">原则 2</div>
+      <h3>207Pb/206Pb 不做 F(τ) 深度校正</h3>
+      <p>它是 Pb 同位素比值，几乎不随坑深分馏；而 4 s 窗口的 207Pb 仅约 130 个计数，
+        套 F(τ) 纯属<b>注入噪声</b>。它仍参与标样归一化（F76），只是不做逐深度校正。</p></div>
+    <div class="card"><div class="no">原则 3</div>
+      <h3>剥蚀区间用两级阈值，峰值比例为主</h3>
+      <p>只用「本底 + kσ」会把 washout 拖尾算进来（关激光后 10 s 仍有 100~200 cps），
+        把大量<b>零信号混入积分窗口</b>，系统性稀释比值。</p></div>
+  </div>
+</div></section>
 
-  <rect x="598" y="32" width="146" height="60" rx="10" fill="#EEEDFE" stroke="#AFA9EC" stroke-width="1.8"/>
-  <text x="671" y="58" fill="#534AB7" font-size="14" font-weight="600" text-anchor="middle">ADEPT</text>
-  <text x="671" y="78" fill="#5F5E5A" font-size="12" text-anchor="middle">分段 · 挑坪</text>
+<!-- ============ 输出 ============ -->
+<section id="output" style="background:var(--bg2)"><div class="wrap">
+  <h2><span class="num">04</span>一份 Excel，五张表，先看三个数</h2>
+  <p class="sub">从逐点结果到标样质控再到逐深度剖面，全部参数可追溯。</p>
+  <div class="outgrid rv">
+    <div class="out"><h4>结果</h4><p>每行一个测点：计数率、三种体系年龄与 1σ/2σ、协和度、深度结构</p></div>
+    <div class="out"><h4>标样QC</h4><p>主标与监控标样的加权平均年龄、MSWD、与推荐值的偏差</p></div>
+    <div class="out"><h4>深度剖面域</h4><p>BIC 检出的年龄域：τ、年龄与 MSWD（与 ADEPT 同口径）</p></div>
+    <div class="out"><h4>剖面窗口</h4><p>逐窗口年龄剖面，列名按 ADEPT 输入约定对齐，可直接喂入</p></div>
+    <div class="out"><h4>运行参数</h4><p>本次运行全部参数与被跳过的文件，半年后也能复现</p></div>
+  </div>
+  <div class="notebox rv">
+    <b>三个数判断数据能不能用：</b>① 91500 偏差绝对值 &lt; 1%；② 监控标样 Ple 偏差绝对值 &lt; 3%；
+    ③ 协和度落在 90–110% 的样品占比 &gt; 85%。三项都过，数据可用。
+  </div>
+</div></section>
 
-  <rect x="786" y="32" width="90" height="60" rx="10" fill="#E1F5EE" stroke="#9FE1CB" stroke-width="1.8"/>
-  <text x="831" y="58" fill="#0F6E56" font-size="13" font-weight="600" text-anchor="middle">坪年龄</text>
-  <text x="831" y="78" fill="#5F5E5A" font-size="12" text-anchor="middle">+ MSWD</text>
+<!-- ============ ADEPT ============ -->
+<section id="adept"><div class="wrap">
+  <h2><span class="num">05</span>与 ADEPT 的接口契约</h2>
+  <p class="sub">「剖面窗口」表的列名就是 ADEPT 的输入约定。四个参数一个都不能省——ADEPT 刻意不猜数据是否已预处理。</p>
+  <pre><span class="c"># 「剖面窗口」表 = ADEPT Format 4：Analysis / Time / Age68 / Age68_1s（+诊断列）</span>
+adept(<span class="s">"EX2022A_U-Pb结果.xlsx"</span>,
+      lower_ablation_time    = <span class="k">0</span>,      <span class="c"># DRUID 已切好自己的剥蚀窗口</span>
+      upper_ablation_time    = <span class="k">1e6</span>,    <span class="c"># 上界放到最后一个窗口之后</span>
+      smooth                 = <span class="s">"none"</span>, <span class="c"># 数据已做 F(τ)，再平滑会抹平真实域边界</span>
+      calibration_uncertainty = <span class="k">0</span>)     <span class="c"># σ 已含外部重现性，再乘 3% 是重复计入</span></pre>
+  <div class="notebox"><b>别忘了：<code>_1s</code> 是 1σ，不是 2σ。</b>拿错那列，MSWD 差 4 倍。
+    契约的全部细节见<a href="druid-adept-dataflow.html">《两个工具的联系与数据流》</a>。</div>
+</div></section>
 
-  <!-- 箭头 -->
-  <g stroke="#888780" stroke-width="1.6" fill="#888780">
-    <line x1="182" y1="62" x2="214" y2="62"/><polygon points="222,62 212,57 212,67"/>
-    <line x1="370" y1="62" x2="402" y2="62"/><polygon points="410,62 400,57 400,67"/>
-    <line x1="558" y1="62" x2="590" y2="62"/><polygon points="598,62 588,57 588,67"/>
-    <line x1="746" y1="62" x2="778" y2="62"/><polygon points="786,62 776,57 776,67"/>
-  </g>
-  <text x="450" y="116" fill="#888780" font-size="12" text-anchor="middle">
-    两个工具之间只传一张表：逐窗口的年龄与不确定度。接口约定见下方第二份文档。
-  </text>
-</svg>
-</div>
-
-<h2>从这里开始</h2>
-<p class="h2sub">两份文档都是单文件自包含（图表全内嵌），离线也能打开。</p>
-<div class="cards">
-  <a class="card" href="from-first-principles.html">
-    <p class="kicker">第一次接触请读这份</p>
-    <h3>从一块岩石到一个年龄</h3>
-    <p>
-      从"放射性为什么能当时钟"一路讲到"MSWD 该怎么读"，<b>不需要任何前置知识</b>。
-      每一步都说明为什么这么做、做错了会往哪个方向偏，并给出已知的局限。
-    </p>
-    <p class="meta">9 章 · 10 张图解 · 约 25 分钟</p>
-  </a>
-  <a class="card" href="druid-adept-dataflow.html">
-    <p class="kicker">已知原理，想看分工</p>
-    <h3>两个工具的联系与数据流</h3>
-    <p>
-      DRUID 与 ADEPT 各负责什么、数据在它们之间如何变化、边界上到底传了什么。
-      含一张真实测点的剖面图与实测数值对照。
-    </p>
-    <p class="meta">8 节 · 含接口约定</p>
-  </a>
-</div>
-
-<h2>快速开始</h2>
-<p class="h2sub">仓库里带着一个匿名示例批次（85 个测点），装好环境就能跑通。</p>
-<pre><code># 跑一个批次，结果写成 Excel（五张表）
+<!-- ============ 快速开始 ============ -->
+<section id="start" style="background:var(--bg2)"><div class="wrap">
+  <h2><span class="num">06</span>快速开始</h2>
+  <p class="sub">仓库里带着一个匿名示例批次（85 个测点），装好环境就能跑通。</p>
+  <pre><span class="c"># 跑一个批次，结果写成 Excel（五张表）</span>
 python -m druid.cli.reduce_batch --dir examples/EX2022A --out 结果.xlsx
 
-# 秒级自检：不需要 pytest，只需要 numpy / pandas
+<span class="c"># 秒级自检：不需要 pytest，只需要 numpy / pandas</span>
 python tests/run_all.py
 
-# 端到端数值回归（约 1 分钟，核对标样 QC 与年龄分布）
-python tests/check_example_batch.py</code></pre>
-<p class="hint">依赖：numpy · pandas · matplotlib · openpyxl · xlrd。刻意不依赖 scipy。</p>
+<span class="c"># 端到端数值回归（约 1 分钟，核对标样 QC 与年龄分布）</span>
+python tests/check_example_batch.py</pre>
+  <div class="notebox">依赖：numpy · pandas · matplotlib · openpyxl · xlrd，刻意不依赖 scipy。
+    也可以双击「启动数据处理工具.bat」用网页界面，全程不需要命令行。</div>
+  <div class="facts rv">
+    <div class="fact"><div class="n">85</div><div class="d">示例测点随仓库发布，可复现文档中的每个数字</div></div>
+    <div class="fact"><div class="n">30</div><div class="d">项自检 + 真实批次的端到端数值回归</div></div>
+    <div class="fact"><div class="n">4</div><div class="d">个平台 × Python 版本的 CI（含 Windows）</div></div>
+  </div>
+</div></section>
 
-<div class="facts">
-  <div class="fact"><div class="n">85</div><div class="d">示例测点随仓库发布，可复现文档中的每个数字</div></div>
-  <div class="fact"><div class="n">28</div><div class="d">自检项，含真实批次的端到端数值回归</div></div>
-  <div class="fact"><div class="n">4</div><div class="d">个平台 × Python 版本的 CI（含 Windows）</div></div>
-</div>
+<!-- ============ 已知限制 ============ -->
+<section id="limits"><div class="wrap">
+  <h2><span class="num">07</span>已知限制（我们明说）</h2>
+  <p class="sub">结果是要写进文章的，边界越清楚越好用。</p>
+  <div class="rv">
+    <div class="limit"><div class="ic">[!]</div><div>
+      <h4>标样与样品计数率相差一个数量级时，二次校正是治标</h4>
+      <p>主标约 1×10⁵ cps、样品约 1×10⁶ cps 时，单一线性因子消不掉高计数率下的非线性残差。
+        正式发表前应缩小信号强度差距（小束斑/低能量）或做死时间校正。</p></div></div>
+    <div class="limit"><div class="ic">[!]</div><div>
+      <h4>--deadtime-ns 默认为 0，是刻意的</h4>
+      <p>死时间需由标样计数率扫描实验标定，不凭经验填；默认开启会让历史上所有未校正结果不可比。
+        要用请显式传参。</p></div></div>
+    <div class="limit"><div class="ic">[!]</div><div>
+      <h4>窗口重叠让 MSWD 系统性偏小</h4>
+      <p>win=4 s / step=1 s 的滑窗引入相关性，年龄域判据因此偏宽松——方向是漏杀混合窗口，
+        不会错杀；下游 ADEPT 的坪判定会补上这一层。</p></div></div>
+  </div>
+</div></section>
 
-<footer>
-  <p>
-    代码与数据：<a href="https://github.com/chengkaide/DRUID">github.com/chengkaide/DRUID</a>　·
-    配套工具：<a href="https://github.com/chengkaide/ADEPT">ADEPT</a>（R 包，坪年龄与 MSWD 判定）　·
-    许可证：MIT
-  </p>
-  <p>
-    <b>关于这些文档的产生方式</b>：结构与行文由 AI（DeepSeek V4.1）协助完成；
+<footer><div class="wrap">
+  <div class="row">
+    <div><b style="color:var(--txt)">DRUID</b> · Depth-Resolved U–Pb Isotope Data reduction<br>
+      LA-ICP-MS 锆石 U-Pb 定年数据还原 · v2.2.2 · 许可证 MIT</div>
+    <div style="text-align:right">
+      代码与数据：<a href="https://github.com/chengkaide/DRUID">github.com/chengkaide/DRUID</a><br>
+      配套工具：<a href="https://github.com/chengkaide/ADEPT">ADEPT</a>（R 包，坪年龄与 MSWD 判定）
+    </div>
+  </div>
+  <p style="margin-top:22px;max-width:760px">
+    <b style="color:var(--dim)">关于这些文档的产生方式</b>：结构与行文由 AI 协助完成；
     其中的公式、常数、阈值与全部实测数值均对照源码与随仓库发布的示例批次逐条核对过，
     出处标在文中。任何一处可疑，请到仓库提 issue —— 这份文档值得被挑错的地方，
     正是它存在的原因。
   </p>
-</footer>
+</div></footer>
 
-</div>
+<script>
+var io = new IntersectionObserver(function(es){
+  es.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target);} });
+},{threshold:.12});
+document.querySelectorAll('.rv').forEach(function(el){ io.observe(el); });
+</script>
 </body>
 </html>
