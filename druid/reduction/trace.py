@@ -37,7 +37,7 @@ class Tra:
 
     # ── 身份信息 ──
     idx: int                 # 在批次中的序号（从 0 开始）
-    sample: str              # 样品名，如 "91500" / "YL-46-1"
+    sample: str              # 样品名，如 "91500" / "S01"
     role: str                # 角色：primary_std / secondary_std / unknown / glass
     path: str                # 源 CSV 路径（排查问题时要用）
 

@@ -58,7 +58,7 @@ let dirCache = {};
 let curPathOfBrowser = '';
 
 function pastePath() {
-  const p = prompt('输入批次目录的完整路径，例如：\nG:\\1.云龙锡矿\\云龙锡矿锆石\\20220301CKDB', curDir);
+  const p = prompt('输入批次目录的完整路径，例如：\nD:\\data\\EX2022A', curDir);
   if (p && p.trim()) chooseDir(p.trim());
 }
 
@@ -197,7 +197,7 @@ async function doUpload(files) {
   }
 
   try {
-    // 用第一个文件名推断批次名：20220301CKDB_12.csv → 20220301CKDB
+    // 用第一个文件名推断批次名：EX2022A_12.csv → EX2022A
     const guess = (files[0].name.match(/^(.+?)_\d+\.csv$/i) || [null, '上传批次'])[1];
     const r = await post('/api/upload', { files: packed, batch_name: guess });
     $('dropZone').textContent = `也可以把 CSV / LIST 文件拖到这里上传（会临时拼成一个批次目录）`;

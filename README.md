@@ -36,11 +36,16 @@ Qtegra CSV (cps)
 ### 2. 命令行（批处理、脚本化）
 
 ```bat
+:: 在包根目录（含 druid/ 的那一层）执行
 python -m druid.cli.reduce_batch ^
-    --dir "G:\1.云龙锡矿\云龙锡矿锆石\20220301CKDB" ^
-    --out "结果\20220301CKDB_U-Pb结果.xlsx" ^
+    --dir "examples\EX2022A" ^
+    --out "结果\EX2022A_U-Pb结果.xlsx" ^
     --plot
 ```
+
+`examples/EX2022A/` 是**仓库自带的示例批次**：85 个测点的真实数据，
+样品名已匿名成 `S01`…`S48`，标样原样保留（91500 / Ple / SRM 612）。
+装完环境先跑它一遍，能跑通就说明一切就绪。
 
 ### 3. 作为库调用
 
@@ -49,7 +54,7 @@ from druid import __version__
 from druid.workflow import BatchConfig, run_batch
 from druid.io.report import export_batch
 
-cfg = BatchConfig(data_dir=r"G:\...\20220301CKDB")
+cfg = BatchConfig(data_dir="examples/EX2022A")
 result = run_batch(cfg)
 export_batch(cfg, result, version=__version__)
 
@@ -82,8 +87,18 @@ python tests\run_all.py
 
 自检覆盖三层：统计内核（卡方上尾概率、加权平均、MAD 判离群，参考值取自 R）、
 输入边界（Qtegra CSV 解析、剥蚀区间、气体空白、窗口切分，用合成数据）、
-打包（版本号一致、入口点可调用、网页资源齐全）。**不含**真实批次的端到端数值
-比对——那需要数据，只能人工做，做法见 `AGENTS.md` §4。
+打包（版本号一致、入口点可调用、网页资源齐全，外加"仓库里不许出现真实地名 /
+样品号 / 用户名"的护栏）。
+
+**还有一项端到端检查，它跑得慢，所以单独调用：**
+
+```bat
+python tests\check_example_batch.py
+```
+
+它把 `examples/EX2022A/`（85 个测点）真跑一遍，比对标样 QC、样品年龄分布与
+深度结构分布。**合成数据只能覆盖边界，覆盖不了"数值算得对不对"** ——
+改了算法就该跑它。CI 每次都跑。
 
 **依赖**：`numpy` `pandas` `matplotlib` `openpyxl` `xlrd`。
 不需要 `scipy`——年龄方程的不动点迭代与二分法都是自己实现的。
@@ -96,16 +111,20 @@ python tests\run_all.py
 一个批次放在一个文件夹里，文件夹名即批次名：
 
 ```
-20220301CKDB\
-    20220301CKDB_LIST.xls     ← 测点序列表：第 1 列文件名，第 2 列样品名
-    20220301CKDB_1.csv        ← 每个测点一个 Qtegra 导出的 CSV
-    20220301CKDB_2.csv
+EX2022A\
+    EX2022A_LIST.csv     ← 测点序列表：第 1 列文件名，第 2 列样品名（无表头）
+    EX2022A_1.csv        ← 每个测点一个 Qtegra 导出的 CSV
+    EX2022A_2.csv
     ...
 ```
 
+序列表可以用 `.xls` / `.xlsx`（仪器工作站直接导出的格式），
+也可以自己存成 `.csv` / `.tsv` 文本 —— 两列几十行，文本能 diff、
+能在 code review 里看懂，`examples/EX2022A/` 用的就是 CSV。
+
 要点：
 
-- 序列表必须叫 `<目录名>_LIST.xls` 或 `.xlsx`（也接受 `.xlsm` / 小写）；
+- 序列表必须叫 `<目录名>_LIST.<扩展名>`（大小写不敏感，`_LIST` 与 `_list` 都认）；
 - LIST 里登记的文件名**不带 `.csv` 后缀**（Qtegra 导出的默认格式）；
 - 样品名决定角色，识别规则见下表；
 - 每个 CSV 必须含 202 / 204 / 206 / 207 / 208 / 232 / 238 全部通道。
@@ -237,7 +256,7 @@ MSWD_概率       零假设（该域只有一个年龄）下，MSWD 至少这么
 | `Tau` / `R68` / `s68` / `ThU` / `U_cps` / `f206_pct` / `n_cycles` | 诊断用 |
 
 ```r
-adept("20220301CKDB_U-Pb结果.xlsx",
+adept("EX2022A_U-Pb结果.xlsx",
       lower_ablation_time    = 0,      # DRUID 已切好自己的剥蚀窗口
       upper_ablation_time    = 1e6,    # 上界放到最后一个窗口之后
       smooth                 = "none", # 关键：数据已做 F(τ) 校正，剖面本就是平的
@@ -288,7 +307,7 @@ druid/
 
 ## 七、已知限制
 
-- **标样与样品计数率相差一个数量级时**（本项目：91500 约 1×10⁵ cps，云龙锆石约
+- **标样与样品计数率相差一个数量级时**（本项目：91500 约 1×10⁵ cps，示例样品约
   1×10⁶ cps），单一线性归一化因子无法完全消除高计数率下的非线性残差，表现为
   监控标样系统性偏老。第 ⑩ 步的二次校正是**基体匹配**的治标办法；
   正式发表前应尽量缩小信号强度差距（换小束斑 / 调低能量），或施加可靠的死时间校正。
@@ -305,14 +324,31 @@ druid/
 
 ## 八、变更记录
 
+### 2.2.0
+
+- **序列表支持 `.csv` / `.tsv` 文本格式**（原来只认 `.xls` / `.xlsx`），
+  并优先于二进制格式查找。两列几十行的东西用文本存才能 diff、才能在 review 里看懂；
+  仓库里的示例批次就是这么存的。`.csv`/`.tsv` 走**显式分隔符**，不交给自动嗅探 ——
+  样品名里有空格（`SRM 612`）时嗅探可能误判，把样品名劈成两半。
+- **随仓库附带示例批次 `examples/EX2022A/`**（85 个测点，样品名匿名成
+  `S01`…`S48`，标样原样保留 91500 / Ple / SRM 612）。它有两个用处：
+  装好环境跑一遍就知道有没有装错；CI 用它做**端到端数值回归**
+  （`tests/check_example_batch.py`），把标样 QC 与年龄分布钉死 ——
+  测试里的合成数据只能覆盖边界，覆盖不了"数值算得对"。
+- **修掉 CLI 收尾摘要的一处统计错误**：用 `DataFrame.get(col, ...)` 取列拿到的是
+  **整表**那一列，于是 35 个标样测点混进了"样品年龄"，中位从 458.1 被抬成
+  460.9 Ma、5–95% 区间从 420~644 撑成 333~1044 Ma。而打印出来的 `n=48`
+  让人以为只统计了样品，所以这个错很难被看出来。
+- `license` 元数据由"内部研究用途"改为 **MIT**，与仓库根目录的 `LICENSE` 一致。
+
 ### 2.1.0
 
 - **`深度剖面域` 表增加 `MSWD` 与 `MSWD_概率` 两列。** 这两个数一直算得出来
   （`summarize_segments()` 内部就在调 `weighted_mean()`，它本来就返回 MSWD），
   只是导出时被丢掉了。补上是为了和 R 端 **ADEPT** 的坪年龄口径直接并列对照——
   两边现在都是"反比方差加权平均 + 卡方上尾概率"。**只增加列，既有列与数值未动。**
-- 新增 `tests/`（26 项自检，不依赖 pytest）与 CI
-  （ubuntu × py3.9/3.12/3.13 + windows × py3.13，含 wheel 完整性检查）。
+- 新增 `tests/` 自检（不依赖 pytest）与 CI（ubuntu × py3.9/3.12/3.13 +
+  windows × py3.13，含 wheel 完整性检查与示例批次端到端回归）。
 - `docs/druid-adept-dataflow.html` 与 `AGENTS.md`。
 
 ### 2.0.0

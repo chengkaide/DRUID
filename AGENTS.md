@@ -14,6 +14,8 @@ LA-ICP-MS 锆石 U-Pb 数据还原工具。把 Qtegra/iCAP 导出的 cps 时间�
 
 - 包名 `druid`（历史上叫 `upb`，见到旧叫法都是改名前的引用）
 - 版本在 `druid/__init__.py:__version__`
+- 仓库布局：`druid/` 代码 · `examples/EX2022A/` 示例批次（85 个测点，样品名
+  匿名成 `S01`…`S48`，标样保留）· `tests/` 自检 · `docs/` 双工具文档
 - Python 层：**只有 numpy / pandas / matplotlib / openpyxl / xlrd**。
   **没有 scipy** —— 年龄方程的不动点迭代、二分法、卡方上尾概率都是自己实现的，
   这不是疏漏而是设计：不依赖会变的第三方行为。
@@ -22,7 +24,7 @@ LA-ICP-MS 锆石 U-Pb 数据还原工具。把 Qtegra/iCAP 导出的 cps 时间�
 
 ```bash
 # 必须用这个解释器 —— 系统 Python 没有科学计算包
-PY="C:/Users/凯凯/.workbuddy/binaries/python/envs/upb/Scripts/python.exe"
+PY="C:/Users/<用户名>/.workbuddy/binaries/python/envs/upb/Scripts/python.exe"
 
 # 跑一个批次
 "$PY" -m druid.cli.reduce_batch --dir "<批次目录>" --out "<结果.xlsx>" --plot
@@ -51,16 +53,14 @@ pip install -e ".[dev]" && python -m pytest -q
 
 ### CI 能替你做什么，不能做什么
 
-`.github/workflows/ci.yml`（推上 GitHub 后自动跑，约 1 分钟）：
+`.github/workflows/ci.yml`（推上 GitHub 后自动跑，约 2 分钟）：
 
 - ubuntu × py3.9 / 3.12 / 3.13，windows × py3.13；
 - 每个平台都跑 pyflakes、`pytest`、`tests/run_all.py`（不含 pytest 的那条路）、
   以及两个命令行入口的 `--help`；
-- 另一个 job 构建 wheel，核对静态资源与两个入口点真的在包里。
-
-**它没有真实批次数据，所以 CI 全绿不代表数值没变 —— 第 3 步只能人来做。**
-反过来，CI 抓的是"源码目录里跑得好好的、装完却坏掉"那类问题
-（网页资源漏进 wheel 就是典型），那种本地很难发现。
+- 另一个 job 构建 wheel，核对静态资源与两个入口点真的在包里；
+- 还有一个 job 跑 `tests/check_example_batch.py` —— 用 `examples/EX2022A/`
+  做端到端数值回归（它要跑一分钟，所以单独一个 job，不拖慢矩阵里那些秒级检查）。
 
 写测试时注意约定：**只写 `assert`，不用任何 pytest 特性**（fixture、参数化、
 `tmp_path` 都别用），需要临时文件就用 `tempfile`。因为实验室那台机器上
@@ -70,19 +70,36 @@ pip install -e ".[dev]" && python -m pytest -q
 
 输出是要写进文章的。除了有意为之的改动，**必须证明数值没变**。
 
-对照基线（批次 `20220301CKDB`，48 个样品测点）：
+### 先跑自动的
+
+```bash
+python tests/check_example_batch.py
+```
+
+它用仓库自带的示例批次 `examples/EX2022A/`（85 个测点）真跑一遍，
+把下表的数字钉死。CI 每次都跑。**改了算法就该跑它**。
+
+### 基线表（批次 `EX2022A`，48 个样品测点 + 21 主标 + 14 监控 + 2 玻璃）
 
 | 量 | 值 |
 |---|---|
 | 结果 / 标样QC / 深度剖面域 / 剖面窗口 | 83 / 2 / 91 / 1677 行 |
-| 样品 206Pb/238U 中位 | 460.9 Ma |
+| 样品 206Pb/238U 中位（QC 校正列） | **458.1 Ma** |
+| 样品的 5–95% 区间 | 420.2 ~ 643.5 Ma |
 | 协和度中位 | 101.3%，其中 90–110% 占 94% |
-| 91500 偏差 / Ple 偏差 | −0.25% / +1.81% |
+| 91500 加权平均 / 偏差 | 1059.75 Ma / **−0.25%** |
+| Ple 加权平均 / 偏差 | 343.24 Ma / **+1.81%** |
+| 深度结构 | 单点 35 / 多域2 18 / 均一 15 / 多域3 15 |
 | 接 ADEPT 后 | 51 个坪，MSWD 中位 1.25 |
+
+⚠ **中位曾经被误报成 460.9 Ma** —— CLI 用 `DataFrame.get(col, ...)` 取列，
+拿到的是整表那一列，43 个标样测点混了进来（91500 约 1060 Ma、Ple 约 343 Ma），
+把中位抬高了、把 5–95% 区间从 420~644 撑成 333~1044。2.2.0 已修。
 
 对比做法：改前先 `--out 旧.xlsx` 存一份，改后逐列比。
 **比较时用 `fillna('__NA__')` 哨兵法，不要直接 `astype(str)` 比** ——
 空单元格在两次读取里可能是 `None` 也可能是 `nan`，会报出假差异（踩过）。
+比较**标签**（样品名、文件名）时要显式排除，它们本来就是用来给人看的。
 
 ## 5. 分层与依赖方向
 

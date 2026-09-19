@@ -22,13 +22,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "druid"
-version = "2.1.0"
+version = "2.2.0"
 description = "LA-ICP-MS 锆石 U-Pb 同位素数据还原工具（DRUID）"
 readme = "README.md"
 requires-python = ">=3.9"
-license = { text = "内部研究用途" }
-authors = [{ name = "云龙锡矿项目组" }]
-# 关键词便于将来在内部索引里检索
+# 与仓库根目录的 LICENSE 保持一致（MIT）。这里此前写的是"内部研究用途"，
+# 与仓库实际采用的 MIT 矛盾 —— 既然代码公开，元数据也必须说同一件事。
+license = { text = "MIT" }
+authors = [{ name = "DRUID contributors" }]
+# 关键词便于检索
 keywords = ["LA-ICP-MS", "U-Pb", "zircon", "geochronology", "depth-profile"]
 
 # 运行时依赖。刻意只列真正用到的，避免为了装它先拉几十个无用包。

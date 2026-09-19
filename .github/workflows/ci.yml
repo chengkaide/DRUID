@@ -99,3 +99,31 @@ jobs:
       - name: 看 wheel 里有没有该有的东西
         shell: bash
         run: python tests/check_wheel.py
+
+  example-batch:
+    name: 示例批次端到端数值回归
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: 安装
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      # `tests/test_*.py` 里的合成数据只覆盖边界（CSV 格式、剥蚀区间、窗口切分、
+      # 卡方概率），**覆盖不了"数值算得对不对"**。
+      # 这一步用仓库自带的示例批次（85 个测点，样品名已匿名）真跑一遍，
+      # 把标样 QC、样品年龄分布、深度结构分布钉死。
+      #
+      # 单独一个 job，不塞进上面的矩阵：它要跑一分钟，
+      # 而矩阵里的检查是秒级的，混在一起会让每次 PR 都白等一分钟。
+      - name: 跑示例批次，比对基线
+        shell: bash
+        run: python tests/check_example_batch.py

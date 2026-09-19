@@ -4,10 +4,10 @@ druid.cli.reduce_batch —— 批处理命令行入口
 
 用法
 ----
-    # 进入 druid 包的**上级**目录（即 ...\\UPb处理）后执行
+    # 进入包根目录（含 druid/ 的那一层）后执行
     python -m druid.cli.reduce_batch ^
-        --dir "G:\\1.云龙锡矿\\云龙锡矿锆石\\20220301CKDB" ^
-        --out "G:\\1.云龙锡矿\\云龙锡矿锆石\\UPb处理\\结果\\20220301CKDB_U-Pb结果.xlsx" ^
+        --dir "examples\\EX2022A" ^
+        --out "结果\\EX2022A_U-Pb结果.xlsx" ^
         --plot
 
     # 做对照实验：换一种整段比值方法 / 施加死时间校正
@@ -15,6 +15,9 @@ druid.cli.reduce_batch —— 批处理命令行入口
     python -m druid.cli.reduce_batch --dir ... --deadtime-ns 14.7645
 
 运行 -h 可查看全部参数。
+
+`examples/EX2022A/` 是仓库自带的示例批次（真实数据，样品名已匿名成 S01…S48，
+标样原样保留），可以直接用来验证环境是否装好。
 """
 from __future__ import annotations
 
@@ -95,7 +98,16 @@ def _summary_lines(result) -> list:
     lines = []
     unk = res[res["类型"] == "样品"]
     if len(unk):
-        a = res.get("年龄206_238_QC校正", unk["年龄206_238"])
+        # ⚠ 这里曾经写成 `res.get("年龄206_238_QC校正", unk["年龄206_238"])`。
+        # `DataFrame.get(key)` 返回的是**整表**的那一列，不是筛选后的子集 ——
+        # 于是 35 个标样测点（91500 约 1060 Ma、Ple 约 343 Ma）混进了
+        # "样品年龄"的统计：中位数从 458.1 抬到 460.9，
+        # 5–95% 区间从 420~644 撑成 333~1044 Ma。
+        # 打印出来的 n=48 又让人以为只统计了样品，所以这个错很难被看出来。
+        # 先定列名，再从 unk 里取列，两步分开，不要再合成一步。
+        col = ("年龄206_238_QC校正"
+               if "年龄206_238_QC校正" in res.columns else "年龄206_238")
+        a = unk[col]
         q = a.quantile([0.05, 0.5, 0.95])
         lines.append(
             f"    样品年龄 206Pb/238U：中位 {q[0.5]:.1f} Ma，"

@@ -42,15 +42,15 @@ druid —— 激光剥蚀 ICP-MS（LA-ICP-MS）锆石 U-Pb 定年数据还原包
 用法示例
 --------
     # 命令行
-    python -m druid.cli.reduce_batch --dir "G:/.../20220301CKDB" --out 结果.xlsx --plot
+    python -m druid.cli.reduce_batch --dir "D:/data/EX2022A" --out 结果.xlsx --plot
 
     # 作为库调用
     from druid.workflow import BatchConfig, run_batch
-    result = run_batch(BatchConfig(data_dir="G:/.../20220301CKDB"))
+    result = run_batch(BatchConfig(data_dir="D:/data/EX2022A"))
 """
 from __future__ import annotations
 
-__version__ = "2.1.0"
+__version__ = "2.2.0"
 
 # 版本说明
 # --------
@@ -61,3 +61,14 @@ __version__ = "2.1.0"
 # （`summarize_segments()` 内部就在调 `weighted_mean()`，它本来就返回 MSWD），
 # 只是导出时被丢掉了。补上是为了让本工具与 R 端 ADEPT 的坪年龄口径能直接并列
 # 对照 —— 两边都是"反比方差加权平均 + 卡方上尾概率"。只增加列，既有列与数值未动。
+#
+# 2.2.0 起：
+#   · 序列表支持 CSV/TSV 文本格式（原来只认 .xls/.xlsx），优先于二进制格式查找。
+#     两列几十行的东西用文本存才能 diff、才能在 review 里看懂。
+#   · 随仓库附带示例批次 `examples/EX2022A/`（85 个测点，样品名匿名成 S01…S48，
+#     标样保留），CI 用它做端到端数值回归 —— 合成数据覆盖不了"数值算得对"。
+#   · 修掉 CLI 收尾摘要里的一处统计错误：`DataFrame.get()` 返回的是**整表**的那一列，
+#     于是 35 个标样测点混进了"样品年龄"，中位 458.1 被抬成 460.9 Ma、
+#     5–95% 区间从 420~644 撑成 333~1044 Ma。
+#   · `_read_rows` 对 .csv/.tsv 改为显式指定分隔符，不再交给嗅探 ——
+#     样品名里有空格（`SRM 612`）时嗅探可能误判，把样品名劈成两半。

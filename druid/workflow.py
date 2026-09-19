@@ -108,7 +108,7 @@ class BatchConfig:
     def __post_init__(self):
         """把字符串路径统一转成 Path，并准备好输出目录。"""
         self.data_dir = Path(self.data_dir)
-        base = self.data_dir.name                       # 例如 "20220301CKDB"
+        base = self.data_dir.name                       # 例如 "EX2022A"
         if self.out_excel is None:
             # 默认和原始数据放在一起，便于"数据—结果"一一对应、不会丢
             self.out_excel = self.data_dir / f"{base}_U-Pb结果.xlsx"
@@ -121,9 +121,25 @@ class BatchConfig:
 
     @property
     def list_file(self) -> Path:
-        """序列文件路径。兼容大小写：CKDB 用的是大写 _LIST.xls。"""
+        """
+        序列文件路径。按**优先级**依次找，第一个存在的就用它。
+
+        为什么把 .csv / .tsv 排在 .xls 前面
+        ----------------------------------
+        序列表只有两列、几十行，用文本存比二进制好得多：能 diff、能在
+        code review 里看懂、出了错能用编辑器直接修。仓库里的示例批次
+        （`examples/EX2022A/`）就是这么存的 —— 谁 clone 下来都能看清
+        "第几个测点是标样、第几个是样品"。
+
+        两列都不带表头（第 1 行就是数据），这与 xls 版的约定一致。
+
+        仍然兼容 .xls/.xlsx：仪器工作站导出的原始 LIST 就是这个格式，
+        日常跑真实批次时不去动它。
+        """
         d = self.data_dir
-        for cand in (f"{d.name}_LIST.xls", f"{d.name}_list.xls",
+        for cand in (f"{d.name}_LIST.csv", f"{d.name}_list.csv",
+                     f"{d.name}_LIST.tsv", f"{d.name}_list.tsv",
+                     f"{d.name}_LIST.xls", f"{d.name}_list.xls",
                      f"{d.name}_LIST.xlsx", f"{d.name}_list.xlsx"):
             p = d / cand
             if p.exists():
@@ -673,7 +689,7 @@ def apply_secondary_correction(res: pd.DataFrame, cfg: BatchConfig):
     ------------
     本批次存在一个结构性问题：
         主标 91500 的 238U ≈ 1×10⁵ cps
-        样品（云龙锆石）的 238U ≈ 1×10⁶ cps
+        样品（示例样品）的 238U ≈ 1×10⁶ cps
     整整差一个数量级。在高计数率下，探测器/电子学的脉冲计数非线性
     无法被单一的线性归一化因子消除，表现为监控标样系统性偏老。
 

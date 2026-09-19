@@ -181,5 +181,50 @@ def test_public_api_is_where_it_is_documented():
     assert callable(reduce_batch.main) and callable(serve_ui.main)
 
 
+# 文本类文件（二进制的不去读）
+TEXT_SUFFIX = {".md", ".txt", ".py", ".js", ".toml", ".html", ".yml", ".yaml",
+               ".css", ".spec", ".bat", ".csv"}
+
+
+def test_no_identifying_strings_in_tracked_files():
+    """
+    仓库里不许再出现真名 —— 地名、样品号、批次号、本机用户名。
+
+    这不是洁癖。这些信息曾经散布在 **13 个文件**里：`pyproject.toml` 的作者名、
+    代码注释与文档里的样例路径、以及文档里内嵌那张图的标题（是像素，不是文本）。
+    发出去就等于把"这套工具"和"一份未发表的数据"绑在一起，而且收不回来。
+
+    现在示例批次用 `S01`…`S48` / `EX2022A`，文档里的例子也一并改名 ——
+    这条测试是防止回流：以后谁顺手贴一条真实路径进来，CI 立刻拦下。
+
+    ⚠ 本文件自己必须把那些模式写出来，所以把自己排除在外。
+    """
+    import subprocess
+
+    files = subprocess.run(["git", "-c", "core.quotePath=false", "ls-files"],
+                           cwd=str(ROOT), capture_output=True, text=True,
+                           encoding="utf-8").stdout
+    if not files.strip():
+        return                    # 不是 git 仓库（例如从源码包解开的），跳过
+
+    me = Path(__file__).name
+    patterns = ["云龙", "锡矿", "YL-46", "20220301", "凯凯"]
+    hits = []
+    for rel in files.splitlines():
+        if not rel.strip() or Path(rel).name == me:
+            continue
+        p = ROOT / rel
+        if not p.exists() or p.suffix.lower() not in TEXT_SUFFIX:
+            continue
+        try:
+            text = p.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        for k in patterns:
+            if k in text:
+                hits.append(f"{rel}: 含 {k}")
+    assert not hits, "仓库里出现了可识别信息，请改成中性示例：" + "; ".join(hits)
+
+
 if __name__ == "__main__":
     raise SystemExit(_selftest.run(globals()))

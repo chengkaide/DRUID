@@ -355,7 +355,7 @@ def save_uploads(files: List[Dict[str, str]], batch_name: str) -> Dict[str, Any]
     用处：数据还在 U 盘/别的机器上，不想先手动拷到一个固定目录。
     写一个临时目录后就退化成正常的"批次目录"流程，后面的代码完全不用改。
 
-    files: [{"name": "20220301CKDB_1.csv", "b64": "..."}]
+    files: [{"name": "EX2022A_1.csv", "b64": "..."}]
     """
     import base64
 

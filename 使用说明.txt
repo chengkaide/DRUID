@@ -38,11 +38,15 @@ DRUID = Depth-Resolved U-Pb Isotope Data reduction
 【用法 3 · 命令行批处理】适合批量、脚本化
 
         python -m druid.cli.reduce_batch ^
-            --dir "G:\1.云龙锡矿\云龙锡矿锆石\20220301CKDB" ^
-            --out "结果\20220301CKDB_U-Pb结果.xlsx" ^
+            --dir "examples\EX2022A" ^
+            --out "结果\EX2022A_U-Pb结果.xlsx" ^
             --plot
 
     参数说明用 -h 查看。
+
+    examples\EX2022A 是随工具附带的示例批次（真实数据，样品名已匿名成
+    S01…S48，标样保留 91500 / Ple / SRM 612）。装好环境先跑它一遍，
+    跑得通就说明一切就绪。
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -51,14 +55,15 @@ DRUID = Depth-Resolved U-Pb Isotope Data reduction
 
 一个批次放在一个文件夹里：
 
-    20220301CKDB\
-        20220301CKDB_LIST.xls     ← 测点序列表，第 1 列文件名、第 2 列样品名
-        20220301CKDB_1.csv
-        20220301CKDB_2.csv
+    EX2022A\
+        EX2022A_LIST.csv     ← 测点序列表，第 1 列文件名、第 2 列样品名（无表头）
+        EX2022A_1.csv
+        EX2022A_2.csv
         ...                        ← 每个测点一个 Qtegra 导出的 CSV
 
 要点：
-  · 序列表必须叫 <目录名>_LIST.xls 或 .xlsx，与文件夹同名；
+  · 序列表必须叫 <目录名>_LIST.<扩展名>，与文件夹同名；
+    仪器工作站导出的 .xls/.xlsx 直接用，也可以自己存成 .csv/.tsv 文本；
   · LIST 里登记的文件名不带 .csv 后缀（Qtegra 导出的默认格式）；
   · 样品名里出现 91500 会被自动识别为主标，Ple / Plešovice 识别为监控标样，
     SRM 612 识别为玻璃标样（不参与 U-Pb），其余一律当作未知样品。

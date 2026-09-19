@@ -6,10 +6,10 @@ druid.io.sequence —— 测点序列（LIST.xls / LIST.xlsx）读取与角色�
 ----------------
 两列、若干行，每行一个测点：
 
-    序号0  20220301CKDB_1    SRM 612
-    序号1  20220301CKDB_2    91500        ← Excel 里写成数字 91500.0
-    序号2  20220301CKDB_5    Ple
-    序号3  20220301CKDB_7    YL-46-1
+    序号0  EX2022A_1    SRM 612
+    序号1  EX2022A_2    91500        ← Excel 里写成数字 91500.0
+    序号2  EX2022A_5    Ple
+    序号3  EX2022A_7    S01
     …
 
 ⚠ 一个陷阱：**91500 在 xls 里存成了浮点数 91500.0**。
@@ -105,7 +105,16 @@ def _read_rows(path: Path):
 
     · .xls  → xlrd（老 Excel 二进制格式，pandas 已弃用 xlrd 读 xls 需显式安装）
     · .xlsx → pandas.read_excel（openpyxl 引擎）
-    · 其余  → 按 CSV 兜底，容忍度更高
+    · .csv  → **显式用逗号**分隔
+    · .tsv  → 显式用制表符分隔
+    · 其余  → 让 pandas 嗅探分隔符（兜底，容忍度最高）
+
+    ⚠ 为什么 .csv/.tsv 要显式指定分隔符，不交给嗅探
+    ------------------------------------------------
+    样品名里有空格（`SRM 612`）而有的行没有（`91500`），
+    列数在各行之间不一致，嗅探器有可能误判成"空格分隔"，
+    于是样品名被劈成两半、角色判定随之失效。
+    文本序列表是我们自己的格式，用哪个分隔符自己最清楚。
     """
     path = Path(path)
     suffix = path.suffix.lower()
@@ -130,8 +139,13 @@ def _read_rows(path: Path):
                 for a, b in zip(df.iloc[:, 0], df.iloc[:, 1])
                 if normalize_name(a)]
 
-    # 兜底：当 CSV 处理（sep=None 让 pandas 自动嗅探分隔符）
-    df = pd.read_csv(path, header=None, sep=None, engine="python")
+    if suffix == ".csv":
+        df = pd.read_csv(path, header=None, usecols=[0, 1], sep=",")
+    elif suffix == ".tsv":
+        df = pd.read_csv(path, header=None, usecols=[0, 1], sep="\t")
+    else:
+        # 兜底：让 pandas 自动嗅探分隔符
+        df = pd.read_csv(path, header=None, sep=None, engine="python")
     return [(normalize_name(a), normalize_name(b))
             for a, b in zip(df.iloc[:, 0], df.iloc[:, 1]) if normalize_name(a)]
 
@@ -147,8 +161,8 @@ def read_sequence(path, primary=None, secondary=None) -> pd.DataFrame:
 
     返回列
     ------
-        file   : 不带扩展名的文件名（如 "20220301CKDB_7"，拼 .csv 即得数据文件路径）
-        sample : 规范化后的样品名（如 "91500" / "Ple" / "YL-46-1"）
+        file   : 不带扩展名的文件名（如 "EX2022A_7"，拼 .csv 即得数据文件路径）
+        sample : 规范化后的样品名（如 "91500" / "Ple" / "S01"）
         role   : 角色（见 sample_role）
         order  : 在序列中的原始次序，从 1 开始计数（= Excel 里的序号列）
     """
@@ -172,7 +186,7 @@ def spot_csv_path(data_dir, fname) -> Path:
 
     约定（重要）
     ----------
-    LIST 里登记的 `file` 列**不带扩展名**（如 "20220301CKDB_7"），
+    LIST 里登记的 `file` 列**不带扩展名**（如 "EX2022A_7"），
     磁盘上的数据文件是同名的 `.csv`。
 
     为什么要把这一个字符串拼接单独拎成函数
