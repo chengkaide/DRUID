@@ -621,6 +621,11 @@ def run_depth_analysis(spots, brack_for, ref68, sd68, cfg: BatchConfig):
                     域=s["domain"], 标记=s["flag"],
                     tau=f"{s['tau0']:.2f}-{s['tau1']:.2f}",
                     年龄_Ma=s["age_Ma"], s2_Ma=2 * s["se_1sig"],
+                    # MSWD 与它的卡方上尾概率。与 R 端 ADEPT 的
+                    # `MSWD` / `MSWD probability` 同一口径 —— 两边都是
+                    # 反比方差加权平均 + χ² 上尾，可以直接对照。
+                    # （年龄_Ma 本身就是反比方差加权平均，不是算术平均。）
+                    MSWD=s["mswd"], MSWD_概率=s["mswd_prob"],
                     Th_U=s["ThU"], n_win=int(s["n_win"])))
 
     if cfg.plot and pdf is not None:

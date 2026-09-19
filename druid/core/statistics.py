@@ -20,7 +20,89 @@ MSWD（Mean Square of Weighted Deviates，加权偏差均方）
 """
 from __future__ import annotations
 
+import math
+
 import numpy as np
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 卡方上尾概率（MSWD 判据的"概率"读法）
+# ─────────────────────────────────────────────────────────────────────────────
+def _gammp_series(a: float, x: float) -> float:
+    """正则化下不完全 Gamma 函数 P(a, x)，级数展开（x < a+1 时收敛快）。"""
+    ap = a
+    total = 1.0 / a
+    delta = total
+    for _ in range(1000):
+        ap += 1.0
+        delta *= x / ap
+        total += delta
+        if abs(delta) < abs(total) * 1e-15:
+            break
+    return total * math.exp(-x + a * math.log(x) - math.lgamma(a))
+
+
+def _gammq_cf(a: float, x: float) -> float:
+    """正则化上不完全 Gamma 函数 Q(a, x)，连分式（x >= a+1 时用）。"""
+    tiny = 1e-300
+    b = x + 1.0 - a
+    c = 1.0 / tiny
+    d = 1.0 / b if b != 0.0 else 1.0 / tiny
+    h = d
+    for i in range(1, 1000):
+        an = -i * (i - a)
+        b += 2.0
+        d = an * d + b
+        if abs(d) < tiny:
+            d = tiny
+        c = b + an / c
+        if abs(c) < tiny:
+            c = tiny
+        d = 1.0 / d
+        delta = d * c
+        h *= delta
+        if abs(delta - 1.0) < 1e-15:
+            break
+    return math.exp(-x + a * math.log(x) - math.lgamma(a)) * h
+
+
+def chi2_sf(x: float, df: int) -> float:
+    """
+    卡方分布的上尾概率 P(χ²_df > x)。
+
+    为什么本包要自带一个
+    --------------------
+    MSWD 的"概率"读法是：在"该年龄域真的只有一个年龄"这个零假设下，
+    观测到的 MSWD 至少这么大的概率 —— 正是卡方上尾概率。
+    scipy 没装（本包刻意不依赖它），所以自己实现。
+
+    与 R 端 ADEPT 的对齐
+    --------------------
+    ADEPT 用的是 `stats::pf(mswd, n-1, Inf, lower.tail = FALSE)`。
+    分母自由度为无穷的 F 分布等价于 χ²/df，所以
+
+        pf(mswd, n-1, Inf, lower.tail=FALSE)  ==  chi2_sf(mswd * (n-1), n-1)
+
+    ——**要乘上 (n−1)**。漏了这一步，概率会算得偏大一大截。
+    本函数只做 χ²，那个乘法由调用方负责（见 depth/domains.py）。
+
+    实现按 Numerical Recipes 的两分支：x < a+1 用级数（算 P 再取 1−P），
+    x ≥ a+1 用连分式直接算 Q —— 后者避免了 1−P 在尾部灾难性的相消误差。
+    """
+    x = float(x)
+    if not np.isfinite(df) or df <= 0:
+        return float("nan")
+    if np.isnan(x):
+        return float("nan")
+    if x == float("inf"):
+        return 0.0          # 上尾概率确实为 0，别退化成 nan
+    if x <= 0.0:
+        return 1.0
+    a = 0.5 * float(df)
+    xx = 0.5 * x
+    if xx < a + 1.0:
+        return float(min(max(1.0 - _gammp_series(a, xx), 0.0), 1.0))
+    return float(min(max(_gammq_cf(a, xx), 0.0), 1.0))
 
 
 def weighted_mean(x, s):

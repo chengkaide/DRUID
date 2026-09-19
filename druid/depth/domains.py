@@ -29,7 +29,7 @@ from typing import List, Sequence, Tuple
 import numpy as np
 import pandas as pd
 
-from ..core.statistics import weighted_mean
+from ..core.statistics import chi2_sf, weighted_mean
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -270,7 +270,11 @@ def summarize_segments(prof: pd.DataFrame,
         n_win    窗口数
         age_Ma   加权平均年龄
         se_1sig  加权平均的 1σ
-        mswd/MSWD/flag 判定依据与结果
+        mswd     加权偏差均方
+        mswd_prob 卡方上尾概率 —— "该域只有一个年龄"这一假设下，
+                 MSWD 至少这么大的概率。读法与 R 端 ADEPT 的
+                 `MSWD probability` 完全一致，两边可比。
+        flag     判定依据与结果
         ThU/U_cps 该域的平均 Th/U 与 U 信号（判岩性用）
     """
     rows = []
@@ -284,12 +288,15 @@ def summarize_segments(prof: pd.DataFrame,
         crit = 1.0 + 2.0 * np.sqrt(2.0 / max(k - 1, 1))
         interior = 0 < j < nseg - 1                      # 是否为中间段
         mixed = (interior and (k <= mixed_max_frac * n_tot or mswd > crit)) or (k < 3)
+        # ADEPT 用 pf(mswd, k-1, Inf, lower.tail=FALSE)，等价于
+        # chi2_sf(mswd*(k-1), k-1) —— **要乘 (k-1)**，见 core.statistics.chi2_sf。
+        prob = chi2_sf(mswd * (k - 1), k - 1) if k >= 2 else float("nan")
         rows.append(dict(
             domain=f"D{j + 1}",
             i0=lo, i1=hi,
             tau0=float(prof["tau"].iloc[lo]),
             tau1=float(prof["tau"].iloc[hi - 1]),
-            n_win=k, age_Ma=mu, se_1sig=se, mswd=mswd,
+            n_win=k, age_Ma=mu, se_1sig=se, mswd=mswd, mswd_prob=prob,
             flag="mixed/过渡带" if mixed else "age domain",
             ThU=float(prof["ThU"].iloc[lo:hi].mean()),
             U_cps=float(prof["U_cps"].iloc[lo:hi].mean()),
