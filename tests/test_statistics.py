@@ -133,18 +133,10 @@ def test_robust_mask_unchanged():
 
 
 def _run_standalone() -> int:
-    tests = [(n, f) for n, f in sorted(globals().items())
-             if n.startswith("test_") and callable(f)]
-    failed = 0
-    for name, fn in tests:
-        try:
-            fn()
-            print(f"  ok    {name}")
-        except AssertionError as e:
-            failed += 1
-            print(f"  FAIL  {name}: {e}")
-    print(f"\n{len(tests) - failed}/{len(tests)} 通过")
-    return 1 if failed else 0
+    """见 tests/_selftest.py —— 让这个文件不装 pytest 也能直接跑。"""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import _selftest
+    return _selftest.run(globals())
 
 
 if __name__ == "__main__":

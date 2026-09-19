@@ -30,8 +30,11 @@ PY="C:/Users/凯凯/.workbuddy/binaries/python/envs/upb/Scripts/python.exe"
 # 网页界面（日常用这个）
 #   双击 启动数据处理工具.bat
 
-# 自检
-"$PY" tests/test_statistics.py
+# 自检（不需要 pytest）
+"$PY" tests/run_all.py
+
+# 装了开发依赖的话等价于（这是 CI 用的那条路）
+pip install -e ".[dev]" && python -m pytest -q
 ```
 
 虚拟环境目录仍叫 `envs/upb`（历史名），两个启动 bat 同时接受 `envs/druid` 和 `envs/upb`。
@@ -40,11 +43,28 @@ PY="C:/Users/凯凯/.workbuddy/binaries/python/envs/upb/Scripts/python.exe"
 
 ```bash
 1) "$PY" -m pyflakes druid/            # 必须 0 项
-2) "$PY" tests/test_statistics.py      # 必须全过
+2) "$PY" tests/run_all.py              # 必须全过
 3) 跑真实批次，与基线逐列对比（见 §4）
 ```
 
-**任何一步没过就不要提交。** 这个工具没有 CI，第 3 步就是唯一的防线。
+**任何一步没过就不要提交。**
+
+### CI 能替你做什么，不能做什么
+
+`.github/workflows/ci.yml`（推上 GitHub 后自动跑，约 1 分钟）：
+
+- ubuntu × py3.9 / 3.12 / 3.13，windows × py3.13；
+- 每个平台都跑 pyflakes、`pytest`、`tests/run_all.py`（不含 pytest 的那条路）、
+  以及两个命令行入口的 `--help`；
+- 另一个 job 构建 wheel，核对静态资源与两个入口点真的在包里。
+
+**它没有真实批次数据，所以 CI 全绿不代表数值没变 —— 第 3 步只能人来做。**
+反过来，CI 抓的是"源码目录里跑得好好的、装完却坏掉"那类问题
+（网页资源漏进 wheel 就是典型），那种本地很难发现。
+
+写测试时注意约定：**只写 `assert`，不用任何 pytest 特性**（fixture、参数化、
+`tmp_path` 都别用），需要临时文件就用 `tempfile`。因为实验室那台机器上
+可能只有 numpy/pandas，`tests/run_all.py` 必须能跑。
 
 ## 4. 数值不许悄悄动
 
@@ -91,8 +111,13 @@ workflow.py  编排层：BatchConfig 集中所有可调参数 + 十步 run_batch
    MSWD 与它的卡方概率都在这个口径上算（与 ADEPT 同口径）。
 4. **不要为了"顺手"改数值输出。** 例如 `deadtime_ns` 默认 0 是刻意的：
    设成实测值会让全部历史结果不可比。要改默认值先问人。
-5. **改 `druid/` 下的东西不要动 `结果/`**（那是输出目录，已被 gitignore 之外地
-   纳管了一部分，别把新的跑批结果顺手提交）。
+5. **改 `druid/` 下的东西不要动 `结果/`。** 那是工具的输出目录，装的是某一次
+   真实分析的数据。它现在被 `.gitignore` 挡住了（曾经没有，代价是重写全部历史）。
+6. **版本号写在两处**：`pyproject.toml` 的 `version` 与 `druid/__init__.py` 的
+   `__version__`。改一处忘一处不会报错，只会让包自称 2.1.0 而跑起来打印 2.0.0
+   ——网页界面那行 banner 就这么硬编码过。`tests/test_packaging.py` 会拦下来。
+7. **改输出表的列就升版本**，并在 `druid/__init__.py` 的版本说明里写清为什么。
+   下游（ADEPT、补充材料里的表）需要靠版本号判断两批结果可不可比。
 
 ## 7. 已知地雷
 
@@ -110,6 +135,14 @@ workflow.py  编排层：BatchConfig 集中所有可调参数 + 十步 run_batch
 - **`.bat` 必须保持纯 ASCII**：cmd.exe 按当前代码页解析，中文注释会变乱码；
   而解释器路径含中文用户名。所有中文路径靠运行时变量（`%USERPROFILE%`、`%~dp0`）抵达。
   `.gitattributes` 已把 `*.bat` 钉成 CRLF。
+- **`结果/` 曾经被纳管进版本控制**：98 个文件（87 个原始 Qtegra CSV + 11 个结果表），
+  而且都在**初始提交**里。等到要发布时，`git rm` 当前提交已经没用，只能重写全部
+  历史才剔干净。规律：**工具的仓库不装某一次分析的数据。** 要留档就存
+  "原始批次目录 + 运行参数"，那两样足够完整复现。
+- **不要用 `git filter-branch` 剔文件后又指望工作区原样**：收尾时它会把工作区
+  重置到重写后的 HEAD，于是那些"刚被移出索引"的文件会**从磁盘上一起消失**。
+  要保住磁盘文件就先复制一份出来。真的丢了也别急，旧提交对象在 gc 之前都还在，
+  `git archive <旧SHA> <目录>` 能完整捞回来（这次就是这么救回来的）。
 
 ## 8. 接 ADEPT
 

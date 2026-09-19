@@ -45,12 +45,13 @@ python -m druid.cli.reduce_batch ^
 ### 3. 作为库调用
 
 ```python
+from druid import __version__
 from druid.workflow import BatchConfig, run_batch
 from druid.io.report import export_batch
 
 cfg = BatchConfig(data_dir=r"G:\...\20220301CKDB")
 result = run_batch(cfg)
-export_batch(cfg, result, version="2.0.0")
+export_batch(cfg, result, version=__version__)
 
 result.results   # 逐点结果表
 result.qc        # 标样 QC 表
@@ -67,6 +68,22 @@ druid-gui
 
 装与不装都能用；不装时在包根目录（含 `druid/` 的那一层）跑
 `python -m druid.cli.xxx` 即可。
+
+### 自检：确认它没坏
+
+改过任何东西、或者换了一台机器之后跑一下：
+
+```bat
+python tests\run_all.py
+```
+
+不需要装 pytest。装了开发依赖（`pip install -e ".[dev]"`）的话，
+`python -m pytest -q` 是等价且报告更清楚的一条路——CI 用的是这条。
+
+自检覆盖三层：统计内核（卡方上尾概率、加权平均、MAD 判离群，参考值取自 R）、
+输入边界（Qtegra CSV 解析、剥蚀区间、气体空白、窗口切分，用合成数据）、
+打包（版本号一致、入口点可调用、网页资源齐全）。**不含**真实批次的端到端数值
+比对——那需要数据，只能人工做，做法见 `AGENTS.md` §4。
 
 **依赖**：`numpy` `pandas` `matplotlib` `openpyxl` `xlrd`。
 不需要 `scipy`——年龄方程的不动点迭代与二分法都是自己实现的。
@@ -283,3 +300,28 @@ druid/
   不要凭经验填。本实验室实测值 `14.7645` ns 记在 `druid/deadtime_ns.txt`，
   但**没有任何代码会自动读它**——要用请显式传 `--deadtime-ns 14.7645`。
   之所以不做成默认值：一旦默认开启，历史上所有未校正的结果就不再可比。
+
+---
+
+## 八、变更记录
+
+### 2.1.0
+
+- **`深度剖面域` 表增加 `MSWD` 与 `MSWD_概率` 两列。** 这两个数一直算得出来
+  （`summarize_segments()` 内部就在调 `weighted_mean()`，它本来就返回 MSWD），
+  只是导出时被丢掉了。补上是为了和 R 端 **ADEPT** 的坪年龄口径直接并列对照——
+  两边现在都是"反比方差加权平均 + 卡方上尾概率"。**只增加列，既有列与数值未动。**
+- 新增 `tests/`（26 项自检，不依赖 pytest）与 CI
+  （ubuntu × py3.9/3.12/3.13 + windows × py3.13，含 wheel 完整性检查）。
+- `docs/druid-adept-dataflow.html` 与 `AGENTS.md`。
+
+### 2.0.0
+
+- 由原先的单文件脚本重构为分层子包（`core` / `io` / `reduction` / `depth` /
+  `webui` / `cli` + `workflow`），并改名 `upb` → `druid`。
+- 修掉三个潜伏缺陷：`workflow.py` 用了 `STANDARDS` 却没导入（传未知主标时给出的
+  是 `NameError` 而不是可用标样清单）、`L238` 硬编码（与 `core/constants.py` 各写一遍）、
+  网页 banner 硬编码版本号 `v2.0`。
+- `pyproject.toml` 声明了 `readme = "README.md"` 但文件不存在，`pip install -e .`
+  根本无法构建——本次补上。
+
