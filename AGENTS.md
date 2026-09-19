@@ -28,6 +28,55 @@ LA-ICP-MS 锆石 U-Pb 数据还原工具。把 Qtegra/iCAP 导出的 cps 时间�
   **没有 scipy** —— 年龄方程的不动点迭代、二分法、卡方上尾概率都是自己实现的，
   这不是疏漏而是设计：不依赖会变的第三方行为。
 
+### 文档站点怎么发布的
+
+`docs/` 通过 GitHub Pages 发布：**Settings → Pages → Source 选
+"Deploy from a branch"，分支 `main`、目录 `/docs`**。这条设置只能由仓库管理员
+在网页上做一次，之后**每次 push 自动上线**，本地不需要做任何事。
+
+⚠️ **不要再改回 "GitHub Actions" 那条路。** 曾经写过
+`.github/workflows/pages.yml` + `configure-pages` 的 `enablement: true`，
+实测报：
+
+```
+Create Pages site failed. Error: Resource not accessible by integration
+Get Pages site failed. Error: Not Found
+```
+
+原因是"创建 Pages site"这个 API 调用需要**仓库 admin 权限**，而
+`GITHUB_TOKEN` 拿不到、也无法授予。也就是说那条 workflow 只有在 Pages
+**已经被手动打开之后**才能跑 —— 正是它想省掉的那一步。既然两种方式都需要
+手动启用一次，就用不带 workflow 的那种：少一个会坏的活动部件。
+
+⚠️ **`docs/.nojekyll` 必须保留。** branch 方式下 Pages 默认拿 Jekyll 处理源码，
+少了它要么白花时间解析那份 260 KB 的 HTML，要么静默跳过下划线开头的路径。
+
+三份 HTML 都是**自包含单文件**，没有构建步骤 —— 改完 push 就上线。
+
+### ⚠️ `git rm` 会连坐：在这个环境里删文件要小心
+
+**实测（4 组独立实验，可复现）**：`git rm <路径>` 会把它所在的
+**仓库第一级目录**整个递归删掉，不只是那一个文件：
+
+| 命令 | 实际后果 |
+|---|---|
+| `git rm .github/workflows/pages.yml` | **整个 `.github/` 消失**（`ci.yml` 也被删） |
+| `git rm src/a/x.py` | **整个 `src/` 消失**（`src/a/y.py` 一起没了） |
+| `git rm README.md` | 正常，只删这一个文件（根目录没有"第一级目录"） |
+
+**已跟踪的文件能救回来**（`git restore <路径>`，因为索引没动）；
+**未跟踪的新文件救不回来** —— 它们是刚写好、还没 `git add` 的东西。
+
+**规避**：要删文件时用
+
+```bash
+git rm --cached <路径>     # 只动索引（实测安全）
+rm <路径>                  # 单独删这一个文件（rm 单文件安全）
+```
+
+或者先把要删的文件挪出去，再 `git rm`。**删完立刻 `ls` 一下同目录**，
+别等下一次跑测试才发现少了东西。
+
 ## 2. 30 秒上手
 
 ```bash
