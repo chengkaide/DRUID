@@ -50,10 +50,13 @@ druid —— 激光剥蚀 ICP-MS（LA-ICP-MS）锆石 U-Pb 定年数据还原包
 """
 from __future__ import annotations
 
-__version__ = "2.2.1"
+__version__ = "2.2.2"
 
 # 版本说明
 # --------
+# 2.2.2 新增 docs/from-first-principles.html —— 从物理原理讲到 MSWD 的完整说明。
+#   纯文档改动，不动任何数值（端到端回归的基线值不变）。
+#
 # 2.2.1 修掉一个只在 Windows + 输出重定向时出现的崩溃：
 #   本包的进度与摘要输出全是中文。把 stdout 重定向到文件/管道时，
 #   Python 用 locale 编码（英文系统上是 cp1252）编码它，第一句

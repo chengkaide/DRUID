@@ -10,12 +10,20 @@
 LA-ICP-MS 锆石 U-Pb 数据还原工具。把 Qtegra/iCAP 导出的 cps 时间序列，
 变成**随深度变化的年龄**（逐窗口，含 1σ），供下游的 R 包 **ADEPT** 判定坪年龄与 MSWD。
 
-一句话分工：**DRUID 测出来，ADEPT 读出来。** 两者关系见 `docs/druid-adept-dataflow.html`。
+一句话分工：**DRUID 测出来，ADEPT 读出来。**
+
+**两份文档在动手前值得翻一下**（都在 `docs/`，单文件自包含）：
+
+| 文档 | 什么时候看 |
+|---|---|
+| `docs/from-first-principles.html` | 不确定某个算法**为什么**要这么做、或者要判断"这个参数能不能改"时。10 张图，从衰变讲到 MSWD；第 8.4 节列了**已知局限**，改代码前先确认不是在自己重新发明它 |
+| `docs/druid-adept-dataflow.html` | 要动两边接口（`剖面窗口` 表的列名、`BatchResult` 字段）时 |
 
 - 包名 `druid`（历史上叫 `upb`，见到旧叫法都是改名前的引用）
-- 版本在 `druid/__init__.py:__version__`
+- 版本在 `druid/__init__.py:__version__`（**必须与 `pyproject.toml` 一致**，
+  有测试钉着）
 - 仓库布局：`druid/` 代码 · `examples/EX2022A/` 示例批次（85 个测点，样品名
-  匿名成 `S01`…`S48`，标样保留）· `tests/` 自检 · `docs/` 双工具文档
+  匿名成 `S01`…`S48`，标样保留）· `tests/` 自检 · `docs/` 两份文档
 - Python 层：**只有 numpy / pandas / matplotlib / openpyxl / xlrd**。
   **没有 scipy** —— 年龄方程的不动点迭代、二分法、卡方上尾概率都是自己实现的，
   这不是疏漏而是设计：不依赖会变的第三方行为。
