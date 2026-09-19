@@ -1,5 +1,9 @@
 # DRUID
 
+[![CI](https://github.com/chengkaide/DRUID/actions/workflows/ci.yml/badge.svg)](https://github.com/chengkaide/DRUID/actions/workflows/ci.yml)
+[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-1d5c45)](https://chengkaide.github.io/DRUID/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-d99a2b)](LICENSE)
+
 **D**epth-**R**esolved **U**–Pb **I**sotope **D**ata reduction
 —— LA-ICP-MS 锆石 U-Pb 定年数据处理工具
 
