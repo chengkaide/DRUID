@@ -323,7 +323,14 @@ def run_job(cfg: BatchConfig, task) -> None:
             secondary_correction=result.info.get("secondary_correction"),
         )
         if len(unk):
-            a = res.get("年龄206_238_QC校正", unk["年龄206_238"])
+            # ⚠ 与 CLI `_summary_lines` 同一段历史 bug 的副本：
+            # `res.get("年龄206_238_QC校正", unk["年龄206_238"])` 在 QC 列存在时
+            # 返回的是**整表**那一列，标样测点会混进"样品年龄"统计
+            # （中位数被抬高、5–95% 区间被撑宽，详见 cli/reduce_batch.py 的注释）。
+            # 先定列名，再从 unk 里取列，两步分开，不要再合成一步。
+            col = ("年龄206_238_QC校正"
+                   if "年龄206_238_QC校正" in res.columns else "年龄206_238")
+            a = unk[col]
             q = a.quantile([0.05, 0.5, 0.95])
             summary["age_median"] = round(float(q[0.5]), 1)
             summary["age_p5"] = round(float(q[0.05]), 1)
