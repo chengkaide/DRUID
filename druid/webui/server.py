@@ -58,7 +58,12 @@ _MIME = {
 class Handler(BaseHTTPRequestHandler):
     """所有 HTTP 请求的入口。GET 走 do_GET，POST 走 do_POST。"""
 
-    server_version = "druid-webui/2.0"
+    # 这行会出现在每个响应的 Server 头里（BaseHTTPRequestHandler 在
+    # send_response 时拼 server_version + sys_version）。
+    # ⚠ 曾经硬编码成 "druid-webui/2.0" —— 正是 AGENTS.md §6.6 说的那种
+    # "版本号写两处、改一处忘一处"：包已经 2.2.2，浏览器里还自称 2.0。
+    # 一律从 druid.__version__ 取，别再写字面量。
+    server_version = f"druid-webui/{__version__}"
 
     # ── 基础工具 ──────────────────────────────────────────────────────────
     def _send(self, code: int, body: bytes, ctype: str, extra: Optional[dict] = None):

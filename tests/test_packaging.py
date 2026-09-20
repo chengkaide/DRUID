@@ -71,6 +71,21 @@ def test_installed_metadata_agrees_if_present():
     assert installed == druid.__version__, (installed, druid.__version__)
 
 
+def test_webui_server_header_carries_the_live_version():
+    """
+    HTTP 响应里的 `Server` 头必须来自 `druid.__version__`：BaseHTTPRequestHandler
+    把它拼在 `server_version` 后面，所以那一行等于对外的自我声明。
+
+    曾经硬编码成 "druid-webui/2.0" —— 包已经是 2.2.2，浏览器/curl 里还自称 2.0。
+    这正是本文件开头说的那个毛病（版本号写两处、改一处忘一处）**第二次复发**：
+    第一次是网页界面那行 banner，这次换成了 HTTP 头。所以再钉一遍。
+    """
+    from druid.webui.server import Handler
+
+    assert Handler.server_version == f"druid-webui/{druid.__version__}", (
+        f"Server 头自称 {Handler.server_version}，而包版本是 {druid.__version__}")
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # 二、pyproject 自己说的东西必须存在
 # ═════════════════════════════════════════════════════════════════════════════
