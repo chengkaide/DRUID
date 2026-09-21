@@ -16,6 +16,16 @@
 > （从衰变原理讲到 MSWD，9 章 10 图）与
 > 《[两个工具的联系与数据流](https://chengkaide.github.io/DRUID/druid-adept-dataflow.html)》。
 
+**你想干什么 → 看哪一份**
+
+| 你想干什么 | 看哪一份 |
+|---|---|
+| 第一次拿到这个工具，想尽快跑通自己的数据 | **[docs/getting-started.html](docs/getting-started.html)** —— 上手指南：装环境四条命令、数据怎么摆、结果先看哪三个数、报错怎么定位（[在线版](https://chengkaide.github.io/DRUID/getting-started.html)） |
+| 搞懂每一步为什么这么做、做错了会往哪偏 | [docs/from-first-principles.html](docs/from-first-principles.html) |
+| 想知道 DRUID 与 ADEPT 之间到底传了什么 | [docs/druid-adept-dataflow.html](docs/druid-adept-dataflow.html) |
+| 要改代码 / 长期维护这个仓库 | [AGENTS.md](AGENTS.md) |
+| 只要一份能在实验室里照着敲的最短说明 | [使用说明.txt](使用说明.txt) |
+
 名字取 "Depth-Resolved" 不是修辞：本工具与只做整段积分的常规流程最大的区别，
 是它把每个测点当成一条**随时间（即随坑深）变化的信号**来处理——分馏按深度校正、
 年龄域按深度划分。ADEPT 负责在这条剖面之上挑坪，两者是同一条链的两端。
@@ -342,6 +352,22 @@ druid/
 ---
 
 ## 八、变更记录
+
+### 2.2.3
+
+- **新增 [`docs/getting-started.html`](docs/getting-started.html) —— 上手指南。**
+  面向第一次拿到这个工具的人：装环境四条命令（每条都写"怎么算成功"）、
+  数据文件夹怎么摆、结果先看哪三个数、九类常见报错对应哪一步、
+  以及改代码时必须守住的三条边界。7 张手绘 SVG 示意图，单文件自包含、离线可开。
+  文档里的每个数字都取自示例批次的端到端回归基线，可自行复现。
+- **一批纯卫生修正，不改任何数值输出**（端到端回归的基线值逐项未变）：
+  删掉两个全仓无调用的死函数（`io.qtegra.channels_of_interest`、
+  `depth.figures.multi_page_pdf`）及其导出，连带删掉只被前者使用的 `UA_MASSES`；
+  `reduction.ratios` 不再自带一份与 `core.constants.MASSES_NEEDED` 完全重复的通道元组；
+  网页界面的 HTTP `Server` 头不再硬编码 `druid-webui/2.0`，改读 `__version__`
+  （新增回归测试钉住 —— 这类"版本号写两处"已经复发过一次）；
+  `io.report` 的裸 `except Exception` 收窄为 `(AttributeError, TypeError, ValueError)`；
+  修正两处会把读者带偏的注释（QC 校正里 1σ/2σ 的缩放、去掉扩展名为何不能用 `rstrip`）。
 
 ### 2.2.2
 

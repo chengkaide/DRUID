@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DRUID 上手指南 · 从零跑通第一批数据</title>
+<style>
+  :root{
+    --ink:#2C2C2A; --ink2:#5F5E5A; --ink3:#888780;
+    --line:#D3D1C7; --bg:#FFFFFF; --panel:#F7F6F3; --panel2:#EFEEE9;
+    --pur:#534AB7; --purbg:#EEEDFE; --purline:#AFA9EC;
+    --tea:#0F6E56; --teabg:#E1F5EE; --tealine:#9FE1CB;
+    --amb:#854F0B; --ambbg:#FAEEDA; --ambline:#FAC775;
+    --red:#A32D2D; --redbg:#FDF6F6;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:"Microsoft YaHei","PingFang SC",system-ui,sans-serif;
+       font-size:15px;line-height:1.78}
+  .wrap{max-width:940px;margin:0 auto;padding:56px 32px 110px}
+  h1{font-size:28px;font-weight:600;margin:0 0 8px}
+  .sub{color:var(--ink2);font-size:15px;margin:0 0 8px}
+  .meta{color:var(--ink3);font-size:13px;margin:0 0 28px}
+  h2{font-size:21px;font-weight:600;margin:58px 0 14px;padding-top:24px;
+     border-top:1px solid var(--line)}
+  h2:first-of-type{border-top:none;padding-top:0}
+  h3{font-size:16.5px;font-weight:600;margin:32px 0 10px}
+  code{font-family:Consolas,monospace;font-size:13.5px;
+       background:var(--panel);padding:1px 5px;border-radius:4px;color:#26215C}
+  pre{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+      padding:14px 16px;overflow-x:auto}
+  pre code{background:none;padding:0}
+  table{border-collapse:collapse;width:100%;margin:0 0 18px;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:8px 11px;text-align:left;vertical-align:top}
+  th{background:var(--panel);font-weight:600;white-space:nowrap}
+  td.n{white-space:nowrap;font-family:Consolas,monospace;font-size:13px}
+  .lead{background:var(--panel);border-left:3px solid var(--pur);
+        border-radius:0 10px 10px 0;padding:16px 20px;margin:0 0 30px}
+  .note{border-left:3px solid var(--ambline);background:#FFFBF3;
+        border-radius:0 10px 10px 0;padding:14px 18px;margin:0 0 18px;font-size:14px}
+  .warn{border-left:3px solid #E24B4A;background:var(--redbg);
+        border-radius:0 10px 10px 0;padding:14px 18px;margin:0 0 18px;font-size:14px}
+  .ok{border-left:3px solid var(--tealine);background:var(--teabg);
+      border-radius:0 10px 10px 0;padding:14px 18px;margin:0 0 18px;font-size:14px}
+  figure{margin:28px 0 32px}
+  figure svg,figure img{display:block;width:100%;height:auto;border-radius:12px}
+  figcaption{color:var(--ink2);font-size:13px;margin-top:10px;line-height:1.65}
+  .toc{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+       padding:18px 24px;margin:0 0 34px}
+  .toc ol{margin:8px 0 0;padding-left:22px}
+  .toc li{margin:3px 0}
+  .toc a{color:var(--pur);text-decoration:none}
+  .toc a:hover{text-decoration:underline}
+  .steps{counter-reset:s;list-style:none;padding:0;margin:0 0 20px}
+  .steps>li{counter-increment:s;position:relative;padding:12px 0 12px 46px;
+            border-bottom:1px dashed var(--line)}
+  .steps>li:last-child{border-bottom:none}
+  .steps>li::before{content:counter(s);position:absolute;left:0;top:12px;
+       width:28px;height:28px;border-radius:50%;background:var(--purbg);
+       color:var(--pur);font-weight:600;font-size:14px;text-align:center;
+       line-height:28px}
+  .steps b{font-weight:600}
+  .steps .why{color:var(--ink2);font-size:13.5px}
+  footer{margin-top:70px;padding-top:22px;border-top:1px solid var(--line);
+         color:var(--ink3);font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>DRUID 上手指南</h1>
+<p class="sub">从零跑通第一批 LA-ICP-MS 锆石 U-Pb 数据 —— 不需要任何编程经验</p>
+<p class="meta">对应 DRUID 2.2.3　·　2026-09-22　·　文中所有示例数字都来自仓库自带的示例批次 <code>examples/EX2022A</code>，可以自己跑出来核对</p>
+
+<div class="lead">
+  <p style="margin:0 0 10px"><b>这份文档要解决的事</b>：你手上有一台 iCAP 仪器导出的 Qtegra 数据，想知道它给出的年龄能不能信、怎么写进文章。</p>
+  <p style="margin:0">读完你会拿到：① 一个装好的环境；② 一条命令（或一次双击）跑完全流程；③ 知道先看哪三个数字判断数据可用；④ 出问题时知道该看哪一行报错。</p>
+</div>
+
+<div class="toc">
+  <b>目录</b>
+  <ol>
+    <li><a href="#c1">三分钟最短路径</a></li>
+    <li><a href="#c2">它做什么、你要做什么</a></li>
+    <li><a href="#c3">装环境（Windows，从零开始）</a></li>
+    <li><a href="#c4">准备你自己的数据</a></li>
+    <li><a href="#c5">跑自己的批次</a></li>
+    <li><a href="#c6">看懂结果：先看这三个数</a></li>
+    <li><a href="#c7">接到 ADEPT 做坪年龄</a></li>
+    <li><a href="#c8">出错了怎么办</a></li>
+    <li><a href="#c9">想改代码 / 长期维护</a></li>
+    <li><a href="#c10">附录：命令速查与名词表</a></li>
+  </ol>
+</div>
+
+<h2 id="c1">一、三分钟最短路径</h2>
+
+<p>如果只想尽快看到"这东西在我机器上能跑"，按下面六步走。每一步都写了<b>「怎么算成功」</b>，对不上就别往下走，直接翻 <a href="#c8">第八节</a>。</p>
+
+<ol class="steps">
+  <li><b>确认有 Python</b>　<code>python --version</code>
+      <div class="why">看到 <code>Python 3.9</code> 以上即可（3.12 / 3.13 更好）。没有就装一个，见 <a href="#c3">第三节</a>。</div></li>
+  <li><b>建一个隔离环境</b>　<code>python -m venv .venv</code>
+      <div class="why">只是为了让依赖不污染系统 Python。不建也能跑，但以后换版本会乱。</div></li>
+  <li><b>装五个依赖</b>　<code>.venv\Scripts\pip install numpy pandas matplotlib openpyxl xlrd</code>
+      <div class="why">就这五个。不需要 scipy、不需要任何 Web 框架，也不需要联网跑程序。</div></li>
+  <li><b>拿到代码</b>　把仓库放到一个<b>不含中文和空格</b>的路径下，例如 <code>D:\tools\DRUID</code>
+      <div class="why">路径里有空格时命令行要加引号；有中文时个别老工具会踩编码问题，能避就避。</div></li>
+  <li><b>跑一遍示例批次</b>　<code>python tests\run_all.py</code>，再跑 <code>python tests\check_example_batch.py</code>
+      <div class="why">第二条会用自带的 85 个测点真算一遍，最后一行是 <code>✓ 全部与基线一致</code> 就说明环境完全就绪。</div></li>
+  <li><b>换成你自己的数据</b>　按 <a href="#c4">第四节</a>把数据摆成文件夹，然后双击 <code>启动数据处理工具.bat</code>
+      <div class="why">网页界面里选文件夹 → 看检查报告 → 开始处理 → 下载结果。</div></li>
+</ol>
+
+<div class="ok">
+  <b>先跑示例批次，再动自己的数据。</b>这句话不是客套：示例批次的输出数字是钉死的（本指南第 <a href="#c6">六节</a>列的三个判据都能对上），
+  它能区分"环境没装对"和"我的数据有问题"这两种完全不同的故障。跳过这一步，第一次报错时你无法判断是谁的错。
+</div>
+
+<h2 id="c2">二、它做什么、你要做什么</h2>
+
+<p>DRUID 把仪器的<b>原始计数率时间序列</b>变成<b>年龄</b>。中间那七步（死时间、<sup>204</sup>Hg 干扰、
+普通铅显著性检验与扣除、标样夹逼归一化、F(τ) 深度分馏校正、jackknife 不确定度）是它的全部工作，
+也正是不要让下游工具重复做的事情。</p>
+
+<figure>
+<svg viewBox="0 0 900 270" font-family="Microsoft YaHei,PingFang SC,system-ui,sans-serif">
+  <text x="30" y="34" font-size="15" font-weight="600" fill="#2C2C2A">从一台仪器导出的 CSV，到一个能写进文章的年龄</text>
+  <text x="30" y="56" font-size="11.5" fill="#5F5E5A">五个环节里，DRUID 负责前三个；第四步是它交给下游的唯一接口</text>
+
+  <rect x="30" y="86" width="144" height="66" rx="10" fill="#F7F6F3" stroke="#D3D1C7"/>
+  <text x="102" y="112" font-size="12.5" text-anchor="middle" fill="#2C2C2A">① 仪器导出</text>
+  <text x="102" y="130" font-size="10.5" text-anchor="middle" fill="#5F5E5A">Qtegra CSV（cps）</text>
+
+  <rect x="201" y="86" width="144" height="66" rx="10" fill="#EEEDFE" stroke="#AFA9EC"/>
+  <text x="273" y="112" font-size="12.5" text-anchor="middle" fill="#2C2C2A">② DRUID 还原</text>
+  <text x="273" y="130" font-size="10.5" text-anchor="middle" fill="#5F5E5A">比值 + 不确定度</text>
+
+  <rect x="372" y="86" width="144" height="66" rx="10" fill="#F7F6F3" stroke="#D3D1C7"/>
+  <text x="444" y="112" font-size="12.5" text-anchor="middle" fill="#2C2C2A">③ 结果.xlsx</text>
+  <text x="444" y="130" font-size="10.5" text-anchor="middle" fill="#5F5E5A">五张工作表</text>
+
+  <rect x="543" y="86" width="144" height="66" rx="10" fill="#F7F6F3" stroke="#D3D1C7"/>
+  <text x="615" y="112" font-size="12.5" text-anchor="middle" fill="#2C2C2A">④ 剖面窗口表</text>
+  <text x="615" y="130" font-size="10.5" text-anchor="middle" fill="#5F5E5A">逐窗口年龄 1σ</text>
+
+  <rect x="714" y="86" width="144" height="66" rx="10" fill="#E1F5EE" stroke="#9FE1CB"/>
+  <text x="786" y="112" font-size="12.5" text-anchor="middle" fill="#2C2C2A">⑤ ADEPT</text>
+  <text x="786" y="130" font-size="10.5" text-anchor="middle" fill="#5F5E5A">坪年龄 + MSWD</text>
+
+  <polygon points="176,113 190,119 176,125" fill="#888780"/>
+  <polygon points="347,113 361,119 347,125" fill="#888780"/>
+  <polygon points="518,113 532,119 518,125" fill="#888780"/>
+  <polygon points="689,113 703,119 689,125" fill="#888780"/>
+
+  <text x="102" y="174" font-size="10.5" text-anchor="middle" fill="#888780">原始时间序列</text>
+  <text x="273" y="174" font-size="10.5" text-anchor="middle" fill="#888780">扣空白 归一化 分馏校正</text>
+  <text x="444" y="174" font-size="10.5" text-anchor="middle" fill="#888780">结果 标样QC 剖面域</text>
+  <text x="615" y="174" font-size="10.5" text-anchor="middle" fill="#888780">交给 ADEPT 的接口</text>
+  <text x="786" y="174" font-size="10.5" text-anchor="middle" fill="#888780">在 R 里做</text>
+
+  <text x="30" y="216" font-size="12" fill="#5F5E5A">你要做的只有两件事：把数据准备成一个文件夹（第四节），然后跑一条命令（第五节）。</text>
+  <text x="30" y="240" font-size="12" fill="#5F5E5A">其余全部自动化：85 个测点的示例批次，DRUID 算完约 3 秒。</text>
+</svg>
+<figcaption><b>图 1</b>　全流程的五段。看到最后两段是分开的很重要：<b>逐窗口年龄</b>是 DRUID 的产出，<b>坪年龄与 MSWD</b> 是 ADEPT 的产出。两边口径一致，但不要互相重复计算。</figcaption>
+</figure>
+
+<table>
+  <tr><th>角色</th><th>谁来做</th><th>产物</th></tr>
+  <tr><td>原始信号 → 带不确定度的年龄</td><td>DRUID（本工具）</td><td>结果.xlsx（五张表）</td></tr>
+  <tr><td>在同一条剖面上挑出坪、判 MSWD</td><td>ADEPT（R 包）</td><td>坪年龄 ± 2σ、MSWD、MSWD 概率</td></tr>
+  <tr><td>判断这批数据能不能用</td><td>你（看三个数字，见第六节）</td><td>一句话结论 + 证据</td></tr>
+</table>
+
+<h2 id="c3">装环境（Windows，从零开始）</h2>
+
+<p>目标：把 Python 和五个依赖装好，并用仓库自带的示例批次确认一切正常。全程只需要复制粘贴四条命令。</p>
+
+<figure>
+<svg viewBox="0 0 900 420" font-family="Microsoft YaHei,PingFang SC,system-ui,sans-serif">
+  <text x="30" y="34" font-size="15" font-weight="600" fill="#2C2C2A">四条命令，每步都有「怎么算成功」</text>
+  <text x="30" y="56" font-size="11.5" fill="#5F5E5A">全部在同一个文件夹里执行：那是个含 druid 子目录的文件夹（仓库根目录）</text>
+
+  <line x1="636" y1="70" x2="636" y2="382" stroke="#D3D1C7" stroke-dasharray="4 4"/>
+  <text x="652" y="66" font-size="10.5" fill="#888780">怎么算成功</text>
+
+  <rect x="30" y="70" width="840" height="62" rx="10" fill="#F7F6F3" stroke="#D3D1C7"/>
+  <circle cx="58" cy="101" r="14" fill="#EEEDFE" stroke="#AFA9EC"/>
+  <text x="58" y="106" font-size="14" text-anchor="middle" fill="#534AB7">1</text>
+  <text x="86" y="94" font-size="13.5" fill="#2C2C2A">确认有没有 Python</text>
+  <text x="86" y="116" font-size="12.5" font-family="Consolas,monospace" fill="#26215C">python --version</text>
+  <text x="652" y="101" font-size="11.5" fill="#0F6E56">显示出 3.9 或更高</text>
+
+  <rect x="30" y="150" width="840" height="62" rx="10" fill="#F7F6F3" stroke="#D3D1C7"/>
+  <circle cx="58" cy="181" r="14" fill="#EEEDFE" stroke="#AFA9EC"/>
+  <text x="58" y="186" font-size="14" text-anchor="middle" fill="#534AB7">2</text>
+  <text x="86" y="174" font-size="13.5" fill="#2C2C2A">建一个隔离环境（只做一次）</text>
+  <text x="86" y="196" font-size="12.5" font-family="Consolas,monospace" fill="#26215C">python -m venv .venv</text>
+  <text x="652" y="181" font-size="11.5" fill="#0F6E56">目录里多出 .venv 文件夹</text>
+
+  <rect x="30" y="230" width="840" height="62" rx="10" fill="#F7F6F3" stroke="#D3D1C7"/>
+  <circle cx="58" cy="261" r="14" fill="#EEEDFE" stroke="#AFA9EC"/>
+  <text x="58" y="266" font-size="14" text-anchor="middle" fill="#534AB7">3</text>
+  <text x="86" y="254" font-size="13.5" fill="#2C2C2A">装五个依赖</text>
+  <text x="86" y="276" font-size="12.5" font-family="Consolas,monospace" fill="#26215C">.venv\Scripts\pip install numpy pandas matplotlib openpyxl xlrd</text>
+  <text x="652" y="261" font-size="11.5" fill="#0F6E56">末行出现 Successfully installed</text>
+
+  <rect x="30" y="310" width="840" height="62" rx="10" fill="#F7F6F3" stroke="#D3D1C7"/>
+  <circle cx="58" cy="341" r="14" fill="#EEEDFE" stroke="#AFA9EC"/>
+  <text x="58" y="346" font-size="14" text-anchor="middle" fill="#534AB7">4</text>
+  <text x="86" y="334" font-size="13.5" fill="#2C2C2A">自检一遍</text>
+  <text x="86" y="356" font-size="12.5" font-family="Consolas,monospace" fill="#26215C">python tests\run_all.py</text>
+  <text x="652" y="341" font-size="11.5" fill="#0F6E56">末行「全部文件跑完」，无 failed</text>
+
+  <text x="30" y="400" font-size="11.5" fill="#888780">装得慢或装不上时，看第八节的「pip 装不上」那一条 —— 里面给了国内镜像的完整命令。</text>
+</svg>
+<figcaption><b>图 2</b>　环境准备四步。<b>顺序不能换</b>：第 3 步用的是第 2 步建出来的那个 pip；直接敲 <code>pip</code> 有可能装到系统 Python 里去，以后排查会多一层干扰。</figcaption>
+</figure>
+
+<h3>3.1　没有 Python 怎么办</h3>
+
+<p>去 python.org 下载 Windows 安装包（3.9 以上任意版本，3.12 或 3.13 最省事），安装时<b>务必勾上
+「Add python.exe to PATH」</b>——这是唯一一个装完必须检查的选项。装完<b>新开一个命令行窗口</b>再敲
+<code>python --version</code>：旧窗口的 PATH 不会更新，这是最常见的"明明装了却说找不到"。</p>
+
+<div class="note">
+<b>虚拟环境是可以随时推倒重来的。</b>如果依赖装乱了，直接删掉 <code>.venv</code> 文件夹，从第 2 步重来即可 ——
+它只包含依赖，不含你的数据，也不含这个仓库的代码。
+</div>
+
+<h3>3.2　依赖为什么只有五个</h3>
+
+<table>
+  <tr><th>包</th><th>干什么用</th></tr>
+  <tr><td class="n">numpy</td><td>数组与数值计算</td></tr>
+  <tr><td class="n">pandas</td><td>序列表与结果表的读写</td></tr>
+  <tr><td class="n">matplotlib</td><td>逐点深度剖面图（<code>--plot</code> 时才用到）</td></tr>
+  <tr><td class="n">openpyxl</td><td>写 .xlsx 结果表</td></tr>
+  <tr><td class="n">xlrd</td><td>读仪器工作站导出的老式 .xls 序列表</td></tr>
+</table>
+
+<p><b>没有 scipy</b>，这是刻意的：年龄方程的不动点迭代、二分法、卡方上尾概率都是自己实现的。
+少了这个依赖，就意味着数值行为不会被第三方库的版本更新悄悄改掉——这对要写进文章的软件很重要。
+网页界面也只用 Python 标准库，不需要装任何 Web 框架、不需要 npm、没有构建步骤。</p>
+
+<h3>3.3　怎么确认装对了（两步）</h3>
+
+<pre><code>:: 第一条：不需要 pytest 的自检，覆盖统计内核、输入边界、打包完整性
+python tests\run_all.py
+
+:: 第二条：拿仓库自带的示例批次真算一遍（约 1 分钟）
+python tests\check_example_batch.py</code></pre>
+
+<p>第二条最后会打印 <code>✓ 全部与基线一致</code>，并逐项列出标样 QC 与样品年龄分布。
+<b>这一步的价值在于：它把"环境装错"和"数据有问题"分开了。</b>示例批次的数字是钉死的，只要一致，
+就说明工具本身没坏，接下来出任何问题都在你的数据或参数上。</p>
+
+<h2 id="c4">准备你自己的数据</h2>
+
+<p>规则只有三条，但每一条错了都会在处理前就被报出来（网页界面里会立刻提示，不用等跑完）。</p>
+
+<figure>
+<svg viewBox="0 0 900 300" font-family="Microsoft YaHei,PingFang SC,system-ui,sans-serif">
+  <text x="30" y="34" font-size="15" font-weight="600" fill="#2C2C2A">一个批次 = 一个文件夹</text>
+  <text x="30" y="56" font-size="11.5" fill="#5F5E5A">文件夹名就是批次名；网页界面里选的就是这个文件夹</text>
+
+  <rect x="50" y="76" width="520" height="196" rx="12" fill="#F7F6F3" stroke="#D3D1C7"/>
+  <text x="68" y="100" font-size="12.5" font-family="Consolas,monospace" fill="#2C2C2A">EX2022A\</text>
+
+  <rect x="80" y="110" width="460" height="30" rx="6" fill="#EEEDFE" stroke="#AFA9EC"/>
+  <text x="92" y="130" font-size="11.5" font-family="Consolas,monospace" fill="#26215C">EX2022A_LIST.csv　← 两列：文件名、样品名</text>
+
+  <rect x="80" y="148" width="460" height="30" rx="6" fill="#FFFFFF" stroke="#D3D1C7"/>
+  <text x="92" y="168" font-size="11.5" font-family="Consolas,monospace" fill="#5F5E5A">EX2022A_1.csv　　← 一个测点一个文件</text>
+
+  <rect x="80" y="186" width="460" height="30" rx="6" fill="#FFFFFF" stroke="#D3D1C7"/>
+  <text x="92" y="206" font-size="11.5" font-family="Consolas,monospace" fill="#5F5E5A">EX2022A_2.csv</text>
+
+  <rect x="80" y="224" width="460" height="30" rx="6" fill="#FFFFFF" stroke="#D3D1C7"/>
+  <text x="92" y="244" font-size="11.5" font-family="Consolas,monospace" fill="#888780">… 还有 83 个</text>
+
+  <rect x="600" y="76" width="260" height="196" rx="12" fill="#FFFBF3" stroke="#FAC775"/>
+  <text x="616" y="100" font-size="12.5" font-weight="600" fill="#854F0B">三条硬规则</text>
+  <text x="616" y="126" font-size="11.5" fill="#5F5E5A">1. 序列表必须与文件夹同名</text>
+  <text x="628" y="144" font-size="11" font-family="Consolas,monospace" fill="#854F0B">EX2022A_LIST.csv</text>
+  <text x="616" y="170" font-size="11.5" fill="#5F5E5A">2. LIST 里的文件名不带 .csv</text>
+  <text x="616" y="196" font-size="11.5" fill="#5F5E5A">3. 每个 CSV 必须含全部通道</text>
+  <text x="628" y="214" font-size="11" font-family="Consolas,monospace" fill="#854F0B">202 204 206 207 208 232 238</text>
+
+  <text x="50" y="292" font-size="11.5" fill="#888780">序列表也可以直接用仪器工作站导出的 .xls / .xlsx；想 diff、想在 code review 里看懂，就用文本存成 .csv 或 .tsv。</text>
+</svg>
+<figcaption><b>图 3</b>　批次文件夹的样子。文件名本身<b>不含任何含义</b>——它只是"测点编号"；真正决定角色的是序列表第二列的<b>样品名</b>（见下表）。</figcaption>
+</figure>
+
+<h3>4.1　样品名决定角色</h3>
+
+<table>
+  <tr><th>样品名里出现</th><th>判定为</th><th>在流程里的作用</th></tr>
+  <tr><td class="n">91500（默认主标）</td><td>主标</td><td>算归一化因子，<b>决定绝对年龄是否成立</b></td></tr>
+  <tr><td class="n">Ple / Plešovice（默认监控标样）</td><td>监控标样</td><td>估外部重现性、做质控与二次校正</td></tr>
+  <tr><td class="n">SRM / NIST / 612 / 610</td><td>玻璃标样</td><td>不参与 U-Pb（给它定年没有意义）</td></tr>
+  <tr><td>其余任何名字</td><td>未知样品</td><td>真正要定年的对象</td></tr>
+</table>
+
+<div class="note">
+<b>主标和监控标样可以换成别的。</b>用 <code>--primary</code> / <code>--secondary</code> 指定（网页界面上是输入框），
+比如本实验室若用 Temora 做主标，就填 <code>--primary Temora</code>。可用标样清单见 <code>druid/core/constants.py</code> 里的标准物质库。
+</div>
+
+<h3>4.2　从仪器导出时的三个注意</h3>
+
+<ul>
+  <li><b>导出的是 cps（计数率），不是原始计数。</b>Qtegra 已经按驻留时间换算过了，DRUID 也按这个前提处理；混用会出现一个固定的比例错误。</li>
+  <li><b>每个测点单独一个 CSV</b>，文件名与 LIST 里登记的字符串一一对应（不带扩展名）。</li>
+  <li><b>别手工改 CSV 的内容。</b>表头前十几行是仪器元数据、中间夹着一行单位行，DRUID 靠自己找 "Time" 表头来解析，改过就未必认得。</li>
+</ul>
+
+<h2 id="c5">跑自己的批次</h2>
+
+<p>两种用法选一种。<b>日常用网页界面</b>，要批量化或脚本化时用命令行。</p>
+
+<figure>
+<svg viewBox="0 0 900 420" font-family="Microsoft YaHei,PingFang SC,system-ui,sans-serif">
+  <text x="30" y="34" font-size="15" font-weight="600" fill="#2C2C2A">网页界面里的一遍完整流程</text>
+
+  <rect x="60" y="52" width="780" height="340" rx="12" fill="#F7F6F3" stroke="#D3D1C7"/>
+  <circle cx="84" cy="70" r="4" fill="#D3D1C7"/>
+  <circle cx="98" cy="70" r="4" fill="#D3D1C7"/>
+  <circle cx="112" cy="70" r="4" fill="#D3D1C7"/>
+  <rect x="132" y="60" width="300" height="20" rx="10" fill="#FFFFFF" stroke="#D3D1C7"/>
+  <text x="144" y="74" font-size="10.5" font-family="Consolas,monospace" fill="#888780">127.0.0.1:8000</text>
+
+  <text x="90" y="116" font-size="12.5" fill="#2C2C2A">① 选择批次文件夹</text>
+  <rect x="90" y="128" width="610" height="32" rx="6" fill="#FFFFFF" stroke="#D3D1C7"/>
+  <text x="102" y="149" font-size="12" font-family="Consolas,monospace" fill="#5F5E5A">D:\data\EX2022A</text>
+  <rect x="712" y="128" width="128" height="32" rx="6" fill="#534AB7"/>
+  <text x="776" y="149" font-size="12" text-anchor="middle" fill="#FFFFFF">选择文件夹</text>
+
+  <text x="90" y="196" font-size="12.5" fill="#2C2C2A">② 看检查报告（缺文件、缺序列表在这里就说）</text>
+  <rect x="90" y="208" width="750" height="60" rx="8" fill="#FFFFFF" stroke="#D3D1C7"/>
+  <text x="104" y="230" font-size="11.5" font-family="Consolas,monospace" fill="#5F5E5A">85 个测点 → 样品 48 / 主标 21 / 监控 14 / 玻璃 2</text>
+  <text x="104" y="252" font-size="11.5" fill="#0F6E56">✓ 所有 CSV 通道齐全，序列表可解析</text>
+
+  <text x="90" y="296" font-size="12.5" fill="#2C2C2A">③ 开始处理 → 完成后直接下载</text>
+  <rect x="90" y="308" width="150" height="32" rx="6" fill="#0F6E56"/>
+  <text x="165" y="329" font-size="12" text-anchor="middle" fill="#FFFFFF">开始处理</text>
+  <rect x="256" y="308" width="240" height="32" rx="6" fill="#FFFFFF" stroke="#AFA9EC"/>
+  <text x="268" y="329" font-size="11.5" fill="#534AB7">下载 U-Pb 结果.xlsx</text>
+  <rect x="512" y="308" width="240" height="32" rx="6" fill="#FFFFFF" stroke="#AFA9EC"/>
+  <text x="524" y="329" font-size="11.5" fill="#534AB7">下载 深度剖面图册.pdf</text>
+
+  <text x="90" y="372" font-size="11.5" fill="#888780">服务只监听本机 127.0.0.1：别人的电脑打不开，这是设计如此。</text>
+
+  <text x="30" y="410" font-size="11.5" fill="#888780">双击「启动数据处理工具.bat」即可打开这个界面；关掉那个黑窗口就退出。</text>
+</svg>
+<figcaption><b>图 4</b>　网页界面的三个动作。<b>检查报告</b>（第 ② 步）值得停一下：它会把"哪些文件缺了、哪些通道不全"在处理前就说出来，
+省掉跑到一半才失败。界面没有"停止"按钮是刻意的——Python 线程无法安全强杀，做了按钮只会变成"点了没反应"。</figcaption>
+</figure>
+
+<h3>5.1　命令行版本</h3>
+
+<pre><code>:: 在仓库根目录执行（含 druid 子目录的那一层）
+python -m druid.cli.reduce_batch ^
+    --dir "D:\data\EX2022A" ^
+    --out "D:\data\EX2022A_U-Pb结果.xlsx" ^
+    --plot
+
+:: 看全部参数
+python -m druid.cli.reduce_batch -h</code></pre>
+
+<p>换成自己的主标 / 监控标样时加 <code>--primary 91500 --secondary Ple</code>。
+需要死时间校正时加 <code>--deadtime-ns 14.7645</code>——<b>默认是 0（不校正）</b>，
+这个值是拿实测死时间扫描标定出来的，请不要凭经验填（见 <a href="#c9">第九节</a>的说明）。</p>
+
+<h3>5.2　结果文件放在哪</h3>
+
+<p>命令行由 <code>--out</code> 指定；网页界面默认写在批次目录旁边的输出位置，完成后在页面上给出下载链接。
+另外界面里的<b>运行日志</b>（那个滚动的框）建议在报错时一起留档——它包含每个测点的处理进度与跳过原因。</p>
+
+<h2 id="c6">看懂结果：先看这三个数</h2>
+
+<p>结果 Excel 有五张表（结果 / 标样QC / 深度剖面域 / 剖面窗口 / 运行参数）。
+<b>先不要看年龄。</b>先用下面三个数字判断这批数据到底能不能用——它们衡量的是"仪器的状态"，不是"岩石的年龄"。</p>
+
+<figure>
+<svg viewBox="0 0 900 380" font-family="Microsoft YaHei,PingFang SC,system-ui,sans-serif">
+  <text x="30" y="34" font-size="15" font-weight="600" fill="#2C2C2A">三个判据与示例批次的实测值</text>
+  <text x="30" y="56" font-size="11.5" fill="#5F5E5A">绿色是"过线区"；下面这组实测值全部来自 examples/EX2022A，可以自己跑出来核对</text>
+
+  <text x="30" y="118" font-size="12.5" fill="#2C2C2A">① 91500 偏差</text>
+  <text x="30" y="136" font-size="10.5" fill="#888780">要求 |偏差| &lt; 1%</text>
+  <rect x="200" y="106" width="580" height="22" rx="6" fill="#EFEEE9" stroke="#D3D1C7"/>
+  <rect x="393" y="106" width="194" height="22" rx="6" fill="#E1F5EE" stroke="#9FE1CB"/>
+  <line x1="466" y1="94" x2="466" y2="140" stroke="#A32D2D" stroke-width="2"/>
+  <text x="466" y="88" font-size="11.5" text-anchor="middle" fill="#A32D2D">−0.25%　通过</text>
+  <text x="200" y="144" font-size="10" fill="#888780">−3%</text>
+  <text x="780" y="144" font-size="10" text-anchor="end" fill="#888780">+3%</text>
+
+  <text x="30" y="208" font-size="12.5" fill="#2C2C2A">② Ple 偏差</text>
+  <text x="30" y="226" font-size="10.5" fill="#888780">要求 |偏差| &lt; 3%</text>
+  <rect x="200" y="196" width="580" height="22" rx="6" fill="#EFEEE9" stroke="#D3D1C7"/>
+  <rect x="345" y="196" width="290" height="22" rx="6" fill="#E1F5EE" stroke="#9FE1CB"/>
+  <line x1="578" y1="184" x2="578" y2="230" stroke="#A32D2D" stroke-width="2"/>
+  <text x="578" y="178" font-size="11.5" text-anchor="middle" fill="#A32D2D">+1.81%　通过</text>
+  <text x="200" y="234" font-size="10" fill="#888780">−6%</text>
+  <text x="780" y="234" font-size="10" text-anchor="end" fill="#888780">+6%</text>
+
+  <text x="30" y="298" font-size="12.5" fill="#2C2C2A">③ 协和度占比</text>
+  <text x="30" y="316" font-size="10.5" fill="#888780">要求 &gt; 85%</text>
+  <rect x="200" y="286" width="580" height="22" rx="6" fill="#EFEEE9" stroke="#D3D1C7"/>
+  <rect x="606" y="286" width="174" height="22" rx="6" fill="#E1F5EE" stroke="#9FE1CB"/>
+  <line x1="708" y1="274" x2="708" y2="320" stroke="#A32D2D" stroke-width="2"/>
+  <text x="708" y="268" font-size="11.5" text-anchor="middle" fill="#A32D2D">93.8%　通过</text>
+  <text x="200" y="324" font-size="10" fill="#888780">50%</text>
+  <text x="780" y="324" font-size="10" text-anchor="end" fill="#888780">100%</text>
+
+  <text x="30" y="362" font-size="12" fill="#5F5E5A">三条都过 → 数据可用。任一条不过，先查标样计数率与信号强度，不要在年龄上找解释。</text>
+</svg>
+<figcaption><b>图 5</b>　三个判据。② 里 Ple 的偏差偏正（+1.81%）在本项目里是<b>已知的系统性现象</b>：标样与样品计数率相差约一个数量级，
+单一线性因子消不掉非线性残差，所以流程里还有一步"二次校正"。这一条会在结果里明确标注。</figcaption>
+</figure>
+
+<div class="warn">
+<b>最容易拿错的两件事。</b>
+① 不确定度列里 <code>s68_1sig</code> 与 <code>s68_2sig</code> 分别是 1σ 与 2σ ——
+下游算 MSWD <b>必须用 1σ</b>，误用 2σ 会把 MSWD 缩小到四分之一，于是"本该不自洽的数据看起来完美"。
+② 摘要里的"样品年龄中位"只统计<b>样品</b>，不含标样；91500 约 1060 Ma、Ple 约 343 Ma 混进来会把中位数整体抬高。
+本工具的 CLI 与网页界面都已按此口径修正，但你自己写脚本从结果表里取数时要注意筛选 <code>类型 = 样品</code>。
+</div>
+
+<h3>6.1　MSWD 怎么读</h3>
+
+<pre><code>MSWD ≈ 1       该域用一个年龄就能解释
+MSWD 远大于 1  要么真的混了多个年龄，要么 σ 被低估了（最常见：只算计数统计，没算外部重现性）
+MSWD 远小于 1  σ 被高估了
+MSWD_概率      该域只有单一真实年龄的前提下，MSWD 至少这么大的概率；小于约 0.05 是常规警戒线</code></pre>
+
+<p>"深度剖面域"与"剖面窗口"两张表里的年龄<b>都是反比方差加权平均</b>（不是算术平均），
+MSWD 与它的卡方概率都在同一口径上算，与 R 端 ADEPT 完全一致，两边数字可以直接并列对照。</p>
+
+<h2 id="c7">接到 ADEPT 做坪年龄</h2>
+
+<p>把结果 Excel 直接喂给 ADEPT 即可：它读"剖面窗口"表，忽略同一工作簿里其它不含 <code>Age68</code> 的表。
+<b>但四个参数必须显式给</b>，因为 ADEPT 不去猜数据的预处理状态——</p>
+
+<pre><code>adept("EX2022A_U-Pb结果.xlsx",
+      lower_ablation_time    = 0,      # DRUID 已经切好了自己的剥蚀窗口
+      upper_ablation_time    = 1e6,    # 上界放到最后一个窗口之后
+      smooth                 = "none", # 数据已做过 F(τ) 校正，剖面本就是平的
+      calibration_uncertainty = 0)     # σ 里已含标样外部重现性</code></pre>
+
+<table>
+  <tr><th>参数</th><th>为什么要显式给</th></tr>
+  <tr><td class="n">lower/upper_ablation_time</td><td>一个 <code>_1s</code> 列说明不了剥蚀窗口在哪里结束。猜错会<b>静默</b>改变参与分段的数据点数，年龄直接跑偏。</td></tr>
+  <tr><td class="n">smooth = "none"</td><td>剖面已经做过逐深度分馏校正；再平滑会把真实的年龄域边界一起抹平。</td></tr>
+  <tr><td class="n">calibration_uncertainty = 0</td><td>σ 里已经含了标样外部重现性；再按默认乘 3% 就是把它算两遍。</td></tr>
+</table>
+
+<figure>
+<svg viewBox="0 0 900 260" font-family="Microsoft YaHei,PingFang SC,system-ui,sans-serif">
+  <text x="30" y="34" font-size="15" font-weight="600" fill="#2C2C2A">一次数据要经过三关，每关解决不同的怀疑</text>
+
+  <rect x="50" y="70" width="230" height="110" rx="10" fill="#EEEDFE" stroke="#AFA9EC"/>
+  <text x="66" y="96" font-size="12.5" fill="#2C2C2A">① DRUID：算得对不对</text>
+  <text x="66" y="120" font-size="11.5" fill="#5F5E5A">看标样 QC 偏差</text>
+  <text x="66" y="140" font-size="11.5" fill="#5F5E5A">91500 &lt; 1%，Ple &lt; 3%</text>
+  <text x="66" y="162" font-size="11" fill="#534AB7">过不了 → 仪器/标样的问题</text>
+
+  <rect x="335" y="70" width="230" height="110" rx="10" fill="#E1F5EE" stroke="#9FE1CB"/>
+  <text x="351" y="96" font-size="12.5" fill="#2C2C2A">② ADEPT：坪选得对不对</text>
+  <text x="351" y="120" font-size="11.5" fill="#5F5E5A">看 MSWD 与 MSWD 概率</text>
+  <text x="351" y="140" font-size="11.5" fill="#5F5E5A">坪内是否自洽</text>
+  <text x="351" y="162" font-size="11" fill="#0F6E56">过不了 → 真有多个年龄域</text>
+
+  <rect x="620" y="70" width="230" height="110" rx="10" fill="#FAEEDA" stroke="#FAC775"/>
+  <text x="636" y="96" font-size="12.5" fill="#2C2C2A">③ 你：结论写不写得住</text>
+  <text x="636" y="120" font-size="11.5" fill="#5F5E5A">看协和度与剖面形态</text>
+  <text x="636" y="140" font-size="11.5" fill="#5F5E5A">年龄域是否与结构对应</text>
+  <text x="636" y="162" font-size="11" fill="#854F0B">过不了 → 别硬解释</text>
+
+  <polygon points="288,119 300,125 288,131" fill="#888780"/>
+  <polygon points="573,119 585,125 573,131" fill="#888780"/>
+
+  <text x="30" y="212" font-size="12" fill="#5F5E5A">这三关的顺序不能颠倒：② 的结论建立在 ① 通过的前提上，③ 建立在 ② 之上。</text>
+  <text x="30" y="236" font-size="12" fill="#5F5E5A">标样 QC 不过线时，任何关于岩石年龄的解释都还没有立足点。</text>
+</svg>
+<figcaption><b>图 6</b>　三关的分工。工具只负责前两关的<b>计算与呈现</b>，第三关的判断必须由人来做——本工具的设计原则是"把不确定性摊开"，而不是替你给出结论。</figcaption>
+</figure>
+
+<h2 id="c8">出错了怎么办</h2>
+
+<p>先记住一条：<b>报错信息里的最后三行通常就够定位</b>。看下面这个表，找到你的现象。</p>
+
+<table>
+  <tr><th>现象</th><th>多半是什么</th><th>怎么办</th></tr>
+  <tr>
+    <td>双击 bat 一闪而过</td>
+    <td>窗口里打印了报错但没停住</td>
+    <td>改从命令行跑 <code>python -m druid.cli.serve_ui</code>，报错就会留在屏幕上；或者先跑 <code>python tests\run_all.py</code> 看环境是否就绪</td>
+  </tr>
+  <tr>
+    <td class="n">ModuleNotFoundError: No module named 'pandas'</td>
+    <td>用的是系统 Python，不是装了依赖的那个</td>
+    <td>用 <code>.venv\Scripts\python.exe</code> 显式跑；或先执行第 3 步的 pip 命令</td>
+  </tr>
+  <tr>
+    <td class="n">'python' 不是内部或外部命令</td>
+    <td>装 Python 时没勾 "Add python.exe to PATH"，或者没重新开窗口</td>
+    <td>重装并勾上，然后<b>新开</b>命令行窗口再试</td>
+  </tr>
+  <tr>
+    <td>pip 装不上 / 一直卡住</td>
+    <td>网络到 pypi 不稳</td>
+    <td>加国内镜像：<code>pip install numpy pandas matplotlib openpyxl xlrd -i https://pypi.tuna.tsinghua.edu.cn/simple</code></td>
+  </tr>
+  <tr>
+    <td class="n">KeyError: 缺少通道: [207]</td>
+    <td>某个测点的 CSV 没导出该质量数</td>
+    <td>回仪器重新导出那个测点；报错里会写是哪个文件</td>
+  </tr>
+  <tr>
+    <td>找不到序列表</td>
+    <td>文件没与文件夹同名，或 <code>_LIST</code> 写成了别的</td>
+    <td>改名成 <code>&lt;文件夹名&gt;_LIST.csv</code>（大小写不敏感）</td>
+  </tr>
+  <tr>
+    <td class="n">PermissionError: ...xlsx</td>
+    <td>结果文件正被 Excel 打开着</td>
+    <td>关掉 Excel 再重跑</td>
+  </tr>
+  <tr>
+    <td>网页打不开</td>
+    <td>端口被占用（会自动顺延）</td>
+    <td>以黑窗口里打印的地址为准；确认服务打印了"界面地址 http://127.0.0.1:…"</td>
+  </tr>
+  <tr>
+    <td>处理到一半关了网页</td>
+    <td>不是故障</td>
+    <td>服务端任务会继续跑完并写盘；重开网页看不到那次日志，但结果文件已经在了</td>
+  </tr>
+</table>
+
+<div class="warn">
+<b>"查不到原因"时的标准动作</b>：① 跑 <code>python tests\run_all.py</code>（环境或代码坏没坏）；
+② 跑 <code>python tests\check_example_batch.py</code>（数值是否仍与基线一致）；
+③ 若是自己的数据，把批次里最小的一个 CSV 单独跑一次，缩小到具体测点。
+这三步能把问题定位到"环境 / 工具 / 你的数据"三类中的一类，比逐行读代码快得多。
+</div>
+
+<h2 id="c9">想改代码 / 长期维护</h2>
+
+<p>这个仓库是给人改的。分层只朝一个方向依赖，所以"改算法"和"改流程"各有一个明确去处。</p>
+
+<figure>
+<svg viewBox="0 0 900 320" font-family="Microsoft YaHei,PingFang SC,system-ui,sans-serif">
+  <text x="30" y="34" font-size="15" font-weight="600" fill="#2C2C2A">依赖只朝一个方向：上层可以 import 下层，下层绝不 import 上层</text>
+
+  <text x="170" y="59" font-size="11" text-anchor="end" fill="#888780">编排层</text>
+  <rect x="190" y="36" width="520" height="38" rx="8" fill="#EEEDFE" stroke="#AFA9EC"/>
+  <text x="206" y="60" font-size="11.5" font-family="Consolas,monospace" fill="#26215C">workflow.py　BatchConfig + run_batch 十步</text>
+  <text x="730" y="59" font-size="11" fill="#5F5E5A">想改流程顺序</text>
+
+  <polygon points="444,78 450,88 456,78" fill="#888780"/>
+
+  <text x="170" y="111" font-size="11" text-anchor="end" fill="#888780">深度剖面</text>
+  <rect x="190" y="88" width="520" height="38" rx="8" fill="#F7F6F3" stroke="#D3D1C7"/>
+  <text x="206" y="112" font-size="11.5" font-family="Consolas,monospace" fill="#26215C">depth/　滑窗、F(τ) 校正、年龄域判别、出图</text>
+  <text x="730" y="111" font-size="11" fill="#5F5E5A">想改深度算法</text>
+
+  <polygon points="444,130 450,140 456,130" fill="#888780"/>
+
+  <text x="170" y="163" font-size="11" text-anchor="end" fill="#888780">单点还原</text>
+  <rect x="190" y="140" width="520" height="38" rx="8" fill="#F7F6F3" stroke="#D3D1C7"/>
+  <text x="206" y="164" font-size="11.5" font-family="Consolas,monospace" fill="#26215C">reduction/　装载、剥蚀段识别、比值、jackknife</text>
+  <text x="730" y="163" font-size="11" fill="#5F5E5A">想改比值算法</text>
+
+  <polygon points="444,182 450,192 456,182" fill="#888780"/>
+
+  <text x="170" y="215" font-size="11" text-anchor="end" fill="#888780">读写</text>
+  <rect x="190" y="192" width="520" height="38" rx="8" fill="#F7F6F3" stroke="#D3D1C7"/>
+  <text x="206" y="216" font-size="11.5" font-family="Consolas,monospace" fill="#26215C">io/　Qtegra CSV、序列 LIST、Excel 报表</text>
+  <text x="730" y="215" font-size="11" fill="#5F5E5A">想改输入格式</text>
+
+  <polygon points="444,234 450,244 456,234" fill="#888780"/>
+
+  <text x="170" y="267" font-size="11" text-anchor="end" fill="#888780">纯计算</text>
+  <rect x="190" y="244" width="520" height="38" rx="8" fill="#E1F5EE" stroke="#9FE1CB"/>
+  <text x="206" y="268" font-size="11.5" font-family="Consolas,monospace" fill="#26215C">core/　衰变常数、年龄方程、普通铅、统计</text>
+  <text x="730" y="267" font-size="11" fill="#0F6E56">常量只放这里</text>
+
+  <text x="30" y="308" font-size="12" fill="#5F5E5A">这条方向带来了两个好处：core/ 可以脱离文件系统单独测试；物理常量只有一个出处，不会改一处忘一处。</text>
+</svg>
+<figcaption><b>图 7</b>　分层与依赖方向。<b>物理常量只允许出现在 <code>core/constants.py</code> 一次</b>——
+同一个衰变常数在两处各写一遍，改了一处忘了另一处不会报错，只会悄悄给出错误的年龄。</figcaption>
+</figure>
+
+<h3>9.1　改完必须做的三件事</h3>
+
+<pre><code>1) python -m pyflakes druid\          :: 必须 0 项
+2) python tests\run_all.py            :: 必须全过
+3) python tests\check_example_batch.py :: 与基线逐项一致</code></pre>
+
+<div class="warn">
+<b>输出是要写进文章的，所以"数值没变"必须被证明，而不是被相信。</b>
+第 3 条就是那个证明：它用自带的 85 个测点真跑一遍，把标样 QC、样品年龄分布、深度结构分布逐项钉死。
+改了算法就该跑它；通不过就不要提交。
+</div>
+
+<h3>9.2　几条不要轻易碰的地方</h3>
+
+<table>
+  <tr><th>位置</th><th>为什么</th></tr>
+  <tr><td class="n">core/constants.py</td><td>全部物理常量与标准物质库的唯一出处</td></tr>
+  <tr><td class="n">--deadtime-ns 默认 0</td><td><code>--deadtime-ns</code> 默认 0 是刻意的：一旦默认开启，历史上所有未校正的结果就不再可比。要改默认值请先与人商量</td></tr>
+  <tr><td class="n">204 显著性检验</td><td><sup>204</sup>Pb 只有几~几十 cps，<sup>204</sup>Hg 本底可达数百 cps。不做显著性检验就扣普通铅 = 把噪声当铅扣掉，对 <sup>207</sup>Pb 是灾难性的</td></tr>
+  <tr><td class="n">207Pb/206Pb 不做 F(τ)</td><td>它是 Pb 同位素内部比值，不随坑深分馏；窗口级 <sup>207</sup>Pb 只有约 130 个计数，套 F(τ) 只会注入噪声</td></tr>
+  <tr><td class="n">*.bat 文件</td><td>必须保持纯 ASCII + CRLF。cmd.exe 按代码页解析，中文注释会变乱码；而解释器路径里含中文用户名，所以中文路径只能靠运行时变量抵达</td></tr>
+</table>
+
+<h2 id="c10">附录：命令速查与名词表</h2>
+
+<h3>10.1　命令速查</h3>
+
+<table>
+  <tr><th>想干什么</th><th>命令</th></tr>
+  <tr><td>看版本</td><td class="n">python -c "import druid; print(druid.__version__)"</td></tr>
+  <tr><td>跑一个批次</td><td class="n">python -m druid.cli.reduce_batch --dir "批次目录" --out "结果.xlsx" --plot</td></tr>
+  <tr><td>看参数</td><td class="n">python -m druid.cli.reduce_batch -h</td></tr>
+  <tr><td>开网页界面</td><td class="n">python -m druid.cli.serve_ui　（或双击 启动数据处理工具.bat）</td></tr>
+  <tr><td>自检</td><td class="n">python tests\run_all.py</td></tr>
+  <tr><td>数值回归</td><td class="n">python tests\check_example_batch.py</td></tr>
+  <tr><td>静态检查</td><td class="n">python -m pyflakes druid\</td></tr>
+  <tr><td>注册为命令行工具</td><td class="n">pip install -e .　→ 之后可用 druid-reduce / druid-gui</td></tr>
+</table>
+
+<h3>10.2　名词表</h3>
+
+<table>
+  <tr><th>名词</th><th>一句话解释</th></tr>
+  <tr><td>cps</td><td>counts per second，计数率。Qtegra 已经按驻留时间换算好，不是原始计数</td></tr>
+  <tr><td>剥蚀区间</td><td>激光真正在烧样品的那个时间段；两端各有几秒的启动爬升与 washout 拖尾必须切掉</td></tr>
+  <tr><td>气体空白</td><td>没开激光时测到的本底信号，用于扣除载气与样品池的贡献</td></tr>
+  <tr><td>死时间</td><td>探测器两次计数之间的最小分辨时间。高计数率下漏计会低估信号，需要校正</td></tr>
+  <tr><td>分馏 F(τ)</td><td>随坑深变化的元素分馏（本项目 ²⁰⁶Pb/²³⁸U 从坑口到坑底漂移约 20%），F(τ) = 标样参考值 / 实测值，逐深度校正</td></tr>
+  <tr><td>归一化</td><td>用主标把仪器测到的比值为真值，F = 真值 / 实测值。它决定<b>绝对年龄</b>是否成立</td></tr>
+  <tr><td>普通铅</td><td>矿物形成时混入的非放射成因铅，用 <sup>204</sup>Pb 指示，需显著性检验后再扣</td></tr>
+  <tr><td>jackknife</td><td>刀切法：逐点剔除重算，得到 σ 与相关系数 ρ（画协和椭圆必需）</td></tr>
+  <tr><td>协和度</td><td>²⁰⁶Pb/²³⁸U 年龄与 ²⁰⁷Pb/²⁰⁶Pb 年龄的一致程度（%）。接近 100% 说明未发生明显的铅丢失或铀富集</td></tr>
+  <tr><td>坪年龄</td><td>剖面上一段年龄彼此一致的区间的加权平均年龄；由 ADEPT 判定</td></tr>
+  <tr><td>MSWD</td><td>加权偏差平方和除以自由度：约 1 表示散布与各自不确定度相符；远大于 1 说明有额外散布没被解释</td></tr>
+</table>
+
+<h3>10.3　这份文档里的数字从哪来</h3>
+
+<p>第 <a href="#c6">六节</a>的三个判据数值（−0.25% / +1.81% / 93.8%）与第 <a href="#c5">五节</a>的
+"85 个测点 → 样品 48 / 主标 21 / 监控 14 / 玻璃 2"，全部来自仓库自带的示例批次
+<code>examples/EX2022A</code>，由 <code>python tests\check_example_batch.py</code> 输出。
+它们的口径与容差写在 <code>AGENTS.md</code> 的基线表里，改动算法时那张表会一起被检查。</p>
+
+<footer>
+  <p>DRUID 上手指南　·　对应版本 2.2.3　·　单文件自包含，离线可开</p>
+  <p>想深入原理：<code>docs/from-first-principles.html</code>（从放射性衰变讲到 MSWD，10 张图）　·　
+     想知道两个工具怎么对接：<code>docs/druid-adept-dataflow.html</code></p>
+</footer>
+
+</div>
+</body>
+</html>

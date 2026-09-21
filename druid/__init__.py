@@ -50,10 +50,21 @@ druid —— 激光剥蚀 ICP-MS（LA-ICP-MS）锆石 U-Pb 定年数据还原包
 """
 from __future__ import annotations
 
-__version__ = "2.2.2"
+__version__ = "2.2.3"
 
 # 版本说明
 # --------
+# 2.2.3 新增 docs/getting-started.html —— 面向"第一次拿到这个工具的人"的上手指南：
+#   装环境四条命令、数据怎么摆、结果先看哪三个数、出错怎么定位、改代码的边界。
+#   同时做了一批纯卫生修正（不改任何数值输出）：
+#   · 删掉两个全仓无调用的死函数（io.qtegra.channels_of_interest、
+#     depth.figures.multi_page_pdf）及其导出，连带删掉只被前者使用的 UA_MASSES；
+#   · reduction.ratios 不再自带一份与 core.constants.MASSES_NEEDED 重复的通道元组；
+#   · webui 的 HTTP `Server` 头不再硬编码 "druid-webui/2.0"，改读 __version__；
+#   · 修正两处会把读者带偏的注释（QC 校正的 1σ/2σ、去掉扩展名为何不能用 rstrip）；
+#   · io.report 的裸 except 收窄为 (AttributeError, TypeError, ValueError)。
+#   新手指南里的每个数字都取自示例批次 EX2022A 的端到端回归基线，可自行复现。
+#
 # 2.2.2 新增 docs/from-first-principles.html —— 从物理原理讲到 MSWD 的完整说明。
 #   纯文档改动，不动任何数值（端到端回归的基线值不变）。
 #

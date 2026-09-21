@@ -9,6 +9,7 @@ DRUID = Depth-Resolved U-Pb Isotope Data reduction
 其中的「剖面窗口」表可以直接交给 ADEPT 做坪年龄与 MSWD 判定。
 
 完整说明见 README.md，本文件是给实验室日常使用的最短路径。
+第一次装、或者想弄明白每一步为什么这么做，看 docs\getting-started.html（上手指南，双击即可打开）。
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
