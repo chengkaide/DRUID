@@ -30,7 +30,11 @@ def _auto_width(series: pd.Series, header: str) -> int:
     """
     try:
         body = series.astype(str).str.len().max()
-    except Exception:
+    # 只兜"这一列量不出宽度"这一种情况：传进来的不是 Series（AttributeError）、
+    # 或者列里的东西 astype/len 处理不了（TypeError / ValueError）。
+    # ⚠ 不要写成裸 except Exception：列宽只是排版小事，一旦把 KeyError、
+    # MemoryError 这类真问题也吞掉，坏的是整张表却查不出原因。
+    except (AttributeError, TypeError, ValueError):
         body = 10
     body = 0 if (body is None or (isinstance(body, float) and math.isnan(body))) else float(body)
     head = len(str(header))

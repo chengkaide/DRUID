@@ -171,7 +171,10 @@ def read_sequence(path, primary=None, secondary=None) -> pd.DataFrame:
     rows = []
     for i, (fname, sname) in enumerate(_read_rows(Path(path))):
         rows.append(dict(
-            # rstrip(".csv")：万一 LIST 里写了带扩展名的文件名，这里统一去掉
+            # 去掉扩展名用 rsplit(".", 1)[0]（含 endswith 判断），**不要写成
+            # rstrip(".csv")** —— rstrip 的参数是"字符集合"而不是后缀，
+            # 它会一路删掉末尾所有属于 {'.','c','s','v'} 的字符：
+            # "sample_v.csv" 会被削成 "sample_"（那个 v 也是集合里的）。
             file=str(fname).rsplit(".", 1)[0] if str(fname).lower().endswith(".csv") else str(fname),
             sample=sname,
             role=sample_role(sname, p, sec),

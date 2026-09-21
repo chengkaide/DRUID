@@ -17,12 +17,11 @@ from .domains import (
 from .figures import (
     make_depth_figure,
     save_depth_figure,
-    multi_page_pdf,
 )
 
 __all__ = [
     "window_edges", "window_profile", "window_sums",
     "bracket_F", "profile_ages", "profile_ages_76", "compare_fractionation",
     "segment", "refine_domains", "merge_close", "summarize_segments",
-    "make_depth_figure", "save_depth_figure", "multi_page_pdf",
+    "make_depth_figure", "save_depth_figure",
 ]

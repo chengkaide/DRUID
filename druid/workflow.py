@@ -723,7 +723,8 @@ def apply_secondary_correction(res: pd.DataFrame, cfg: BatchConfig):
     res["QC校正系数"] = kfac
     res["年龄206_238_QC校正"] = res["年龄206_238"] * kfac
     res["s68_2sig_QC校正"] = res["s68_2sig"] * kfac
-    # 对带 Query 同样缩放 2σ，便于画加权平均图
+    # 1σ 与 2σ 都按同一个系数缩放：kfac 是乘性因子，误差一同放大/缩小。
+    # （s68_2sig 上一行已缩放，这里补 s68_1sig —— ADEPT 画加权平均图用的是 1σ。）
     res["s68_1sig_QC校正"] = res["s68_1sig"] * kfac
 
     _log(cfg, f"\n[6] QC 二次校正：{cfg.secondary} 实测 {mu_qc:.2f} Ma "

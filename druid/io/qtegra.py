@@ -33,11 +33,9 @@ import numpy as np
 
 # 从表头字符串里抽质量数的正则。
 # 例："204Pb" → 204 ；"238U" → 238 ；"49Ti" → 49
-# ⚠ 只关心 U-Pb 定年要用到的这几个质量数，微量元素（29Si、178Hf…）不处理。
+# ⚠ 只关心 U-Pb 定年要用到的这几个质量数（202/204/206/207/208/232/235/238），
+#   微量元素（29Si、178Hf…）不处理 —— 这个分组就是"属于 U-Pb 体系"的判据。
 MASS_RE = re.compile(r"(202|204|206|207|208|232|235|238)")
-
-# 参与 U-Pb 还原的关键质量数合集（用于快速判断某个通道是否属于 U-Pb 体系）
-UA_MASSES = frozenset((202, 204, 206, 207, 208, 232, 235, 238))
 
 
 def read_qtegra(path) -> Tuple[str, np.ndarray, Dict[int, np.ndarray], list]:
@@ -119,8 +117,3 @@ def read_qtegra(path) -> Tuple[str, np.ndarray, Dict[int, np.ndarray], list]:
             data.setdefault(mass, arr[:, j])
 
     return title, t, data, columns
-
-
-def channels_of_interest(data: Dict[int, np.ndarray]) -> Dict[int, np.ndarray]:
-    """只保留与 U-Pb 定年有关的质量通道，丢掉微量元素（减小后续循环开销）。"""
-    return {m: v for m, v in data.items() if m in UA_MASSES}

@@ -165,23 +165,3 @@ def save_depth_figure(prof, segs, title, out_path, summ=None,
     import matplotlib.pyplot as plt
     plt.close(fig)
     return out_path
-
-
-def multi_page_pdf(figures, pdf_path) -> Path:
-    """
-    把若干 Figure 汇总成一个多页 PDF，方便整批快速翻阅。
-
-    参数
-    ----
-    figures   : Figure 的可迭代对象
-    pdf_path  : 输出 PDF 路径
-    """
-    import matplotlib.pyplot as plt
-    from matplotlib.backends.backend_pdf import PdfPages
-    pdf_path = Path(pdf_path)
-    pdf_path.parent.mkdir(parents=True, exist_ok=True)
-    with PdfPages(pdf_path) as pdf:
-        for fig in figures:
-            pdf.savefig(fig, bbox_inches="tight")
-            plt.close(fig)
-    return pdf_path

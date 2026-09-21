@@ -35,7 +35,8 @@ import numpy as np
 import pandas as pd
 
 from ..core.constants import L238
-from ..core.geochronology import age68
+from ..core.geochronology import age68, age76
+from ..core.statistics import weighted_mean
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -134,11 +135,10 @@ def profile_ages_76(prof: pd.DataFrame, F76: np.ndarray, sigma_ext76: float):
     s = np.hypot(prof["s76"].to_numpy() * F76, sigma_ext76 * R)
     ag = np.empty_like(R)
     sa = np.empty_like(R)
-    from ..core.geochronology import age76 as _age76
     for i in range(R.size):
         # 逐点二分求逆，因为 207Pb/206Pb 的年龄方程无法解析反解
-        ag[i] = _age76(R[i])
-        sa[i] = abs(_age76(R[i] + s[i]) - _age76(R[i] - s[i])) / 2.0
+        ag[i] = age76(R[i])
+        sa[i] = abs(age76(R[i] + s[i]) - age76(R[i] - s[i])) / 2.0
     return ag, sa
 
 
@@ -165,7 +165,6 @@ def compare_fractionation(prof: pd.DataFrame,
     F_bulk = np.full_like(F_tau, float(np.nanmean(F_tau)))   # 常数版本
 
     out = {}
-    from ..core.statistics import weighted_mean
     for tag, F in (("F(tau)", F_tau), ("F_bulk", F_bulk)):
         a, sa = profile_ages(prof, F, sigma_ext)
         mu, se, mswd, k = weighted_mean(a, sa)
