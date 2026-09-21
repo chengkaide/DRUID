@@ -35,11 +35,8 @@ from typing import Dict, Optional, Tuple
 import numpy as np
 
 from ..core.common_lead import stacey_kramers
-from ..core.constants import HG202_204
+from ..core.constants import HG202_204, MASSES_NEEDED
 from ..core.geochronology import age76
-
-# 比例计算的通道全集
-_NEED = (202, 204, 206, 207, 208, 232, 238)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -121,12 +118,15 @@ def reduce_interval(net: Dict[int, np.ndarray],
         s68, s76, rho             : 206Pb/238U 与 207Pb/206Pb 的 1σ 与相关系数
         U_cps, n_cycles, i204, sk : 质控信息
     """
-    # 通道检查：一个都不能少
-    if not all(k in net for k in _NEED):
-        raise KeyError(f"缺少通道: {sorted(set(_NEED) - set(net))}")
+    # 通道检查：一个都不能少。
+    # 通道全集用 core.constants.MASSES_NEEDED —— 本文件曾经自己写了一份同样的元组
+    # (_NEED)，两处并存就是 AGENTS.md §6.1 警告的"同一事实两个出处"：
+    # 哪天常量表里加了通道，这里不会跟着变，而漏检一个通道的后果是静默算错年龄。
+    if not all(k in net for k in MASSES_NEEDED):
+        raise KeyError(f"缺少通道: {sorted(set(MASSES_NEEDED) - set(net))}")
 
     # 取出窗口内的子信号
-    a = {k: net[k][mask] for k in _NEED}
+    a = {k: net[k][mask] for k in MASSES_NEEDED}
     n = a[238].size
     if n < 5:
         # 点数太少，jackknife 的方差估计完全不可靠，直接放弃这个窗口
