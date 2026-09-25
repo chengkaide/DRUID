@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+# GitHub Pages 直接发布 docs/ 目录，四份页面都是静态 HTML，没有需要屏蔽的路径。
+Sitemap: https://chengkaide.github.io/DRUID/sitemap.xml

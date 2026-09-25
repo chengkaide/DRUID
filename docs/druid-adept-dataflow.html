@@ -3,7 +3,79 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>DRUID 与 ADEPT：一个剥蚀坑里的两个问题</title>
+<title>DRUID 与 ADEPT：一个剥蚀坑里的两个问题 · 数据流与接口约定</title>
+<meta name="description" content="DRUID 与 ADEPT 各负责什么、数据在它们之间怎么变形、边界上到底传了哪几列、为什么不传 207Pb/206Pb，以及「ADEPT 会静默丢掉哪些窗口」的预测与实际逐点对照。">
+<meta name="keywords" content="ADEPT, DRUID, 数据流, 接口约定, 剖面窗口, Format 4, 坪年龄, MSWD, R 包对接, LA-ICP-MS">
+<meta name="author" content="chengkaide">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://chengkaide.github.io/DRUID/druid-adept-dataflow.html">
+<meta name="theme-color" content="#f7f6f3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#16181a" media="(prefers-color-scheme: dark)">
+<!-- 社交分享：微信 / Twitter / Slack 等都抓这里 -->
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="DRUID">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:title" content="DRUID 与 ADEPT：一个剥蚀坑里的两个问题 · 数据流与接口约定">
+<meta property="og:description" content="DRUID 与 ADEPT 各负责什么、数据在它们之间怎么变形、边界上到底传了哪几列、为什么不传 207Pb/206Pb，以及「ADEPT 会静默丢掉哪些窗口」的预测与实际逐点对照。">
+<meta property="og:url" content="https://chengkaide.github.io/DRUID/druid-adept-dataflow.html">
+<meta property="og:image" content="https://chengkaide.github.io/DRUID/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="DRUID：把 LA-ICP-MS 原始信号时间序列转化为带不确定度的逐深度年龄剖面">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="DRUID 与 ADEPT：一个剥蚀坑里的两个问题 · 数据流与接口约定">
+<meta name="twitter:description" content="DRUID 与 ADEPT 各负责什么、数据在它们之间怎么变形、边界上到底传了哪几列、为什么不传 207Pb/206Pb，以及「ADEPT 会静默丢掉哪些窗口」的预测与实际逐点对照。">
+<meta name="twitter:image" content="https://chengkaide.github.io/DRUID/og-image.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230d1512'/%3E%3Ctext x='32' y='45' font-family='Georgia,serif' font-size='38' font-weight='bold' fill='%23e8b04b' text-anchor='middle'%3ED%3C/text%3E%3C/svg%3E">
+<!-- 结构化数据：让搜索引擎知道这是科研软件的技术文档，而不是普通网页 -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "TechArticle",
+      "headline": "DRUID 与 ADEPT：一个剥蚀坑里的两个问题 · 数据流与接口约定",
+      "description": "DRUID 与 ADEPT 各负责什么、数据在它们之间怎么变形、边界上到底传了哪几列、为什么不传 207Pb/206Pb，以及「ADEPT 会静默丢掉哪些窗口」的预测与实际逐点对照。",
+      "inLanguage": "zh-CN",
+      "url": "https://chengkaide.github.io/DRUID/druid-adept-dataflow.html",
+      "author": {
+        "@type": "Person",
+        "name": "chengkaide",
+        "url": "https://github.com/chengkaide"
+      },
+      "isPartOf": {
+        "@type": "WebSite",
+        "name": "DRUID 文档",
+        "url": "https://chengkaide.github.io/DRUID/"
+      },
+      "about": {
+        "@type": "SoftwareApplication",
+        "name": "DRUID",
+        "softwareVersion": "2.5.0",
+        "applicationCategory": "ScienceApplication"
+      },
+      "license": "https://opensource.org/licenses/MIT"
+    },
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "DRUID",
+          "item": "https://chengkaide.github.io/DRUID/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "两个工具的联系与数据流",
+          "item": "https://chengkaide.github.io/DRUID/druid-adept-dataflow.html"
+        }
+      ]
+    }
+  ]
+}
+</script>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230d1512'/%3E%3Ctext x='32' y='45' font-family='Georgia,serif' font-size='38' font-weight='bold' fill='%23e8b04b' text-anchor='middle'%3ED%3C/text%3E%3C/svg%3E">
 <style>
   :root{
@@ -68,10 +140,60 @@
     .two{grid-template-columns:1fr}
     body{font-size:14.5px}
   }
+
+  /* ═══════════ 2026-09-25 补充：无障碍 · 响应式 · 深色模式 ═══════════ */
+
+  /* 键盘可见焦点（原来只在鼠标点击时才看得出位置，Tab 走一圈看不见光标落在哪） */
+  :focus-visible{outline:2.5px solid var(--pur);outline-offset:3px;border-radius:4px}
+  .skip{position:absolute;left:-9999px;top:0;background:var(--pur);color:#fff;
+        padding:10px 18px;z-index:99;font-weight:600;border-radius:0 0 8px 0}
+  .skip:focus{left:0;top:0}
+
+  /* 宽表格在窄屏上横向滚动，而不是把整个页面撑宽。
+     <div class="tscroll"> 由页尾那段脚本自动套上，不用逐张表手写。
+     width:auto + min-width:100% 是关键：外层 width:100% 会让表格被压缩，反而不滚。 */
+  .tscroll{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 0 18px}
+  .tscroll table{width:auto;min-width:100%;margin:0}
+  .figscroll-hint{color:var(--ink3);font-size:12.5px;
+                  font-family:Consolas,monospace;margin:-18px 0 22px}
+
+  @media(max-width:700px){
+    .wrap{padding:36px 20px 80px}
+    body{font-size:14.5px}
+    h1{font-size:24px}
+    h2{font-size:19px;margin:44px 0 12px}
+    h3{font-size:15.5px;margin:26px 0 8px}
+    /* 图里全是文字标注，等比缩到 1/3 就等于没画 —— 改成横向滚动 */
+    figure{overflow-x:auto;overflow-y:hidden}
+    figure svg,figure img{min-width:620px}
+    pre{font-size:12.5px;padding:12px 13px}
+  }
+
+  @media (prefers-color-scheme: dark){
+    :root{
+      --ink:#E6E4DE; --ink2:#B0AEA6; --ink3:#8B8983;
+      --line:#3A3833; --bg:#16181A; --panel:#1E2124; --panel2:#26292D;
+      --pur:#B9B2F5; --purbg:#262346; --purline:#4A4390;
+      --tea:#6FD3AE; --teabg:#123028; --tealine:#2C6B57;
+      --amb:#E8C07A; --ambbg:#33280F; --ambline:#7A5F22;
+      --red:#F09A9A; --redbg:#2E1A1A;
+    }
+    /* 三处不随变量走的硬编码色，逐条改掉（其余全部走 :root 变量，自动跟随） */
+    code{color:#D9C98F}
+    .note{background:#241E12}
+    .warn{border-left-color:#F09A9A}
+    /* 每张图都画了自己的浅色背景矩形，深色页面上给它留一块浅色面板，
+       否则图里的深色标注会掉进深色背景。图本身一个字节都不用改。 */
+    figure svg,figure img{background:#F7F6F3}
+    /* 数据流那页还有两处不随变量走的浅底卡片，一并改掉 */
+    .card.t{background:#12251F}
+    .card.p{background:#1D1B36}
+  }
 </style>
 </head>
 <body>
-<div class="wrap">
+<a class="skip" href="#main">跳到正文</a>
+<div class="wrap" id="main" role="main">
 
 <h1>DRUID 与 ADEPT：一个剥蚀坑里的两个问题</h1>
 <p class="sub">两个工具为什么分开、数据在它们之间如何变化、边界上到底传了什么</p>
@@ -463,5 +585,41 @@ print(r$summary[, c('Analysis','Final age (Ma)','MSWD')])"</code></pre>
 </footer>
 
 </div>
+
+<script>
+/* 两件事，都放在页尾统一做，免得逐处手写漏掉：
+   1. 给每张表格套一层横向滚动容器（窄屏下表格会撑宽页面）；
+   2. 图在窄屏下能横向滚动时补一句提示 —— 不加提示，读者不知道图可以滑。 */
+(function(){
+  document.querySelectorAll('table').forEach(function(t){
+    var p = t.parentNode;
+    if (p.classList && p.classList.contains('tscroll')) return;
+    var d = document.createElement('div');
+    d.className = 'tscroll';
+    p.insertBefore(d, t);
+    d.appendChild(t);
+  });
+
+  function addHint(el, text){
+    var p = document.createElement('p');
+    p.className = 'figscroll-hint';
+    p.textContent = text;
+    el.parentNode.insertBefore(p, el.nextSibling);
+  }
+  function hints(){
+    document.querySelectorAll('.figscroll-hint').forEach(function(n){ n.remove(); });
+    document.querySelectorAll('figure').forEach(function(f){
+      if (f.scrollWidth > f.clientWidth + 4) addHint(f, '图较宽，可左右滑动查看完整内容');
+    });
+    // 表格同理：能滚但不说，读者只会以为内容被截掉了
+    document.querySelectorAll('.tscroll').forEach(function(d){
+      if (d.scrollWidth > d.clientWidth + 4) addHint(d, '表格较宽，可左右滑动查看完整内容');
+    });
+  }
+  hints();
+  var tm;
+  window.addEventListener('resize', function(){ clearTimeout(tm); tm = setTimeout(hints, 150); });
+})();
+</script>
 </body>
 </html>

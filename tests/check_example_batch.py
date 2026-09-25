@@ -25,10 +25,17 @@
 5. **不分域（整段）口径**：整段加权平均的年龄与"与常数模型相容"的测点数。
    这条不经过分域，是**独立于第 4 条**的另一条判据：两者一起变，说明问题在
    更上游（归一化、外部重现性）；只有一条变，说明问题就在那一层。
+6. **落地页那张「分域前后」图**：它由 `tools/gen_docs_split_figure.py` 从本批次
+   算出来并写进 `docs/index.html`，是**发布出去的东西**。算法一改、图忘了重新生成，
+   页面上的数字就会与真实结果不符。这里把页面上的数字抓回来逐项比 ——
+   于是"过期的图"变成一次确定的失败，而不是等读者发现。
+   数字对不上时：重跑 `python tools/gen_docs_split_figure.py`，
+   确认新数值是对的，再更新本文件顶部的常量。
 
 改了算法就有数字变化是正常的 —— 那时候要**重新确认基线并更新这里的常量**，
 而不是把容差放宽。容差放宽等于把这个检查废掉。
 """
+import re
 import sys
 import time
 from pathlib import Path
@@ -55,6 +62,10 @@ STRUCT = {None: 35, "多域(2)": 18, "均一": 15, "多域(3)": 15}
 # 这类从分布上看不出来的变化。
 WHOLE = {"行数": 48, "整段常数": 5, "MSWD中位": 4.4376,
          "首点年龄": 459.0069, "首点主域": 453.8410}
+# 落地页那张图上的数字（图上是大字，只到十分位）。
+# 这些不是"另抄一份基线"，而是**从 docs/index.html 抓回来、与本次实跑比**——
+# 抓不到才算失败，抓到了对不上也算失败。
+DOC_FIG = {"整段": 459.0, "D1": 453.8, "D2": 494.3, "未归域": 18, "窗口数": 35}
 
 TOL_AGE = 1e-3         # Ma。基线是从导出的 xlsx 里取的（导出时 round(4)），
                        # 内存里的完整精度与之可能差 1e-4 量级，所以留 1e-3。
@@ -176,6 +187,51 @@ def main() -> int:
               WHOLE["首点年龄"], TOL_AGE)
         check("首点主域年龄 (Ma)", round(float(ov["主域年龄_Ma"].iloc[0]), 4),
               WHOLE["首点主域"], TOL_AGE)
+
+    print()
+    print("=== 文档里的「分域前后」图 ===")
+    doc = ROOT / "docs" / "index.html"
+    if not getattr(ov, "empty", True) and doc.is_file() and "gen_docs_split_figure" in \
+            doc.read_text(encoding="utf-8"):
+        txt = doc.read_text(encoding="utf-8")
+
+        def from_doc(pat, cast, label):
+            m = re.search(pat, txt)
+            if not m:
+                bad.append(f"文档图里找不到「{label}」—— 图被改坏或没生成？")
+                print(f"  FAIL 文档图里找不到「{label}」")
+                return None
+            return cast(m.group(1))
+
+        first = ov["样品"].iloc[0]
+        d0 = dom[dom["样品"] == first]
+        got = {
+            "整段": from_doc(r"整段不分域 ([\d.]+) Ma</b>", float, "整段不分域"),
+            "D1": from_doc(r"D1 域均值 ([\d.]+) Ma</b>", float, "D1 域均值"),
+            "D2": from_doc(r"D2 域均值 ([\d.]+) Ma</b>", float, "D2 域均值"),
+            "未归域": from_doc(r"未进入任何年龄域：(\d+) 个窗口", int, "未归域窗口数"),
+            "窗口数": from_doc(r"同一个剥蚀坑的 (\d+) 个滑窗", int, "窗口数"),
+        }
+        want = {
+            "整段": round(float(ov["年龄_Ma"].iloc[0]), 1),
+            "D1": round(float(ov["主域年龄_Ma"].iloc[0]), 1),
+            "D2": round(float(d0["年龄_Ma"].iloc[1]), 1) if len(d0) > 1 else None,
+            "未归域": int(ov["n_win"].iloc[0]) - int(d0["n_win"].sum()),
+            "窗口数": int(ov["n_win"].iloc[0]),
+        }
+        for k, w in want.items():
+            g = got.get(k)
+            if g is None:
+                continue          # 已经在 from_doc 里记过失败了
+            if w is None:
+                print(f"  skip  {k}：本批次的该测点只有一个域，图上没有 D2")
+                continue
+            check(f"图上 {k}", g, w)
+        for k, v in DOC_FIG.items():
+            check(f"图上 {k}（静态锚）", got.get(k), v)
+        print(f"  （图取自测点 {first}；重生成：python tools/gen_docs_split_figure.py）")
+    else:
+        print("  skip  落地页里没有这张自动生成的图，或不分域表为空")
 
     print()
     if bad:

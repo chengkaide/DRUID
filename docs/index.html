@@ -1,134 +1,363 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DRUID — LA-ICP-MS 锆石 U-Pb 定年数据处理</title>
-<meta name="description" content="DRUID: Depth-Resolved U–Pb Isotope Data reduction。把 Qtegra/iCAP 导出的 cps 时间序列还原为带不确定度的年龄、标样质控与逐深度年龄剖面，直接对接 ADEPT 判定坪年龄与 MSWD。">
+<title>DRUID — LA-ICP-MS 锆石 U-Pb 定年：从 cps 时间序列到逐深度年龄剖面</title>
+<meta name="description" content="DRUID（Depth-Resolved U–Pb Isotope Data reduction）把 Qtegra/iCAP 导出的 LA-ICP-MS 原始计数率时间序列，还原成带不确定度的锆石 U-Pb 年龄、标样质控表与逐深度年龄剖面；「剖面窗口」表可直接交给 R 包 ADEPT 判定坪年龄与 MSWD。含完整质控层与机读交接文件。">
+<meta name="keywords" content="DRUID, LA-ICP-MS, 锆石 U-Pb 定年, 激光剥蚀, 深度剖面, 分馏校正, 坪年龄, MSWD, ADEPT, 同位素年代学, geochronology, depth profile">
+<meta name="author" content="chengkaide">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://chengkaide.github.io/DRUID/">
 <meta name="theme-color" content="#0d1512">
+
+<!-- 社交分享：微信 / Twitter / Slack 等抓这里 -->
 <meta property="og:type" content="website">
+<meta property="og:site_name" content="DRUID">
+<meta property="og:locale" content="zh_CN">
 <meta property="og:title" content="DRUID — 随坑深变化的锆石年龄">
-<meta property="og:description" content="LA-ICP-MS 锆石 U-Pb 数据还原：cps 时间序列 → 带不确定度的年龄与逐深度剖面，直接对接 ADEPT 判定坪年龄与 MSWD。">
+<meta property="og:description" content="把 LA-ICP-MS 的原始信号时间序列，直接转化为带不确定度的逐深度年龄剖面。DRUID 测出来，ADEPT 读出来。">
 <meta property="og:url" content="https://chengkaide.github.io/DRUID/">
 <meta property="og:image" content="https://chengkaide.github.io/DRUID/og-image.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="DRUID：从 cps 时间序列到逐深度年龄剖面">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="DRUID — 随坑深变化的锆石年龄">
+<meta name="twitter:description" content="把 LA-ICP-MS 的原始信号时间序列，直接转化为带不确定度的逐深度年龄剖面。">
+<meta name="twitter:image" content="https://chengkaide.github.io/DRUID/og-image.png">
+
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230d1512'/%3E%3Ctext x='32' y='45' font-family='Georgia,serif' font-size='38' font-weight='bold' fill='%23e8b04b' text-anchor='middle'%3ED%3C/text%3E%3C/svg%3E">
+
+<!-- 结构化数据：告诉搜索引擎这是一个科研软件项目，而不是一篇普通网页 -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "DRUID",
+  "alternateName": "Depth-Resolved U–Pb Isotope Data reduction",
+  "description": "把 Qtegra/iCAP 导出的 LA-ICP-MS 原始计数率时间序列还原为带不确定度的锆石 U-Pb 年龄、标样质控表与逐深度年龄剖面，「剖面窗口」表可直接交给 ADEPT 判定坪年龄与 MSWD。",
+  "url": "https://chengkaide.github.io/DRUID/",
+  "codeRepository": "https://github.com/chengkaide/DRUID",
+  "softwareVersion": "2.5.0",
+  "applicationCategory": "ScienceApplication",
+  "applicationSubCategory": "Geochronology",
+  "operatingSystem": "Windows, Linux, macOS (Python ≥ 3.9)",
+  "programmingLanguage": "Python",
+  "license": "https://opensource.org/licenses/MIT",
+  "isAccessibleForFree": true,
+  "keywords": "LA-ICP-MS, U-Pb, 锆石定年, 深度剖面, 分馏校正, 坪年龄, MSWD, ADEPT",
+  "softwareRequirements": "numpy, pandas, matplotlib, openpyxl, xlrd（刻意不依赖 scipy）",
+  "author": { "@type": "Person", "name": "chengkaide", "url": "https://github.com/chengkaide" },
+  "maintainer": { "@type": "Person", "name": "chengkaide", "url": "https://github.com/chengkaide" }
+}
+</script>
+
 <style>
 :root{
+  /* ── 深色（默认，品牌色）──────────────────────────────────────── */
   --bg:#0d1512; --bg2:#111d18; --bg3:#16241e; --card:#132019;
   --line:#26402f; --line2:#35573f;
   --txt:#e6f0e9; --dim:#9db8a8; --faint:#6d8a79;
   --acc:#e8b04b; --acc2:#f2c86d; --grn:#5fb87a; --grn2:#8fd4a4;
-  --code-bg:#0a120e;
-  --mono:"Cascadia Code","JetBrains Mono",Consolas,"Courier New",monospace;
-  --sans:"Segoe UI","Microsoft YaHei","PingFang SC",system-ui,sans-serif;
+  --code-bg:#0a120e; --btn-ink:#171108; --nav-bg:rgba(13,21,18,.88);
+  --hero-a:rgba(95,184,122,.14); --hero-b:rgba(232,176,75,.10);
+}
+/* ── 浅色：与三份文档页同一套暖纸底色，切换时不跳戏 ────────────────
+   对比度已逐项算过（正文 14.3:1、次要 6.6:1、最淡的小字 5.1:1，
+   链接 6.1:1），全部 ≥ WCAG AA 的 4.5:1。改色时请重新算一遍。 */
+:root[data-theme=light]{
+  --bg:#fbfaf7; --bg2:#f3f1ea; --bg3:#eae7de; --card:#ffffff;
+  --line:#dedbd1; --line2:#c4c0b3;
+  --txt:#22282a; --dim:#525b59; --faint:#646e6b;
+  --acc:#8a5208; --acc2:#a6630a; --grn:#1c6b4a; --grn2:#155c3e;
+  --code-bg:#f4f2ec; --btn-ink:#ffffff; --nav-bg:rgba(251,250,247,.88);
+  --hero-a:rgba(28,107,74,.10); --hero-b:rgba(138,82,8,.08);
 }
 *{margin:0;padding:0;box-sizing:border-box}
 html{scroll-behavior:smooth}
-body{background:var(--bg);color:var(--txt);font-family:var(--sans);line-height:1.75;font-size:16px}
+body{background:var(--bg);color:var(--txt);font-family:var(--sans);line-height:1.75;font-size:16px;
+  -webkit-text-size-adjust:100%}
+:root{--mono:"Cascadia Code","JetBrains Mono",Consolas,"Courier New",monospace;
+      --sans:"Segoe UI","Microsoft YaHei","PingFang SC",system-ui,sans-serif}
 a{color:var(--acc);text-decoration:none}
 a:hover{color:var(--acc2);text-decoration:underline}
-code{font-family:var(--mono);font-size:.9em;background:#1b2d23;padding:.12em .45em;border-radius:4px;color:#d9c98f}
-pre{font-family:var(--mono);background:var(--code-bg);border:1px solid var(--line);border-radius:10px;padding:18px 22px;overflow-x:auto;font-size:13.5px;line-height:1.65;color:#cfe3d5}
+code{font-family:var(--mono);font-size:.9em;background:var(--bg3);padding:.12em .45em;
+  border-radius:4px;color:var(--txt);border:1px solid var(--line)}
+pre{font-family:var(--mono);background:var(--code-bg);border:1px solid var(--line);
+  border-radius:10px;padding:18px 22px;overflow-x:auto;font-size:13.5px;line-height:1.65;
+  color:var(--txt);-webkit-overflow-scrolling:touch}
 pre .c{color:var(--faint)} pre .k{color:var(--acc)} pre .s{color:var(--grn2)}
 .wrap{max-width:1080px;margin:0 auto;padding:0 28px}
 section{padding:72px 0}
 h2{font-size:30px;font-weight:700;letter-spacing:.5px;margin-bottom:8px}
 h2 .num{color:var(--acc);font-family:var(--mono);font-size:22px;margin-right:10px}
-.sub{color:var(--dim);margin-bottom:40px;font-size:16px}
+.sub{color:var(--dim);margin-bottom:40px;font-size:16px;max-width:900px}
+h3{font-size:17px}
+
+/* 无障碍：键盘可见焦点 + 跳过导航 */
+:focus-visible{outline:2.5px solid var(--acc);outline-offset:3px;border-radius:4px}
+.skip{position:absolute;left:-9999px;top:0;background:var(--acc);color:var(--btn-ink);
+  padding:10px 18px;z-index:99;font-weight:600}
+.skip:focus{left:12px;top:12px}
+
 /* ---- nav ---- */
-nav{position:sticky;top:0;z-index:50;background:rgba(13,21,18,.88);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
-nav .wrap{display:flex;align-items:center;gap:26px;height:56px}
+nav{position:sticky;top:0;z-index:50;background:var(--nav-bg);
+  backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+nav .wrap{display:flex;align-items:center;gap:20px;height:56px}
 .logo{font-weight:800;font-size:19px;letter-spacing:2.5px;color:var(--txt)}
 .logo b{color:var(--acc)}
-.logo small{font-family:var(--mono);font-weight:400;font-size:11px;color:var(--faint);margin-left:8px;letter-spacing:0}
-nav .links{margin-left:auto;display:flex;gap:22px;font-size:14px}
+.logo small{font-family:var(--mono);font-weight:400;font-size:11px;color:var(--faint);
+  margin-left:8px;letter-spacing:0}
+nav .links{margin-left:auto;display:flex;gap:20px;font-size:14px}
 nav .links a{color:var(--dim)}
 nav .links a:hover{color:var(--acc2);text-decoration:none}
-@media(max-width:760px){nav .links{display:none}}
+#theme{border:1px solid var(--line2);background:transparent;color:var(--dim);
+  font-family:var(--mono);font-size:13px;line-height:1;padding:7px 11px;border-radius:8px;
+  cursor:pointer;flex-shrink:0}
+#theme:hover{color:var(--acc2);border-color:var(--acc)}
+@media(max-width:900px){nav .links{display:none}}
+@media(max-width:900px){nav .wrap{gap:10px}}
+
 /* ---- hero ---- */
-.hero{padding:96px 0 80px;background:
-  radial-gradient(1100px 480px at 72% -10%, rgba(95,184,122,.14), transparent 60%),
-  radial-gradient(800px 400px at 15% 20%, rgba(232,176,75,.10), transparent 60%),
+.hero{padding:92px 0 76px;background:
+  radial-gradient(1100px 480px at 72% -10%, var(--hero-a), transparent 60%),
+  radial-gradient(800px 400px at 15% 20%, var(--hero-b), transparent 60%),
   var(--bg)}
-.hero .en{font-family:var(--mono);font-size:13.5px;color:var(--grn2);letter-spacing:1.5px;margin-bottom:18px}
-.hero h1{font-size:56px;font-weight:800;letter-spacing:3px;line-height:1.15}
+.hero .en{font-family:var(--mono);font-size:13.5px;color:var(--grn2);
+  letter-spacing:1.5px;margin-bottom:16px}
+.hero h1{font-size:clamp(34px,6vw,56px);font-weight:800;letter-spacing:2px;line-height:1.15}
 .hero h1 .em{color:var(--acc)}
-.hero .tag{font-size:19px;color:var(--dim);max-width:760px;margin:22px 0 30px}
+/* 一句话价值主张：放在 h1 正下方，字号比正文大、比 h1 小，先于一切技术细节 */
+.hero .vp{font-size:clamp(19px,2.6vw,25px);font-weight:600;line-height:1.55;
+  max-width:820px;margin:26px 0 20px;color:var(--txt);
+  border-left:4px solid var(--acc);padding-left:20px}
+.hero .tag{font-size:16.5px;color:var(--dim);max-width:780px;margin:0 0 30px}
 .hero .tag b{color:var(--txt)}
-.badges{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:36px}
-.badge{font-family:var(--mono);font-size:12.5px;padding:5px 13px;border:1px solid var(--line2);border-radius:999px;color:var(--dim);background:rgba(19,32,25,.6)}
+.badges{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:34px}
+.badge{font-family:var(--mono);font-size:12.5px;padding:5px 13px;border:1px solid var(--line2);
+  border-radius:999px;color:var(--dim);background:var(--card)}
 .badge i{color:var(--grn);font-style:normal}
 .cta{display:flex;gap:14px;flex-wrap:wrap}
-.btn{padding:12px 26px;border-radius:8px;font-weight:600;font-size:15px;border:1px solid var(--acc);transition:.2s}
+.btn{padding:12px 26px;border-radius:8px;font-weight:600;font-size:15px;
+  border:1px solid var(--acc);transition:transform .2s,background .2s}
 .btn:hover{text-decoration:none;transform:translateY(-2px)}
-.btn.pri{background:var(--acc);color:#171108}
+.btn.pri{background:var(--acc);color:var(--btn-ink)}
 .btn.sec{background:transparent;color:var(--acc)}
-/* ---- doc cards ---- */
+
+/* ---- 文档卡 ---- */
 .cards2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
 @media(max-width:860px){.cards2{grid-template-columns:1fr}}
-a.doc{display:block;text-decoration:none;color:inherit;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:26px 24px;transition:.2s}
+a.doc{display:block;text-decoration:none;color:inherit;background:var(--card);
+  border:1px solid var(--line);border-radius:12px;padding:26px 24px;transition:.2s}
 a.doc:hover{border-color:var(--acc);transform:translateY(-3px)}
 .doc .kicker{font-size:12px;font-weight:600;letter-spacing:1px;color:var(--grn);margin-bottom:8px}
 .doc h3{font-size:18px;margin-bottom:10px;color:var(--txt)}
 .doc p{font-size:14.5px;color:var(--dim)}
 .doc .meta{margin-top:14px;font-size:12.5px;color:var(--faint);font-family:var(--mono)}
-/* ---- pipeline ---- */
-.pipe{background:var(--bg2);border:1px solid var(--line);border-radius:14px;padding:30px 26px;margin-top:14px}
-/* ---- cards ---- */
+
+/* ---- 图 ---- */
+.pipe,.figbox{background:var(--bg2);border:1px solid var(--line);border-radius:14px;
+  padding:26px;margin-top:14px}
+.figbox{background:var(--card)}
+.flow,.fig{width:100%;height:auto;display:block}
+/* 窄屏：SVG 等比缩到 1/3 时轴上的字只剩 4px 高，等于没有图。
+   改成横向滚动，保一个能读的最小宽度。 */
+.figscroll{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch}
+.figscroll-hint{display:none;color:var(--faint);font-size:12.5px;margin-top:10px;
+  font-family:var(--mono)}
+@media(max-width:760px){
+  .figscroll .fig,.figscroll .flow{min-width:680px}
+  .figscroll-hint{display:block}
+}
+.flow .fl-node{fill:var(--card);stroke:var(--line2)}
+.flow .fl-box{fill:var(--bg3);stroke:var(--line)}
+.flow .fl-accbox{fill:var(--bg3);stroke:var(--acc)}
+.flow .fl-zone{fill:none;stroke:var(--acc);stroke-width:1.5;stroke-dasharray:6 4}
+.flow .fl-ar{fill:var(--grn)}
+.flow .fl-ar2{fill:var(--acc)}
+.flow .fl-line{stroke:var(--grn);stroke-width:1.5}
+.flow .fl-line-acc{stroke:var(--acc);stroke-width:1.5}
+.flow text{font-family:var(--sans)}
+.flow .fl-t{fill:var(--txt);font-size:15px;font-weight:600}
+.flow .fl-body{fill:var(--dim);font-size:13px}
+.flow .fl-lbl{fill:var(--dim);font-family:var(--mono);font-size:12px}
+.flow .fl-f{fill:var(--faint);font-size:12.5px}
+.flow .fl-acc-t{fill:var(--acc);font-size:15px;font-weight:700;font-family:var(--mono)}
+.fig .fig-bg{fill:var(--card);stroke:var(--line)}
+.fig .fig-frame{fill:none;stroke:var(--line2)}
+.fig .fig-grid{stroke:var(--line);stroke-width:.7;opacity:.8}
+.fig .fig-tick{fill:var(--faint);font-family:var(--mono);font-size:12px}
+.fig .fig-axis{fill:var(--dim);font-size:12.5px;font-family:var(--sans)}
+.fig .fig-ebar{stroke:var(--dim);stroke-width:1.1;opacity:.7}
+.fig .fig-ebar-off{stroke:var(--faint);stroke-width:1;opacity:.4}
+.fig .dot-D1{fill:var(--grn)}
+.fig .dot-D2{fill:var(--acc)}
+.fig .fig-dot-off{fill:none;stroke:var(--faint);stroke-width:1.3}
+.fig .band-D1{fill:var(--grn);opacity:.08}
+.fig .band-D2{fill:var(--acc);opacity:.10}
+.fig .solid-D1{stroke:var(--grn);stroke-width:2.6}
+.fig .solid-D2{stroke:var(--acc);stroke-width:2.6}
+.fig .txt-D1{fill:var(--grn2);font-size:12.5px;font-weight:600;font-family:var(--sans)}
+.fig .txt-D2{fill:var(--acc);font-size:12.5px;font-weight:600;font-family:var(--sans)}
+.fig .fig-whole{stroke:var(--faint);stroke-width:1.8}
+.fig .fig-off-note{fill:var(--faint);font-size:12px;font-family:var(--sans)}
+/* 图例放在图**下方**的 HTML 里。画进坐标系内一定会压住某个角上的数据 ——
+   实测图例放右上角正好盖掉 D2 那 3 个高年龄窗口。 */
+.figlegend{list-style:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));
+  gap:12px 26px;margin:18px 0 0;padding:16px 18px;background:var(--bg2);
+  border:1px solid var(--line);border-radius:10px}
+.figlegend li{display:flex;align-items:flex-start;gap:10px;line-height:1.5}
+.figlegend .lg{display:flex;flex-direction:column;gap:2px}
+.figlegend b{color:var(--txt);font-family:var(--mono);font-size:13.5px;font-weight:600;
+  white-space:nowrap}
+.figlegend em{color:var(--faint);font-size:12.5px;font-style:normal}
+.figlegend li.wide{grid-column:1/-1;border-top:1px dashed var(--line);padding-top:11px;
+  color:var(--faint);font-size:12.5px;display:block;line-height:1.7}
+.figlegend li.wide b{color:var(--dim);font-size:12.5px}
+.figlegend i{display:inline-block;flex-shrink:0;margin-top:.42em}
+i.sw-whole{width:18px;height:0;border-top:2px dashed var(--faint)}
+i.sw-d1{width:18px;height:4px;border-radius:2px;background:var(--grn)}
+i.sw-d2{width:18px;height:4px;border-radius:2px;background:var(--acc)}
+i.sw-off{width:11px;height:11px;border-radius:50%;border:1.4px solid var(--faint)}
+figcaption{color:var(--dim);font-size:14px;margin-top:16px;line-height:1.7}
+figcaption b{color:var(--txt)}
+
+/* ---- 设计原则 ---- */
 .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
-@media(max-width:860px){.cards{grid-template-columns:1fr}}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:26px 24px;transition:.2s}
+@media(max-width:900px){.cards{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;
+  padding:24px;transition:.2s;display:flex;flex-direction:column}
 .card:hover{border-color:var(--line2);transform:translateY(-3px)}
-.card .no{font-family:var(--mono);color:var(--acc);font-size:13px;margin-bottom:8px;letter-spacing:1px}
-.card h3{font-size:17.5px;margin-bottom:12px;line-height:1.5}
-.card p{font-size:14.5px;color:var(--dim)}
-.card p b{color:var(--grn2)}
-/* ---- outputs ---- */
+.card .no{font-family:var(--mono);color:var(--acc);font-size:12.5px;margin-bottom:10px;
+  letter-spacing:1px}
+/* 原则的标题 = 一句加粗的判断句，可扫描 */
+.card h3{font-size:17px;line-height:1.5;margin-bottom:12px;color:var(--txt)}
+.card .cost{font-size:13.5px;color:var(--txt);background:var(--bg3);border-left:3px solid var(--acc);
+  border-radius:0 6px 6px 0;padding:9px 13px;margin-bottom:14px}
+.card .cost b{color:var(--acc2)}
+.card p.det{font-size:14px;color:var(--dim);margin-top:auto}
+
+/* ---- 输出 ---- */
 .outgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px}
 .out{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:20px}
 .out h4{font-family:var(--mono);font-size:15px;color:var(--acc);margin-bottom:8px}
 .out p{font-size:13.5px;color:var(--dim)}
-.notebox{border-left:3px solid var(--acc);background:rgba(232,176,75,.07);padding:16px 20px;border-radius:0 10px 10px 0;margin-top:28px;font-size:14.5px;color:var(--dim)}
-.notebox b{color:var(--acc2)}
-/* ---- limits ---- */
-.limit{display:flex;gap:16px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:20px 22px;margin-bottom:16px}
+.out.hi{border-color:var(--acc)}
+.notebox{border-left:3px solid var(--acc);background:var(--bg3);padding:16px 20px;
+  border-radius:0 10px 10px 0;margin-top:28px;font-size:14.5px;color:var(--dim)}
+.notebox b{color:var(--txt)}
+.files{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:34px}
+@media(max-width:860px){.files{grid-template-columns:1fr}}
+.filecard{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:22px}
+.filecard .fn{font-family:var(--mono);font-size:14px;color:var(--acc);margin-bottom:10px}
+.filecard .fn2{font-family:var(--mono);font-size:14px;color:var(--grn);margin-bottom:10px}
+.filecard p{font-size:14px;color:var(--dim);margin-bottom:8px}
+
+/* ---- 三个数（独立模块）---- */
+.gate{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-bottom:26px}
+@media(max-width:900px){.gate{grid-template-columns:1fr}}
+.gcard{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:22px 20px;
+  border-top:3px solid var(--line2)}
+.gcard.pass{border-top-color:var(--grn)}
+.gcard.warn{border-top-color:var(--acc)}
+.gtop{display:flex;align-items:center;gap:9px;margin-bottom:14px;flex-wrap:wrap}
+.gn{font-family:var(--mono);font-size:19px;color:var(--faint);line-height:1}
+.gname{font-size:15px;font-weight:600;color:var(--txt)}
+.gpill{margin-left:auto;font-family:var(--mono);font-size:11.5px;padding:3px 9px;
+  border-radius:999px;border:1px solid var(--line2);color:var(--dim)}
+.gpill.pass{border-color:var(--grn);color:var(--grn)}
+.gval{display:flex;align-items:baseline;gap:8px;margin-bottom:6px;flex-wrap:nowrap}
+.gval b{font-family:var(--mono);font-size:30px;font-weight:700;color:var(--acc);line-height:1.1;
+  white-space:nowrap}
+.gval span{font-size:13px;color:var(--faint)}
+.gmeas{font-size:13.5px;color:var(--dim)}
+.gmeas b{font-family:var(--mono);color:var(--txt);font-weight:600}
+.gcri{font-size:12.5px;color:var(--faint);font-family:var(--mono);margin-top:10px;
+  line-height:1.6;border-top:1px dashed var(--line);padding-top:10px}
+.gtable{width:100%;border-collapse:collapse;font-size:14px;margin-top:8px}
+.gtable th,.gtable td{border-bottom:1px solid var(--line);padding:11px 12px;text-align:left;
+  vertical-align:top}
+.gtable th{font-size:13px;color:var(--faint);font-weight:600;white-space:nowrap}
+.gtable td:first-child{white-space:nowrap;color:var(--txt)}
+.gtable code{font-size:12.5px}
+@media(max-width:700px){
+  .gtable,.gtable thead,.gtable tbody,.gtable th,.gtable td,.gtable tr{display:block}
+  .gtable thead{display:none}
+  .gtable tr{border:1px solid var(--line);border-radius:10px;margin-bottom:12px;padding:6px 4px}
+  .gtable td{border:none;padding:6px 12px}
+  .gtable td::before{content:attr(data-th) "　";color:var(--faint);font-size:12.5px}
+}
+
+/* ---- 限制 ---- */
+.limit{display:flex;gap:16px;background:var(--card);border:1px solid var(--line);
+  border-radius:10px;padding:20px 22px;margin-bottom:16px}
 .limit .ic{color:var(--acc);font-family:var(--mono);font-size:15px;flex-shrink:0;padding-top:2px}
 .limit h4{font-size:15.5px;margin-bottom:6px}
 .limit p{font-size:14px;color:var(--dim)}
+
 /* ---- facts ---- */
-.facts{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;border-top:1px solid var(--line);padding-top:30px;margin-top:10px}
+.facts{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;border-top:1px solid var(--line);
+  padding-top:30px;margin-top:10px}
 @media(max-width:720px){.facts{grid-template-columns:1fr}}
 .fact .n{font-size:26px;font-weight:700;color:var(--acc);font-family:var(--mono)}
 .fact .d{font-size:13.5px;color:var(--dim);margin-top:4px}
+
 /* ---- footer ---- */
 footer{border-top:1px solid var(--line);padding:40px 0 56px;color:var(--faint);font-size:13.5px}
 footer .row{display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px}
-/* reveal */
+
+/* 滚动淡入 */
 .rv{opacity:0;transform:translateY(18px);transition:opacity .6s ease,transform .6s ease}
 .rv.in{opacity:1;transform:none}
-.flow-lbl{font-family:var(--mono);font-size:12px;fill:var(--dim)}
+/* 尊重系统的"减少动态效果"偏好 */
+@media (prefers-reduced-motion: reduce){
+  html{scroll-behavior:auto}
+  .rv{opacity:1;transform:none;transition:none}
+  a.doc:hover,.card:hover,.btn:hover{transform:none}
+}
 </style>
+
+<script>
+/* 主题引导：必须在首屏绘制之前跑，否则会闪一下默认深色。
+   顺序是「手动选择 > 系统偏好 > 深色」。 */
+(function(){
+  var t = null;
+  try { t = localStorage.getItem("druid-theme"); } catch(e) {}
+  if (t !== "light" && t !== "dark") {
+    t = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches)
+        ? "light" : "dark";
+  }
+  document.documentElement.setAttribute("data-theme", t);
+})();
+</script>
 </head>
 <body>
 
-<nav><div class="wrap">
-  <div class="logo">DR<b>UI</b>D<small>v2.4.0</small></div>
+<a class="skip" href="#main">跳到正文</a>
+
+<nav aria-label="主导航"><div class="wrap">
+  <div class="logo">DR<b>UI</b>D<small>v2.5.0</small></div>
   <div class="links">
-    <a href="#docs">文档</a><a href="#why">为什么不同</a><a href="#principles">设计原则</a>
-    <a href="#output">输出</a><a href="#adept">ADEPT 接口</a>
-    <a href="#start">快速开始</a><a href="#limits">已知限制</a>
+    <a href="#docs">文档</a><a href="#why">它做什么</a><a href="#principles">设计原则</a>
+    <a href="#output">输出</a><a href="#gate">三个数</a><a href="#adept">ADEPT 接口</a>
+    <a href="#start">快速开始</a>
   </div>
+  <button id="theme" type="button" aria-label="切换深色 / 浅色主题">◐ 主题</button>
 </div></nav>
 
 <header class="hero"><div class="wrap">
   <div class="en">Depth-Resolved U–Pb Isotope Data reduction</div>
   <h1>DR<span class="em">UI</span>D<br>随坑深变化的锆石年龄</h1>
-  <p class="tag">把 LA-ICP-MS 导出的原始计数率（cps）时间序列，还原成<b>带不确定度的年龄</b>、
-    <b>标样质控表</b>与<b>逐深度的年龄剖面</b>——然后交给
-    <a href="https://github.com/chengkaide/ADEPT">ADEPT</a> 判定坪年龄与 MSWD。<b>DRUID 测出来，ADEPT 读出来。</b></p>
+
+  <!-- 一句话价值主张：先说"解决了什么"，再说"怎么做" -->
+  <p class="vp">把 LA-ICP-MS 的原始信号时间序列，直接转化为带不确定度的逐深度年龄剖面。</p>
+
+  <p class="tag">再展开一点：输入是 Qtegra / iCAP 导出的<b>计数率（cps）时间序列</b>，
+    输出是<b>带不确定度的年龄</b>、<b>标样质控表</b>以及<b>逐深度的年龄剖面</b>；
+    其中剖面表可直接交给 R 包 <a href="https://github.com/chengkaide/ADEPT">ADEPT</a> 判定坪年龄与 MSWD。
+    <b>DRUID 测出来，ADEPT 读出来。</b></p>
+
   <div class="badges">
     <span class="badge">依赖 <i>numpy / pandas / matplotlib / openpyxl / xlrd</i></span>
     <span class="badge"><i>无 scipy</i> — 统计内核自实现</span>
@@ -143,7 +372,9 @@ footer .row{display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px}
   </div>
 </div></header>
 
-<!-- ============ 文档 ============ -->
+<main id="main">
+
+<!-- ============ 01 文档 ============ -->
 <section id="docs"><div class="wrap">
   <h2><span class="num">01</span>从这里开始</h2>
   <p class="sub">三份文档都是单文件自包含（图表全内嵌），离线也能打开。</p>
@@ -169,110 +400,374 @@ footer .row{display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px}
         含一张真实测点的剖面图与实测数值对照。</p>
       <p class="meta">8 节 · 含接口约定</p>
     </a>
+    <a class="doc" href="https://github.com/chengkaide/DRUID">
+      <p class="kicker">要读代码 / 长期维护</p>
+      <h3>仓库与开发约定</h3>
+      <p>分层结构、改动守则、已知地雷与回归基线都在 <code>AGENTS.md</code> 里；
+        所有数字都能用仓库自带的示例批次复现。</p>
+      <p class="meta">README · AGENTS.md · MIT</p>
+    </a>
   </div>
 </div></section>
 
-<!-- ============ 为什么不同 ============ -->
+<!-- ============ 02 它做什么 ============ -->
 <section id="why" style="background:var(--bg2)"><div class="wrap">
   <h2><span class="num">02</span>名字取 Depth-Resolved，不是修辞</h2>
-  <p class="sub">与只做整段积分的常规流程最大的区别：每个测点被当成一条<b>随时间（即随坑深）变化的信号</b>来处理——分馏按深度校正、年龄域按深度划分。</p>
+  <p class="sub">与只做整段积分的常规流程最大的区别：每个测点被当成一条<b>随时间（即随坑深）变化的信号</b>来处理——
+    分馏按深度校正、年龄域按深度划分。</p>
+
   <div class="pipe rv">
-    <svg viewBox="0 0 1000 300" width="100%" role="img" aria-label="DRUID 流水线">
-      <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-        <path d="M0,0 L10,5 L0,10 z" fill="#5fb87a"/></marker></defs>
-      <rect x="20" y="60" width="150" height="60" rx="10" fill="#132019" stroke="#35573f"/>
-      <text x="95" y="85" text-anchor="middle" fill="#e6f0e9" font-size="15" font-weight="600">Qtegra CSV</text>
-      <text x="95" y="107" text-anchor="middle" class="flow-lbl">cps 时间序列</text>
-      <rect x="230" y="20" width="480" height="220" rx="14" fill="none" stroke="#e8b04b" stroke-width="1.5" stroke-dasharray="6 4"/>
-      <text x="250" y="44" fill="#e8b04b" font-size="15" font-weight="700" font-family="monospace">DRUID</text>
-      <g font-size="13" fill="#cfe3d5">
-        <rect x="250" y="58" width="210" height="44" rx="8" fill="#16241e" stroke="#26402f"/>
-        <text x="262" y="76" class="flow-lbl">①—②</text><text x="262" y="94" fill="#cfe3d5">剥蚀区间 · 扣空白</text>
-        <rect x="480" y="58" width="210" height="44" rx="8" fill="#16241e" stroke="#26402f"/>
-        <text x="492" y="76" class="flow-lbl">③—⑥</text><text x="492" y="94" fill="#cfe3d5">Hg/普通铅校正 · 夹逼归一化</text>
-        <rect x="250" y="120" width="210" height="44" rx="8" fill="#16241e" stroke="#26402f"/>
-        <text x="262" y="138" class="flow-lbl">⑤⑦</text><text x="262" y="156" fill="#cfe3d5">F(τ) 深度分馏校正 · σ<tspan font-size="9" dy="3">ext</tspan></text>
-        <rect x="480" y="120" width="210" height="44" rx="8" fill="#16241e" stroke="#26402f"/>
-        <text x="492" y="138" class="flow-lbl">⑧—⑩</text><text x="492" y="156" fill="#cfe3d5">年龄 + BIC 年龄域 + 标样 QC</text>
-        <text x="250" y="200" fill="#9db8a8" font-size="12.5">整段年龄 + 逐窗口年龄剖面（含 1σ，jackknife + 外部重现性）</text>
-      </g>
-      <line x1="170" y1="90" x2="226" y2="90" stroke="#5fb87a" stroke-width="1.5" marker-end="url(#ar)"/>
-      <rect x="770" y="60" width="140" height="60" rx="10" fill="#132019" stroke="#35573f"/>
-      <text x="840" y="85" text-anchor="middle" fill="#e6f0e9" font-size="15" font-weight="600">结果.xlsx</text>
-      <text x="840" y="107" text-anchor="middle" class="flow-lbl">六个工作表</text>
-      <line x1="710" y1="90" x2="766" y2="90" stroke="#5fb87a" stroke-width="1.5" marker-end="url(#ar)"/>
-      <line x1="840" y1="120" x2="840" y2="196" stroke="#e8b04b" stroke-width="1.5" marker-end="url(#ar)"/>
-      <text x="848" y="160" class="flow-lbl">「剖面窗口」表</text>
-      <rect x="770" y="200" width="140" height="60" rx="10" fill="#1b2d23" stroke="#e8b04b"/>
-      <text x="840" y="225" text-anchor="middle" fill="#e8b04b" font-size="15" font-weight="700" font-family="monospace">ADEPT</text>
-      <text x="840" y="247" text-anchor="middle" class="flow-lbl">坪年龄 + MSWD</text>
-      <text x="95" y="200" fill="#6d8a79" font-size="12.5">十步流水线，每一步的参数都写进结果表</text>
-      <text x="95" y="220" fill="#6d8a79" font-size="12.5">的「运行参数」页，半年后可回溯。</text>
+    <div class="figscroll">
+    <svg viewBox="0 0 1000 300" class="flow" role="img" aria-labelledby="figPipeT figPipeD">
+      <title id="figPipeT">DRUID 的十步流水线与它和 ADEPT 的分工</title>
+      <desc id="figPipeD">Qtegra 导出的 cps 时间序列，经过剥蚀区间识别与扣空白、汞与普通铅校正加夹逼归一化、F(τ) 深度分馏校正，最后得到年龄、BIC 年龄域与标样质控；结果落成一个 Excel 的六张表，其中「剖面窗口」表交给 ADEPT 判坪年龄与 MSWD。</desc>
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path class="fl-ar" d="M0,0 L10,5 L0,10 z"/></marker>
+        <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path class="fl-ar2" d="M0,0 L10,5 L0,10 z"/></marker>
+      </defs>
+
+      <rect class="fl-node" x="20" y="60" width="150" height="60" rx="10"/>
+      <text class="fl-t" x="95" y="85" text-anchor="middle">Qtegra CSV</text>
+      <text class="fl-lbl" x="95" y="107" text-anchor="middle">cps 时间序列</text>
+
+      <rect class="fl-zone" x="230" y="20" width="480" height="220" rx="14"/>
+      <text class="fl-acc-t" x="250" y="44">DRUID</text>
+
+      <rect class="fl-box" x="250" y="58" width="210" height="44" rx="8"/>
+      <text class="fl-lbl" x="262" y="76">①—②</text>
+      <text class="fl-body" x="262" y="94">剥蚀区间 · 扣空白</text>
+      <rect class="fl-box" x="480" y="58" width="210" height="44" rx="8"/>
+      <text class="fl-lbl" x="492" y="76">③—⑥</text>
+      <text class="fl-body" x="492" y="94">Hg/普通铅校正 · 夹逼归一化</text>
+      <rect class="fl-box" x="250" y="120" width="210" height="44" rx="8"/>
+      <text class="fl-lbl" x="262" y="138">⑤⑦</text>
+      <text class="fl-body" x="262" y="156">F(τ) 深度分馏校正 · σ<tspan font-size="9" dy="3">ext</tspan></text>
+      <rect class="fl-box" x="480" y="120" width="210" height="44" rx="8"/>
+      <text class="fl-lbl" x="492" y="138">⑧—⑩</text>
+      <text class="fl-body" x="492" y="156">年龄 + BIC 年龄域 + 标样 QC</text>
+      <text class="fl-body" x="250" y="200">整段年龄 + 逐窗口年龄剖面（含 1σ，jackknife + 外部重现性）</text>
+
+      <line class="fl-line" x1="170" y1="90" x2="226" y2="90" marker-end="url(#ar)"/>
+      <rect class="fl-node" x="770" y="60" width="140" height="60" rx="10"/>
+      <text class="fl-t" x="840" y="85" text-anchor="middle">结果.xlsx</text>
+      <text class="fl-lbl" x="840" y="107" text-anchor="middle">六个工作表</text>
+      <line class="fl-line" x1="710" y1="90" x2="766" y2="90" marker-end="url(#ar)"/>
+      <line class="fl-line-acc" x1="840" y1="120" x2="840" y2="196" marker-end="url(#ar2)"/>
+      <text class="fl-lbl" x="848" y="160">「剖面窗口」表</text>
+      <rect class="fl-accbox" x="770" y="200" width="140" height="60" rx="10"/>
+      <text class="fl-acc-t" x="840" y="225" text-anchor="middle">ADEPT</text>
+      <text class="fl-lbl" x="840" y="247" text-anchor="middle">坪年龄 + MSWD</text>
+
+      <text class="fl-f" x="20" y="264">十步流水线，每一步的参数都写进结果表</text>
+      <text class="fl-f" x="20" y="284">的「运行参数」页，半年后可回溯。</text>
     </svg>
+    </div>
+    <p class="figscroll-hint">图较宽，可左右滑动查看完整流程</p>
   </div>
+
+  <h3 style="margin:52px 0 6px">那么"分域"这一步到底买到了什么？</h3>
+  <p class="sub" style="margin-bottom:20px">下面这张图是示例批次里 S01 这个真实测点，
+    每个点是一个 4 秒滑窗，误差棒是该窗口的 1σ。</p>
+
+  <figure class="figbox rv" style="margin:0">
+    <!-- ==== 分域前后对比图：由 tools/gen_docs_split_figure.py 生成，请勿手改 ==== -->
+      <div class="figscroll">
+      <svg class="fig" viewBox="0 0 900 372" role="img" aria-labelledby="figSplitT figSplitD">
+      <title id="figSplitT">S01 测点：整段一个数，与分域后的阶梯</title>
+      <desc id="figSplitD">同一个剥蚀坑的 35 个滑窗年龄。灰虚线是整段加权平均出的 459.0 Ma —— 它不对应任何一个窗口；两条实线是两个年龄域的均值。中间 18 个窗口没通过域内相容性检验，被分域步骤剥掉了。</desc>
+      <clipPath id="cpSplit"><rect x="88" y="40" width="782" height="266"/></clipPath>
+      <rect x="0" y="0" width="900" height="372" rx="14" class="fig-bg"/>
+      <line class="fig-grid" x1="88" y1="287.9" x2="870" y2="287.9"/>
+      <text class="fig-tick" x="76" y="291.9" text-anchor="end">425</text>
+      <line class="fig-grid" x1="88" y1="232.7" x2="870" y2="232.7"/>
+      <text class="fig-tick" x="76" y="236.7" text-anchor="end">450</text>
+      <line class="fig-grid" x1="88" y1="177.4" x2="870" y2="177.4"/>
+      <text class="fig-tick" x="76" y="181.4" text-anchor="end">475</text>
+      <line class="fig-grid" x1="88" y1="122.2" x2="870" y2="122.2"/>
+      <text class="fig-tick" x="76" y="126.2" text-anchor="end">500</text>
+      <line class="fig-grid" x1="88" y1="67.0" x2="870" y2="67.0"/>
+      <text class="fig-tick" x="76" y="71.0" text-anchor="end">525</text>
+      <text class="fig-axis" transform="translate(24,173) rotate(-90)" text-anchor="middle">年龄 (Ma)</text>
+      <rect class="band-D1" x="127.1" y="40" width="286.1" height="266"/>
+      <rect class="band-D2" x="776.2" y="40" width="59.3" height="266"/>
+      <line class="fig-grid" x1="88.0" y1="40" x2="88.0" y2="306"/>
+      <text class="fig-tick" x="88.0" y="326" text-anchor="middle">0</text>
+      <line class="fig-grid" x1="244.4" y1="40" x2="244.4" y2="306"/>
+      <text class="fig-tick" x="244.4" y="326" text-anchor="middle">0.2</text>
+      <line class="fig-grid" x1="400.8" y1="40" x2="400.8" y2="306"/>
+      <text class="fig-tick" x="400.8" y="326" text-anchor="middle">0.4</text>
+      <line class="fig-grid" x1="557.2" y1="40" x2="557.2" y2="306"/>
+      <text class="fig-tick" x="557.2" y="326" text-anchor="middle">0.6</text>
+      <line class="fig-grid" x1="713.6" y1="40" x2="713.6" y2="306"/>
+      <text class="fig-tick" x="713.6" y="326" text-anchor="middle">0.8</text>
+      <line class="fig-grid" x1="870.0" y1="40" x2="870.0" y2="306"/>
+      <text class="fig-tick" x="870.0" y="326" text-anchor="middle">1</text>
+      <g clip-path="url(#cpSplit)">
+      <line class="fig-ebar" x1="128.4" y1="230.7" x2="128.4" y2="198.1"/>
+      <circle class="dot-D1" cx="128.4" cy="214.4" r="3.4"/>
+      <line class="fig-ebar" x1="148.5" y1="237.3" x2="148.5" y2="205.9"/>
+      <circle class="dot-D1" cx="148.5" cy="221.6" r="3.4"/>
+      <line class="fig-ebar" x1="168.7" y1="226.8" x2="168.7" y2="195.6"/>
+      <circle class="dot-D1" cx="168.7" cy="211.2" r="3.4"/>
+      <line class="fig-ebar" x1="188.9" y1="224.0" x2="188.9" y2="192.8"/>
+      <circle class="dot-D1" cx="188.9" cy="208.4" r="3.4"/>
+      <line class="fig-ebar" x1="209.1" y1="218.1" x2="209.1" y2="186.7"/>
+      <circle class="dot-D1" cx="209.1" cy="202.4" r="3.4"/>
+      <line class="fig-ebar" x1="229.3" y1="232.5" x2="229.3" y2="201.9"/>
+      <circle class="dot-D1" cx="229.3" cy="217.2" r="3.4"/>
+      <line class="fig-ebar" x1="249.4" y1="245.8" x2="249.4" y2="218.1"/>
+      <circle class="dot-D1" cx="249.4" cy="232.0" r="3.4"/>
+      <line class="fig-ebar" x1="269.6" y1="235.7" x2="269.6" y2="210.6"/>
+      <circle class="dot-D1" cx="269.6" cy="223.2" r="3.4"/>
+      <line class="fig-ebar" x1="289.8" y1="262.1" x2="289.8" y2="236.5"/>
+      <circle class="dot-D1" cx="289.8" cy="249.3" r="3.4"/>
+      <line class="fig-ebar" x1="310.0" y1="257.6" x2="310.0" y2="232.0"/>
+      <circle class="dot-D1" cx="310.0" cy="244.8" r="3.4"/>
+      <line class="fig-ebar" x1="330.2" y1="246.5" x2="330.2" y2="218.2"/>
+      <circle class="dot-D1" cx="330.2" cy="232.3" r="3.4"/>
+      <line class="fig-ebar" x1="350.3" y1="253.6" x2="350.3" y2="225.6"/>
+      <circle class="dot-D1" cx="350.3" cy="239.6" r="3.4"/>
+      <line class="fig-ebar" x1="370.5" y1="227.3" x2="370.5" y2="188.7"/>
+      <circle class="dot-D1" cx="370.5" cy="208.0" r="3.4"/>
+      <line class="fig-ebar" x1="390.7" y1="204.7" x2="390.7" y2="166.5"/>
+      <circle class="dot-D1" cx="390.7" cy="185.6" r="3.4"/>
+      <line class="fig-ebar-off" x1="410.9" y1="185.9" x2="410.9" y2="142.1"/>
+      <circle class="fig-dot-off" cx="410.9" cy="164.0" r="3.4"/>
+      <line class="fig-ebar-off" x1="431.1" y1="153.3" x2="431.1" y2="114.5"/>
+      <circle class="fig-dot-off" cx="431.1" cy="133.9" r="3.4"/>
+      <line class="fig-ebar-off" x1="451.2" y1="168.3" x2="451.2" y2="130.7"/>
+      <circle class="fig-dot-off" cx="451.2" cy="149.5" r="3.4"/>
+      <line class="fig-ebar-off" x1="471.4" y1="159.5" x2="471.4" y2="118.1"/>
+      <circle class="fig-dot-off" cx="471.4" cy="138.8" r="3.4"/>
+      <line class="fig-ebar-off" x1="491.6" y1="176.5" x2="491.6" y2="139.5"/>
+      <circle class="fig-dot-off" cx="491.6" cy="158.0" r="3.4"/>
+      <line class="fig-ebar-off" x1="511.8" y1="198.0" x2="511.8" y2="159.8"/>
+      <circle class="fig-dot-off" cx="511.8" cy="178.9" r="3.4"/>
+      <line class="fig-ebar-off" x1="532.0" y1="216.0" x2="532.0" y2="172.5"/>
+      <circle class="fig-dot-off" cx="532.0" cy="194.3" r="3.4"/>
+      <line class="fig-ebar-off" x1="552.1" y1="254.1" x2="552.1" y2="215.1"/>
+      <circle class="fig-dot-off" cx="552.1" cy="234.6" r="3.4"/>
+      <line class="fig-ebar-off" x1="572.3" y1="269.6" x2="572.3" y2="230.9"/>
+      <circle class="fig-dot-off" cx="572.3" cy="250.2" r="3.4"/>
+      <line class="fig-ebar-off" x1="592.5" y1="278.8" x2="592.5" y2="240.5"/>
+      <circle class="fig-dot-off" cx="592.5" cy="259.6" r="3.4"/>
+      <line class="fig-ebar-off" x1="612.7" y1="285.7" x2="612.7" y2="243.6"/>
+      <circle class="fig-dot-off" cx="612.7" cy="264.6" r="3.4"/>
+      <line class="fig-ebar-off" x1="632.9" y1="274.3" x2="632.9" y2="224.7"/>
+      <circle class="fig-dot-off" cx="632.9" cy="249.5" r="3.4"/>
+      <line class="fig-ebar-off" x1="653.0" y1="238.7" x2="653.0" y2="204.1"/>
+      <circle class="fig-dot-off" cx="653.0" cy="221.4" r="3.4"/>
+      <line class="fig-ebar-off" x1="673.2" y1="245.8" x2="673.2" y2="204.3"/>
+      <circle class="fig-dot-off" cx="673.2" cy="225.1" r="3.4"/>
+      <line class="fig-ebar-off" x1="693.4" y1="249.0" x2="693.4" y2="193.8"/>
+      <circle class="fig-dot-off" cx="693.4" cy="221.4" r="3.4"/>
+      <line class="fig-ebar-off" x1="713.6" y1="258.6" x2="713.6" y2="203.1"/>
+      <circle class="fig-dot-off" cx="713.6" cy="230.8" r="3.4"/>
+      <line class="fig-ebar-off" x1="733.8" y1="254.3" x2="733.8" y2="197.7"/>
+      <circle class="fig-dot-off" cx="733.8" cy="226.0" r="3.4"/>
+      <line class="fig-ebar-off" x1="753.9" y1="234.4" x2="753.9" y2="173.5"/>
+      <circle class="fig-dot-off" cx="753.9" cy="204.0" r="3.4"/>
+      <line class="fig-ebar" x1="774.1" y1="186.8" x2="774.1" y2="144.4"/>
+      <circle class="dot-D2" cx="774.1" cy="165.6" r="3.4"/>
+      <line class="fig-ebar" x1="794.3" y1="140.0" x2="794.3" y2="79.1"/>
+      <circle class="dot-D2" cx="794.3" cy="109.6" r="3.4"/>
+      <line class="fig-ebar" x1="814.5" y1="124.6" x2="814.5" y2="60.3"/>
+      <circle class="dot-D2" cx="814.5" cy="92.5" r="3.4"/>
+      </g>
+      <line class="fig-whole" x1="88" y1="212.8" x2="870" y2="212.8" stroke-dasharray="7 4"/>
+      <line class="solid-D1" x1="127.1" y1="224.2" x2="413.2" y2="224.2"/>
+      <text class="txt-D1" x="270.1" y="214.2" text-anchor="middle">D1 453.8</text>
+      <line class="solid-D2" x1="776.2" y1="134.9" x2="835.4" y2="134.9"/>
+      <text class="txt-D2" x="805.8" y="124.9" text-anchor="middle">D2 494.3</text>
+      <text class="fig-off-note" x="594.7" y="58" text-anchor="middle">18 个混合/过渡窗口（未进入任何年龄域）</text>
+      <rect class="fig-frame" x="88" y="40" width="782" height="266"/>
+      <text class="fig-axis" x="479" y="358" text-anchor="middle">剥蚀时间 τ（0 = 激光开，1 = 激光关）　→ 坑深方向</text>
+      </svg>
+      </div>
+      <p class="figscroll-hint">图较宽，可左右滑动查看完整的坐标轴</p>
+      <ul class="figlegend">
+      <li><i class="sw-whole"></i><span class="lg"><b>整段不分域 459.0 Ma</b><em>MSWD 3.97 > 判据上限 1.49 → 整段非常数</em></span></li>
+      <li><i class="sw-d1"></i><span class="lg"><b>D1 域均值 453.8 Ma</b><em>14 个窗口，MSWD 1.33</em></span></li>
+      <li><i class="sw-d2"></i><span class="lg"><b>D2 域均值 494.3 Ma</b><em>3 个窗口，MSWD 2.27</em></span></li>
+      <li><i class="sw-off"></i><span class="lg"><b>未进入任何年龄域：18 个窗口</b><em>域内相容性检验未通过，被分域步骤剥掉</em></span></li>
+      <li class="wide">逐点差额：整段 459.0 − 主域 453.8 = <b>+5.17 Ma（+1.14%）</b>，这就是「分域」这一步的贡献；整段积分是另一种算法，本例给 451.6 Ma。</li>
+      </ul>
+    <figcaption>同一个剥蚀坑的 <b>35 个滑窗</b>。灰虚线是整段加权平均的
+      <b>459.0 Ma</b> —— <b>它不对应任何一个窗口</b>；两个年龄域分别是
+      <b>453.8 Ma</b>（绿，14 个窗口）与 <b>494.3 Ma</b>（黄，3 个窗口）。
+      两者相差 <b>+5.17 Ma（+1.14%）</b>，这 1.14% 就是"分域这一步"的贡献。
+      中间 <b>18 个空心点</b>没通过域内相容性检验，被分域步骤剥掉了 ——
+      整段平均却把它们一起算了进去，所以 459.0 Ma 既不等于 453.8 也不等于 494.3。
+      <br>图为 `examples/EX2022A` 的真实输出，可自行复现。</figcaption>
+  </figure>
 </div></section>
 
-<!-- ============ 三条设计原则 ============ -->
+<!-- ============ 03 设计原则 ============ -->
 <section id="principles"><div class="wrap">
   <h2><span class="num">03</span>三条不轻易改动的设计</h2>
   <p class="sub">每条都来自实测数据的教训。违背它们不会报错，只会悄悄给出错误的年龄。</p>
   <div class="cards rv">
-    <div class="card"><div class="no">原则 1</div>
-      <h3>204Pb 普通铅校正必须做显著性检验</h3>
-      <p>204Pb 只有几~几十 cps，204Hg 本底可达数百 cps，做差后的残余往往就是噪声。
-        不显著却强行扣除，等于<b>把噪声当普通铅扣掉</b>——对计数本来就少的 207Pb 是灾难性的。</p></div>
-    <div class="card"><div class="no">原则 2</div>
-      <h3>207Pb/206Pb 不做 F(τ) 深度校正</h3>
-      <p>它是 Pb 同位素比值，几乎不随坑深分馏；而 4 s 窗口的 207Pb 仅约 130 个计数，
-        套 F(τ) 纯属<b>注入噪声</b>。它仍参与标样归一化（F76），只是不做逐深度校正。</p></div>
-    <div class="card"><div class="no">原则 3</div>
-      <h3>剥蚀区间用两级阈值，峰值比例为主</h3>
-      <p>只用「本底 + kσ」会把 washout 拖尾算进来（关激光后 10 s 仍有 100~200 cps），
-        把大量<b>零信号混入积分窗口</b>，系统性稀释比值。</p></div>
+    <div class="card">
+      <div class="no">原则 1</div>
+      <h3>204Pb 普通铅校正，必须先通过显著性检验才做</h3>
+      <div class="cost"><b>违反的代价：</b>把噪声当普通铅扣掉，对计数本来就极少的 207Pb 是灾难性的。</div>
+      <p class="det">204Pb 只有几~几十 cps，而 204Hg 本底可达数百 cps，两者做差后的残余往往就是噪声。
+        所以只在 2σ 显著时才扣，不显著就整批不扣。</p>
+    </div>
+    <div class="card">
+      <div class="no">原则 2</div>
+      <h3>207Pb/206Pb 不做 F(τ) 深度分馏校正</h3>
+      <div class="cost"><b>违反的代价：</b>纯属给一个本来就没有系统漂移的量注入噪声。</div>
+      <p class="det">它是 Pb 同位素比值，几乎不随坑深分馏（随坑深漂移的是 Pb/U 这类元素对比值）；
+        4 s 窗口的 207Pb 仅约 130 个计数。它仍参与标样归一化（F76），只是不做逐深度校正。</p>
+    </div>
+    <div class="card">
+      <div class="no">原则 3</div>
+      <h3>剥蚀区间用两级阈值，以峰值比例为主</h3>
+      <div class="cost"><b>违反的代价：</b>把 washout 拖尾算进积分窗口，系统性稀释全部比值。</div>
+      <p class="det">只用「本底 + kσ」会把 washout 拖尾算进来——关激光后 10 s 仍有 100~200 cps，
+        等于把大量零信号混进了积分窗口。</p>
+    </div>
   </div>
 </div></section>
 
-<!-- ============ 输出 ============ -->
+<!-- ============ 04 输出 ============ -->
 <section id="output" style="background:var(--bg2)"><div class="wrap">
-  <h2><span class="num">04</span>一个批次两份文件，六张表，先看三个数</h2>
-  <p class="sub">一份 Excel 给人看（六张表），一份 <code>.handoff.json</code> 给程序读；
+  <h2><span class="num">04</span>一个批次两份文件，六张表</h2>
+  <p class="sub">一份 Excel 给人看，一份 <code>.handoff.json</code> 给程序读；
     从逐点结果到标样质控再到逐深度剖面，全部参数可追溯。</p>
+
+  <div class="files rv">
+    <div class="filecard">
+      <div class="fn">EX2022A_U-Pb结果.xlsx</div>
+      <p>六张工作表，给人看：结果 / 标样QC / 深度剖面域 / 不分域年龄 / 剖面窗口 / 运行参数。</p>
+      <p style="color:var(--faint);font-size:13px">「剖面窗口」表列名已按 ADEPT 的输入约定取好，可直接喂入。</p>
+    </div>
+    <div class="filecard">
+      <div class="fn2">EX2022A_U-Pb结果.handoff.json</div>
+      <p>给程序读的<b>质控交接</b>：25 条带稳定 key 的检查项、四级结论、以及本次运行的完整参数。</p>
+      <p style="color:var(--faint);font-size:13px">下游按 <code>key</code> 分支，不要按标题文字匹配——文字会改，key 不会。</p>
+    </div>
+  </div>
+
   <div class="outgrid rv">
     <div class="out"><h4>结果</h4><p>每行一个测点：计数率、三种体系年龄与 1σ/2σ、协和度、深度结构</p></div>
     <div class="out"><h4>标样QC</h4><p>主标与监控标样的加权平均年龄、MSWD、与推荐值的偏差</p></div>
     <div class="out"><h4>深度剖面域</h4><p>BIC 检出的年龄域：τ、年龄与 MSWD（与 ADEPT 同口径）</p></div>
-    <div class="out"><h4>不分域年龄</h4><p>把整段剥蚀当作一个域的年龄基准。与分域主域、整段积分三种口径并排，差额正好是「分域这一步」的贡献</p></div>
+    <div class="out hi"><h4>不分域年龄</h4><p>把整段剥蚀当作一个域的年龄基准，与分域主域、整段积分三种口径并排——差额正好是「分域这一步」的贡献</p></div>
     <div class="out"><h4>剖面窗口</h4><p>逐窗口年龄剖面，列名按 ADEPT 输入约定对齐，可直接喂入</p></div>
     <div class="out"><h4>运行参数</h4><p>本次运行全部参数与被跳过的文件，半年后也能复现</p></div>
   </div>
-  <div class="notebox rv">
-    <b>三个数判断数据能不能用：</b>① 91500 偏差绝对值 &lt; 1%；② 监控标样 Ple 偏差绝对值 &lt; 3%；
-    ③ 协和度落在 90–110% 的样品占比 &gt; 85%。三项都过，数据可用。
-  </div>
+
   <div class="notebox rv">
     <b>「不分域年龄」表不是一份年龄清单。</b>它把整个剥蚀段当成唯一一个域来算，
     示例批次 48 个样品测点里只有 <b>5 个</b>与「整段只有一个年龄」相容；
     其余的整段值是几个年龄的加权混合，<b>只能用于横向对比，不能定年</b>。要定年请看「深度剖面域」表。
   </div>
+
+  <h3 style="margin:44px 0 10px">机读交接文件长什么样</h3>
+  <p class="sub" style="margin-bottom:16px">下面是示例批次真实输出的节选（键名与结论原文，未做改写）。</p>
+  <pre>{
+  <span class="s">"schema"</span>: <span class="s">"druid.handoff/1"</span>,
+  <span class="s">"verdict"</span>: { <span class="s">"level"</span>: <span class="s">"warn"</span>,
+               <span class="s">"counts"</span>: { <span class="k">"fail"</span>: 0, <span class="k">"warn"</span>: 4, <span class="k">"info"</span>: 4, <span class="k">"pass"</span>: 17 } },
+  <span class="s">"checks"</span>: [
+    { <span class="s">"key"</span>: <span class="s">"standards.primary_bias"</span>, <span class="s">"level"</span>: <span class="s">"pass"</span>,
+      <span class="s">"criterion"</span>: <span class="s">"|偏差| &lt; 1.0%（≥2.0% 判 fail）"</span> },
+    { <span class="s">"key"</span>: <span class="s">"samples.unresolved_structure"</span>, <span class="s">"level"</span>: <span class="s">"warn"</span>,
+      <span class="s">"criterion"</span>: <span class="s">"占比 ≤ 50.00%"</span> }
+  ],
+  <span class="s">"whole_spot"</span>: { <span class="s">"n_spots"</span>: 48, <span class="s">"n_compatible"</span>: 5,
+                  <span class="s">"mswd_median"</span>: 4.437620781414898 }
+}</pre>
+  <div class="notebox">
+    增字段、增检查项属于<b>兼容扩展，不升 schema</b>；只有<b>改 key 名、改语义、改类型</b>才升。
+    这样下游可以放心地"多读一个字段"，不用怕版本号一动就全线告警。
+  </div>
 </div></section>
 
-<!-- ============ ADEPT ============ -->
-<section id="adept"><div class="wrap">
-  <h2><span class="num">05</span>与 ADEPT 的接口契约</h2>
-  <p class="sub">「剖面窗口」表的列名就是 ADEPT 的输入约定。四个参数一个都不能省——ADEPT 刻意不猜数据是否已预处理。</p>
+<!-- ============ 05 三个数 ============ -->
+<section id="gate"><div class="wrap">
+  <h2><span class="num">05</span>先看这三个数</h2>
+  <p class="sub">跑完一个批次，别急着解释年龄——先用这三个数判断<b>这一批数据能不能用</b>。
+    它们是 DRUID 质控层里三条检查项的<b>判据原文</b>，不是我们另拍的。</p>
+
+  <div class="gate rv">
+    <div class="gcard pass">
+      <div class="gtop"><span class="gn">①</span><span class="gname">主标 91500 偏差</span>
+        <span class="gpill pass">本批通过</span></div>
+      <div class="gval"><b>&lt; 1%</b><span>绝对值上限</span></div>
+      <div class="gmeas">本批实测 <b>−0.25%</b>　1059.75 Ma（n=21，MSWD 0.51）</div>
+      <p class="gcri">standards.primary_bias　|criterion| = |偏差| &lt; 1.0%（≥2.0% 判 fail）</p>
+    </div>
+    <div class="gcard pass">
+      <div class="gtop"><span class="gn">②</span><span class="gname">监控标样 Ple 偏差</span>
+        <span class="gpill pass">本批通过</span></div>
+      <div class="gval"><b>&lt; 3%</b><span>绝对值上限</span></div>
+      <div class="gmeas">本批实测 <b>+1.81%</b>　343.24 Ma（n=14，MSWD 1.00）</div>
+      <p class="gcri">standards.secondary_bias　|criterion| = |偏差| &lt; 3.0%（≥5.0% 判 fail）</p>
+    </div>
+    <div class="gcard pass">
+      <div class="gtop"><span class="gn">③</span><span class="gname">协和度占比</span>
+        <span class="gpill pass">本批通过</span></div>
+      <div class="gval"><b>&gt; 85%</b><span>样品占比下限</span></div>
+      <div class="gmeas">本批实测 <b>93.75%</b>（45 / 48 个样品测点落在 90–110%）</div>
+      <p class="gcri">samples.concordance　|criterion| = ≥ 85%（&lt; 70% 判 fail）</p>
+    </div>
+  </div>
+
+  <div class="rv">
+    <p class="sub" style="margin-bottom:12px">超过阈值不等于"不能用"，而是<b>降级</b>——质控层分四级，
+      每条检查项自己带着判据，不需要你去查文档对照：</p>
+    <table class="gtable">
+      <thead><tr><th>检查</th><th>pass</th><th>warn</th><th>fail</th><th>为什么这个数</th></tr></thead>
+      <tbody>
+        <tr><td data-th="检查">91500 偏差</td><td data-th="pass">&lt; 1%</td>
+          <td data-th="warn">1–2%</td><td data-th="fail">≥ 2%</td>
+          <td data-th="为什么">它是归一化锚点，偏差会<b>整体平移全部样品年龄</b>，不是随机误差</td></tr>
+        <tr><td data-th="检查">Ple 偏差</td><td data-th="pass">&lt; 3%</td>
+          <td data-th="warn">3–5%</td><td data-th="fail">≥ 5%</td>
+          <td data-th="为什么">监控标样独立于归一化，检验的是"换一个基体还准不准"</td></tr>
+        <tr><td data-th="检查">协和度占比</td><td data-th="pass">≥ 85%</td>
+          <td data-th="warn">70–85%</td><td data-th="fail">&lt; 70%</td>
+          <td data-th="为什么">占比掉下来通常意味着普通铅校正或剥蚀区间出了问题</td></tr>
+      </tbody>
+    </table>
+    <div class="notebox">
+      <b>三个数都过，才往下看年龄。</b>任何一项不过，先解决仪器与标样的问题，
+      别急着解释地质含义——那是把分析误差读成了地质事件。
+      阈值集中在 <code>qc.QCThresholds</code> 一处，换仪器时改那里，改一处即全局生效。
+    </div>
+  </div>
+</div></section>
+
+<!-- ============ 06 ADEPT ============ -->
+<section id="adept" style="background:var(--bg2)"><div class="wrap">
+  <h2><span class="num">06</span>与 ADEPT 的接口契约</h2>
+
+  <!-- 先给一句人话总结，技术细节放后面 -->
+  <p class="vp" style="font-size:20px;margin:0 0 20px">DRUID 输出的「剖面窗口」表，
+    可以直接作为 ADEPT 的输入文件。</p>
+  <p class="sub">下表列名就按 ADEPT 的 Format 4 约定取好（<code>Analysis</code> /
+    <code>Time</code> / <code>Age68</code> / <code>Age68_1s</code>），不用转发、不用改列名。
+    调用时要显式给四个参数，一个都不能省——ADEPT 刻意不猜数据是否已预处理。</p>
+
   <pre><span class="c"># 「剖面窗口」表 = ADEPT Format 4：Analysis / Time / Age68 / Age68_1s（+诊断列）</span>
 adept(<span class="s">"EX2022A_U-Pb结果.xlsx"</span>,
       lower_ablation_time    = <span class="k">0</span>,      <span class="c"># DRUID 已切好自己的剥蚀窗口</span>
       upper_ablation_time    = <span class="k">1e6</span>,    <span class="c"># 上界放到最后一个窗口之后</span>
       smooth                 = <span class="s">"none"</span>, <span class="c"># 数据已做 F(τ)，再平滑会抹平真实域边界</span>
       calibration_uncertainty = <span class="k">0</span>)     <span class="c"># σ 已含外部重现性，再乘 3% 是重复计入</span></pre>
+
   <div class="notebox"><b>别忘了：<code>_1s</code> 是 1σ，不是 2σ。</b>拿错那列，MSWD 差 4 倍。
     契约的全部细节见<a href="druid-adept-dataflow.html">《两个工具的联系与数据流》</a>。</div>
 </div></section>
 
-<!-- ============ 快速开始 ============ -->
-<section id="start" style="background:var(--bg2)"><div class="wrap">
-  <h2><span class="num">06</span>快速开始</h2>
+<!-- ============ 07 快速开始 ============ -->
+<section id="start"><div class="wrap">
+  <h2><span class="num">07</span>快速开始</h2>
   <p class="sub">仓库里带着一个匿名示例批次（85 个测点），装好环境就能跑通。</p>
   <pre><span class="c"># 跑一个批次：Excel（六张表）+ 一份 .handoff.json（给程序读的质控交接）</span>
 python -m druid.cli.reduce_batch --dir examples/EX2022A --out 结果.xlsx
@@ -291,9 +786,9 @@ python tests/check_example_batch.py</pre>
   </div>
 </div></section>
 
-<!-- ============ 已知限制 ============ -->
-<section id="limits"><div class="wrap">
-  <h2><span class="num">07</span>已知限制（我们明说）</h2>
+<!-- ============ 08 已知限制 ============ -->
+<section id="limits" style="background:var(--bg2)"><div class="wrap">
+  <h2><span class="num">08</span>已知限制（我们明说）</h2>
   <p class="sub">结果是要写进文章的，边界越清楚越好用。</p>
   <div class="rv">
     <div class="limit"><div class="ic">[!]</div><div>
@@ -308,19 +803,25 @@ python tests/check_example_batch.py</pre>
       <h4>窗口重叠让 MSWD 系统性偏小</h4>
       <p>win=4 s / step=1 s 的滑窗引入相关性，年龄域判据因此偏宽松——方向是漏杀混合窗口，
         不会错杀；下游 ADEPT 的坪判定会补上这一层。</p></div></div>
+    <div class="limit"><div class="ic">[!]</div><div>
+      <h4>「不分域年龄」表里 43 / 48 个测点判「整段非常数」</h4>
+      <p>不是 bug，是真实结果：整段把倾斜剖面与混合域一起算了进来。这张表按设计只用于横向对比，
+        能定年的只有那 5 个整段常数的点。</p></div></div>
   </div>
 </div></section>
+
+</main>
 
 <footer><div class="wrap">
   <div class="row">
     <div><b style="color:var(--txt)">DRUID</b> · Depth-Resolved U–Pb Isotope Data reduction<br>
-      LA-ICP-MS 锆石 U-Pb 定年数据还原 · v2.4.0 · 许可证 MIT</div>
+      LA-ICP-MS 锆石 U-Pb 定年数据还原 · v2.5.0 · 许可证 MIT</div>
     <div style="text-align:right">
       代码与数据：<a href="https://github.com/chengkaide/DRUID">github.com/chengkaide/DRUID</a><br>
       配套工具：<a href="https://github.com/chengkaide/ADEPT">ADEPT</a>（R 包，坪年龄与 MSWD 判定）
     </div>
   </div>
-  <p style="margin-top:22px;max-width:760px">
+  <p style="margin-top:22px;max-width:820px">
     <b style="color:var(--dim)">关于这些文档的产生方式</b>：结构与行文由 AI 协助完成；
     其中的公式、常数、阈值与全部实测数值均对照源码与随仓库发布的示例批次逐条核对过，
     出处标在文中。任何一处可疑，请到仓库提 issue —— 这份文档值得被挑错的地方，
@@ -329,10 +830,30 @@ python tests/check_example_batch.py</pre>
 </div></footer>
 
 <script>
+/* 滚动淡入 */
 var io = new IntersectionObserver(function(es){
   es.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target);} });
 },{threshold:.12});
 document.querySelectorAll('.rv').forEach(function(el){ io.observe(el); });
+
+/* 主题切换：手动选择写进 localStorage，下次直接生效 */
+(function(){
+  var btn = document.getElementById('theme');
+  var meta = document.querySelector('meta[name="theme-color"]');
+  function label(){
+    var cur = document.documentElement.getAttribute('data-theme');
+    btn.textContent = cur === 'dark' ? '☀ 浅色' : '☾ 深色';
+    btn.setAttribute('aria-label', cur === 'dark' ? '切换到浅色主题' : '切换到深色主题');
+    if (meta) meta.setAttribute('content', cur === 'dark' ? '#0d1512' : '#fbfaf7');
+  }
+  btn.addEventListener('click', function(){
+    var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    try { localStorage.setItem('druid-theme', next); } catch(e) {}
+    label();
+  });
+  label();
+})();
 </script>
 </body>
 </html>

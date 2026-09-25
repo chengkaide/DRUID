@@ -431,6 +431,37 @@ druid/
 
 ## 八、变更记录
 
+### 2.5.0
+
+**文档站重构，并把「文档里的数字」纳入回归守护。不改任何数值输出**
+（`结果` / `标样QC` / `深度剖面域` / `不分域年龄` / `剖面窗口` 五张表
+与 2.4.0 逐位一致）。
+
+- 落地页按**信息优先级**重排：标题下新增一句话价值主张（"把 LA-ICP-MS 的
+  原始信号时间序列，直接转化为带不确定度的逐深度年龄剖面"）；三条设计原则
+  改成**判断句小标题 + 违反代价 + 展开解释**；新增独立一节「先看这三个数」
+  （91500 偏差 <1% / Ple 偏差 <3% / 协和度占比 >85%，各带实测值与判据原文）；
+  ADEPT 接口先给一句话总结再上技术细节。
+- 新增「**分域前后对比图**」——同一个剥蚀坑的整段年龄 vs 各年龄域，
+  由仓库内脚本 [`tools/gen_docs_split_figure.py`](tools/gen_docs_split_figure.py)
+  从 `run_batch()` 的公开表算出并就地注入 `docs/index.html`；图上 5 个数字由
+  [`tests/check_example_batch.py`](tests/check_example_batch.py) 抓回核对。
+  **图是算出来的，不是手抄的** —— 算法一改、图忘了重新生成，测试会当场红。
+- 四份页面补齐 SEO 与社交分享：完整 `meta`（`title` / `description` /
+  `keywords` / `canonical` / 双 `theme-color`）、Open Graph、Twitter 卡；
+  JSON-LD 结构化数据（落地页 `SoftwareApplication`，三份文档页
+  `TechArticle` + `BreadcrumbList`）；新增
+  [`docs/robots.txt`](docs/robots.txt) 与
+  [`docs/sitemap.xml`](docs/sitemap.xml)。
+- 三份文档页新增**深色模式**（`prefers-color-scheme`；只覆盖 `:root` 变量与
+  三处硬编码色，内联 SVG 一个字节没动 —— 深色下给图一块浅色面板）、
+  **窄屏响应式**（≤700px 排版收缩；宽表与宽图加横向滚动容器 + 滑动提示）、
+  **键盘可达**（跳过导航链接、`:focus-visible` 焦点环、
+  `prefers-reduced-motion` 关掉入场动画）。
+- 落地页改为**深色 / 浅色双主题**，导航栏一个按钮切换并写 `localStorage`。
+- 对比度实测（浅色主题）：正文 14.3:1、次要文字 6.6:1、最淡小字 5.1:1，
+  全部 ≥ WCAG AA（4.5:1）。
+
 ### 2.4.0
 
 新增「不分域年龄」表：把整个剥蚀段当作一个域算出**一个**年龄，全部样品测点
