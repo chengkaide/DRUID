@@ -4,28 +4,38 @@
 
     python tools/gen_docs_split_figure.py
 
+画的是示例批次 `examples/EX2022A` 里三个**真实测点**，对应三种剖面形态：
+
+    ① S43  均一      —— 整段与「只有一个年龄」相容。域表里根本没有它，不需要分域
+    ② S34  核边分明  —— 两段平台差 45.6 Ma，一个窗口都没被剥掉，一分为二正好
+    ③ S18  复杂变化  —— 三段平台 + 一片 8 个窗口的过渡带，只拆得动一部分
+
 为什么要有这个脚本
 ------------------
-那张图上的每一个点都是**真实数据**：示例批次 `examples/EX2022A` 里 S01 测点的
-35 个滑窗，坐标来自「剖面窗口」表，两条域均值来自「深度剖面域」表，灰虚线来自
-「不分域年龄」表。既然是算出来的，就必须能从仓库里的数据重新算一遍 ——
-否则它和手抄的数字没有区别，改了算法也没人知道它过期了。
+图上每一个点、每一条线都是**真实数据**：坐标取自「剖面窗口」表，域均值取自
+「深度剖面域」表，灰虚线取自「不分域年龄」表。既然是算出来的，就必须能从仓库里
+的数据重新算一遍 —— 否则它和手抄的数字没有区别，改了算法也没人知道它过期了。
 
-只用**公开输出**（run_batch 返回的四张表），不碰内部结构：
+只用**公开输出**（`run_batch` 返回的四张表），不碰内部结构：
 这样图上的点与文档里引用的数字保证来自同一次运行。
 
-`tests/check_example_batch.py` 会反过来核对这张图里的数字，
+`tests/check_example_batch.py` 会反过来核对这张图里的数字（按测点分块抓取），
 所以算法一变、图没跟上，检查当场就会红。
 
-踩过的两个坑（改这个脚本时别再犯）
-----------------------------------
+踩过的坑（改这个脚本时别再犯）
+------------------------------
 1. SVG 根元素必须带 `class="fig"`。页面里所有配色规则都写成 `.fig .xxx`，
    漏了这个 class 会得到一张"尺寸正确、内容完全空白"的图。
-   图例也必须放在坐标系**外面**（这里输出成 HTML 放在图下方）——
-   放图内右上角时，正好压住了 D2 那 3 个高年龄窗口。
-2. 页面上的配色全部走 CSS 变量，深浅两套主题共用同一份 SVG；
+2. 图例必须放在坐标系**外面**（这里输出成 HTML 放在图下方）——
+   画进坐标系里一定会压住某个角上的数据（实测盖掉过右上角的三个高年龄窗口）。
+3. `tau` 是窗口**起点**，而域表的 `tau` 写成"首个窗口起点-末个窗口起点"，
+   所以归域要按半个步长做容差；直接用区间过滤会漏掉每个域的最后一个窗口。
+4. 页面配色全部走 CSS 变量，深浅两套主题共用同一份 SVG；
    所以这里一个颜色都不写死，只给 class。
 """
+from __future__ import annotations
+
+import argparse
 import math
 import pathlib
 import sys
@@ -37,19 +47,34 @@ sys.path.insert(0, str(ROOT))
 
 from druid.workflow import BatchConfig, run_batch   # noqa: E402
 
-SPOT = "S01"
 BATCH = ROOT / "examples" / "EX2022A"
 HTML = ROOT / "docs" / "index.html"
 
-W, H = 900, 372
-ML, MR, MT, MB = 88, 30, 40, 66
-PW, PH = W - ML - MR, H - MT - MB
+#: 三个示例测点。`label` 会出现在图上与图例里，改它要同步改回归守护的正则。
+CASES = (
+    {"spot": "S43", "num": "①", "label": "均一", "head": "整段就是答案"},
+    {"spot": "S34", "num": "②", "label": "核边分明", "head": "一分为二正好"},
+    {"spot": "S18", "num": "③", "label": "复杂变化", "head": "只拆得动一部分"},
+)
+
+# ── 版面 ──────────────────────────────────────────────────────────────────
+W = 900
+ML, MR = 78, 28
+PW = W - ML - MR
+PH = 150          # 单个面板的绘图区高度
+HEAD = 26         # 面板标题行
+TAIL = 22         # 面板自己的 x 轴刻度行
+BLOCK = HEAD + PH + TAIL
+GAP = 26
+TOP = 14
+BOTTOM = 30
+H = TOP + len(CASES) * BLOCK + (len(CASES) - 1) * GAP + BOTTOM
 
 BEGIN = "<!-- ==== 分域前后对比图：由 tools/gen_docs_split_figure.py 生成，请勿手改 ==== -->"
-LEGACY = "<!-- 这张图由 build_tmp/_gen_split_svg.py"     # 迁移用，兼容旧标记
+LEGACY = "<!-- 这张图由 build_tmp/"          # 迁移用，兼容最早的标记
 
 
-def nice_ticks(lo, hi, want=5):
+def nice_ticks(lo: float, hi: float, want: int = 4) -> list[float]:
     """取"好看的整数"刻度，而不是把 y0~y1 等分 —— 等分会给出 417/441/465 这种数。"""
     span = hi - lo
     mag = 10 ** math.floor(math.log10(span / want))
@@ -65,13 +90,14 @@ def nice_ticks(lo, hi, want=5):
     return out
 
 
-def build() -> tuple[str, dict]:
-    res = run_batch(BatchConfig(data_dir=str(BATCH), plot=False))
-    win = res.windows[res.windows["Sample"] == SPOT].reset_index(drop=True)
-    dom = res.domains[res.domains["样品"] == SPOT].reset_index(drop=True)
-    ov = res.overall[res.overall["样品"] == SPOT].iloc[0]
-    if not len(win) or not len(dom):
-        raise SystemExit(f"示例批次里找不到 {SPOT} 的剖面窗口或年龄域，图没法画")
+def collect(res, spot: str) -> dict:
+    """把一个测点的窗口、域、整段口径全部抽出来，并核对窗口数守恒。"""
+    win = res.windows[res.windows["Sample"] == spot].reset_index(drop=True)
+    dom = res.domains[res.domains["样品"] == spot].sort_values("tau").reset_index(drop=True)
+    ov = res.overall[res.overall["样品"] == spot]
+    if not len(win) or not len(ov):
+        raise SystemExit(f"示例批次里找不到 {spot} 的剖面窗口或整段口径，图没法画")
+    ov = ov.iloc[0]
 
     tau = win["Tau"].to_numpy(float)
     age = win["Age68"].to_numpy(float)
@@ -79,145 +105,280 @@ def build() -> tuple[str, dict]:
     step = float(np.median(np.diff(tau)))
     tol = step * 0.55
 
-    # ── 真实数值：全部取自公开输出，一个都不手写 ──
-    whole_age = float(ov["年龄_Ma"])
-    whole_mswd = float(ov["MSWD"])
-    whole_crit = float(ov["相容上限"])
-    main_age = float(ov["主域年龄_Ma"])
-    d_age = float(ov["Δ年龄_Ma"])
-    d_pct = float(ov["Δ年龄_pct"])
-    bulk_age = float(ov["整段积分年龄_Ma"])
-    n_win = int(ov["n_win"])
-
-    # ── 逐窗口归域。tau 是窗口起点，域表的 tau 写成「首个窗口起点-末个窗口起点」，
-    #    所以按半个步长做容差（直接用区间过滤会漏掉最后一个窗口）。 ──
+    # 逐窗口归域：域表的 tau 上界是**末个窗口的起点**，所以要带半个步长的容差
     belong = np.full(tau.size, "", dtype=object)
     bands = []
     for _, r in dom.iterrows():
-        a, b = [float(x) for x in str(r["tau"]).split("-")]
+        a, b = (float(x) for x in str(r["tau"]).split("-"))
         belong[(tau >= a - tol) & (tau <= b + tol)] = str(r["域"])
-        bands.append((str(r["域"]), a, min(b + step, 1.0), float(r["年龄_Ma"]), int(r["n_win"])))
+        bands.append({"name": str(r["域"]), "a": a, "b": min(b + step, 1.0),
+                      "age": float(r["年龄_Ma"]), "n": int(r["n_win"]),
+                      "mswd": float(r["MSWD"]), "s2": float(r["s2_Ma"])})
+
+    n_win = int(ov["n_win"])
     n_off = int((belong == "").sum())
-    assert int((belong == "D1").sum()) == int(dom["n_win"].iloc[0]), "D1 窗口数对不上"
-    assert int((belong == "D2").sum()) == int(dom["n_win"].iloc[1]), "D2 窗口数对不上"
-    assert n_off == n_win - int(dom["n_win"].sum()), "未归域窗口数对不上"
+    for bd in bands:
+        got = int((belong == bd["name"]).sum())
+        assert got == bd["n"], f"{spot}/{bd['name']} 窗口数对不上：算得 {got}，表里 {bd['n']}"
+    if not bands:
+        # 均一测点：域表里没有行，全部窗口都属于同一个年龄，不存在"被剥掉"这回事
+        assert n_off == n_win, f"{spot} 域表里没有行，却有窗口落进了某个域"
+        belong[:] = "D1"
+        n_off = 0
+    else:
+        assert n_off == n_win - sum(bd["n"] for bd in bands), f"{spot} 未归域窗口数对不上"
 
-    lo, hi = float(np.nanmin(age - sig)), float(np.nanmax(age + sig))
-    pad = (hi - lo) * 0.09
-    y0, y1 = lo - pad, hi + pad
-    yticks, x0, x1 = nice_ticks(y0, y1), 0.0, 1.0
+    return {
+        "spot": spot, "tau": tau, "age": age, "sig": sig, "belong": belong,
+        "bands": bands, "n_win": n_win, "n_off": n_off,
+        "whole": float(ov["年龄_Ma"]), "whole_mswd": float(ov["MSWD"]),
+        "crit": float(ov["相容上限"]), "whole_s2": float(ov["s2_Ma"]),
+        "bulk": float(ov["整段积分年龄_Ma"]),
+        "main_age": float(ov["主域年龄_Ma"]), "main_dom": str(ov["主域"]),
+        "d_age": float(ov["Δ年龄_Ma"]), "d_pct": float(ov["Δ年龄_pct"]),
+        "verdict": str(ov["判定"]), "structure": str(ov["深度结构"]),
+    }
 
-    def X(t):
-        return ML + (t - x0) / (x1 - x0) * PW
 
-    def Y(a):
-        return MT + (y1 - a) / (y1 - y0) * PH
+def panel(i: int, case: dict, d: dict) -> list[str]:
+    """画第 i 个面板，返回 SVG 片段。"""
+    top = TOP + i * (BLOCK + GAP)
+    pt = top + HEAD                     # 绘图区上边
+    pb = pt + PH                        # 绘图区下边
 
-    P = []
-    P.append('<div class="figscroll">')
-    P.append(f'<svg class="fig" viewBox="0 0 {W} {H}" role="img" '
-             f'aria-labelledby="figSplitT figSplitD">')
-    P.append(f'<title id="figSplitT">{SPOT} 测点：整段一个数，与分域后的阶梯</title>')
-    P.append(f'<desc id="figSplitD">同一个剥蚀坑的 {n_win} 个滑窗年龄。灰虚线是整段加权平均出的 '
-             f'{whole_age:.1f} Ma —— 它不对应任何一个窗口；两条实线是两个年龄域的均值。'
-             f'中间 {n_off} 个窗口没通过域内相容性检验，被分域步骤剥掉了。</desc>')
-    P.append(f'<clipPath id="cpSplit"><rect x="{ML}" y="{MT}" width="{PW}" height="{PH}"/></clipPath>')
-    P.append(f'<rect x="0" y="0" width="{W}" height="{H}" rx="14" class="fig-bg"/>')
+    lo = float(np.nanmin(d["age"] - d["sig"]))
+    hi = float(np.nanmax(d["age"] + d["sig"]))
+    pad = (hi - lo) * 0.10
+    y0v, y1v = lo - pad, hi + pad
+    ticks = nice_ticks(y0v, y1v, want=4)
 
-    for a in yticks:
+    def X(t: float) -> float:
+        return ML + (t - 0.0) / 1.0 * PW
+
+    def Y(a: float) -> float:
+        return pt + (y1v - a) / (y1v - y0v) * PH
+
+    n_dom = len(d["bands"])
+    if n_dom == 0:
+        verdict = f"整段 MSWD {d['whole_mswd']:.2f} / 上限 {d['crit']:.2f} → 整段常数"
+    else:
+        verdict = f"整段 MSWD {d['whole_mswd']:.2f} / 上限 {d['crit']:.2f} → 整段非常数"
+
+    P: list[str] = [f'<g class="case" data-spot="{d["spot"]}">']
+    # 面板标题行：左边是形态，右边是整段判据
+    P.append(f'<text class="fig-cap" x="{ML}" y="{pt-11:.0f}">'
+             f'<tspan class="fig-num">{case["num"]}</tspan>  {d["spot"]} · {case["label"]}'
+             f'<tspan class="fig-cap-sub">　{case["head"]}</tspan></text>')
+    P.append(f'<text class="fig-sub" x="{ML+PW}" y="{pt-11:.0f}" text-anchor="end">{verdict}</text>')
+
+    for a in ticks:
         P.append(f'<line class="fig-grid" x1="{ML}" y1="{Y(a):.1f}" x2="{ML+PW}" y2="{Y(a):.1f}"/>')
-        P.append(f'<text class="fig-tick" x="{ML-12}" y="{Y(a)+4:.1f}" '
-                 f'text-anchor="end">{a:.0f}</text>')
-    P.append(f'<text class="fig-axis" transform="translate(24,{MT+PH/2:.0f}) rotate(-90)" '
-             f'text-anchor="middle">年龄 (Ma)</text>')
+        P.append(f'<text class="fig-tick" x="{ML-12}" y="{Y(a)+4:.1f}" text-anchor="end">{a:.0f}</text>')
+    if i == 1:                          # 纵轴标题只画一次，免得三行重复
+        P.append(f'<text class="fig-axis" transform="translate(22,{pt+PH/2:.0f}) rotate(-90)" '
+                 f'text-anchor="middle">年龄 (Ma)</text>')
 
-    for name, a, b, _, _ in bands:                       # 域底纹画在数据点下面
-        P.append(f'<rect class="band-{name}" x="{X(a):.1f}" y="{MT}" '
-                 f'width="{X(b)-X(a):.1f}" height="{PH}"/>')
+    for bd in d["bands"]:               # 域底纹画在数据点下面
+        P.append(f'<rect class="band-{bd["name"]}" x="{X(bd["a"]):.1f}" y="{pt}" '
+                 f'width="{X(bd["b"])-X(bd["a"]):.1f}" height="{PH}"/>')
+
     for t in (0.0, 0.2, 0.4, 0.6, 0.8, 1.0):
-        P.append(f'<line class="fig-grid" x1="{X(t):.1f}" y1="{MT}" x2="{X(t):.1f}" y2="{MT+PH}"/>')
-        P.append(f'<text class="fig-tick" x="{X(t):.1f}" y="{MT+PH+20}" '
-                 f'text-anchor="middle">{t:g}</text>')
+        P.append(f'<line class="fig-grid" x1="{X(t):.1f}" y1="{pt}" x2="{X(t):.1f}" y2="{pb}"/>')
+        P.append(f'<text class="fig-tick" x="{X(t):.1f}" y="{pb+17}" text-anchor="middle">'
+                 f'{t:g}</text>')
 
-    P.append('<g clip-path="url(#cpSplit)">')
-    for t, a, s, b in zip(tau, age, sig, belong):
+    P.append(f'<clipPath id="cpCase{i}"><rect x="{ML}" y="{pt}" width="{PW}" height="{PH}"/></clipPath>')
+    P.append(f'<g clip-path="url(#cpCase{i})">')
+    for t, a, s, b in zip(d["tau"], d["age"], d["sig"], d["belong"]):
         if not np.isfinite(a):
             continue
         x, y = X(t), Y(a)
+        cls = f'dot-{b}' if b else "fig-dot-off"
         P.append(f'<line class="{"fig-ebar" if b else "fig-ebar-off"}" '
                  f'x1="{x:.1f}" y1="{Y(a-s):.1f}" x2="{x:.1f}" y2="{Y(a+s):.1f}"/>')
-        P.append(f'<circle class="{"dot-"+b if b else "fig-dot-off"}" '
-                 f'cx="{x:.1f}" cy="{y:.1f}" r="3.4"/>')
+        P.append(f'<circle class="{cls}" cx="{x:.1f}" cy="{y:.1f}" r="3.4"/>')
     P.append('</g>')
 
-    P.append(f'<line class="fig-whole" x1="{ML}" y1="{Y(whole_age):.1f}" x2="{ML+PW}" '
-             f'y2="{Y(whole_age):.1f}" stroke-dasharray="7 4"/>')
-    for name, a, b, mage, _ in bands:
-        ym = Y(mage)
-        P.append(f'<line class="solid-{name}" x1="{X(a):.1f}" y1="{ym:.1f}" '
-                 f'x2="{X(b):.1f}" y2="{ym:.1f}"/>')
-        P.append(f'<text class="txt-{name}" x="{X((a+b)/2):.1f}" y="{ym-10:.1f}" '
-                 f'text-anchor="middle">{name} {mage:.1f}</text>')
-    if n_off:
-        mid = X((bands[0][2] + bands[1][1]) / 2)
-        P.append(f'<text class="fig-off-note" x="{mid:.1f}" y="{MT+18}" text-anchor="middle">'
-                 f'{n_off} 个混合/过渡窗口（未进入任何年龄域）</text>')
+    # 灰虚线＝整段不分域口径，三个面板都画：①里它就是答案，②③里它不是任何一个域
+    P.append(f'<line class="fig-whole" x1="{ML}" y1="{Y(d["whole"]):.1f}" x2="{ML+PW}" '
+             f'y2="{Y(d["whole"]):.1f}" stroke-dasharray="7 4"/>')
+    for bd in d["bands"]:
+        ym = Y(bd["age"])
+        P.append(f'<line class="solid-{bd["name"]}" x1="{X(bd["a"]):.1f}" y1="{ym:.1f}" '
+                 f'x2="{X(bd["b"]):.1f}" y2="{ym:.1f}"/>')
+        P.append(f'<text class="txt-{bd["name"]}" x="{X((bd["a"]+bd["b"])/2):.1f}" y="{ym-9:.1f}" '
+                 f'text-anchor="middle">{bd["name"]} {bd["age"]:.1f}</text>')
+    if d["n_off"]:
+        edges = [bd for bd in d["bands"]]
+        mid = X((edges[0]["b"] + edges[-1]["a"]) / 2) if n_dom > 1 else X(0.5)
+        P.append(f'<text class="fig-off-note" x="{mid:.1f}" y="{pt+17}" text-anchor="middle">'
+                 f'{d["n_off"]} 个混合/过渡窗口（未进入任何年龄域）</text>')
+    P.append(f'<rect class="fig-frame" x="{ML}" y="{pt}" width="{PW}" height="{PH}"/>')
+    if i == len(CASES) - 1:
+        P.append(f'<text class="fig-axis" x="{ML+PW/2:.0f}" y="{H-10}" text-anchor="middle">'
+                 f'剥蚀时间 τ（0 = 激光开，1 = 激光关）　→ 坑深方向</text>')
+    P.append('</g>')
+    return P
 
-    P.append(f'<rect class="fig-frame" x="{ML}" y="{MT}" width="{PW}" height="{PH}"/>')
-    P.append(f'<text class="fig-axis" x="{ML+PW/2:.0f}" y="{H-14}" text-anchor="middle">'
-             f'剥蚀时间 τ（0 = 激光开，1 = 激光关）　→ 坑深方向</text>')
+
+def build() -> tuple[str, list[dict]]:
+    res = run_batch(BatchConfig(data_dir=str(BATCH), plot=False))
+    data = []
+    for case in CASES:
+        d = collect(res, case["spot"])
+        d["num"], d["label"], d["head"] = case["num"], case["label"], case["head"]
+        data.append(d)
+
+    P: list[str] = ['<div class="figscroll">']
+    P.append(f'<svg class="fig" viewBox="0 0 {W} {H}" role="img" '
+             f'aria-labelledby="figSplitT figSplitD">')
+    P.append('<title id="figSplitT">同一个示例批次里的三种剖面形态：均一 / 核边分明 / 复杂变化</title>')
+    P.append('<desc id="figSplitD">三个真实测点，每个点是一个 4 秒滑窗，误差棒是 1σ。'
+             '灰虚线是整段不分域的加权平均：在 ① 里它就是答案，在 ②③ 里它不对应任何一个窗口。'
+             '彩色实线是两个或三个年龄域的均值，空心圈是没通过域内相容性检验、'
+             '不进入任何年龄域的窗口。</desc>')
+    P.append(f'<rect x="0" y="0" width="{W}" height="{H}" rx="14" class="fig-bg"/>')
+
+    rows = []
+    for i, (case, d) in enumerate(zip(CASES, data)):
+        P.extend(panel(i, case, d))
+        rows.append({"case": case, **{k: d[k] for k in
+                    ("spot", "n_win", "n_off", "bands", "whole", "whole_mswd", "crit",
+                     "bulk", "main_age", "main_dom", "d_age", "d_pct", "verdict",
+                     "structure", "whole_s2")}})
     P.append('</svg>')
     P.append('</div>')
     P.append('<p class="figscroll-hint">图较宽，可左右滑动查看完整的坐标轴</p>')
 
-    # 图例放图下方（HTML）：画进坐标系里一定会压住某个角上的数据
+    # ── 图例（HTML）：每行一个测点，做成回归守护能按行抓取的形状 ──
     P.append('<ul class="figlegend">')
-    P.append(f'<li><i class="sw-whole"></i><span class="lg"><b>整段不分域 {whole_age:.1f} Ma</b>'
-             f'<em>MSWD {whole_mswd:.2f} > 判据上限 {whole_crit:.2f} → 整段非常数</em></span></li>')
-    P.append(f'<li><i class="sw-d1"></i><span class="lg"><b>D1 域均值 {main_age:.1f} Ma</b>'
-             f'<em>{int(dom["n_win"].iloc[0])} 个窗口，MSWD {float(dom["MSWD"].iloc[0]):.2f}'
-             f'</em></span></li>')
-    P.append(f'<li><i class="sw-d2"></i><span class="lg"><b>D2 域均值 {bands[1][3]:.1f} Ma</b>'
-             f'<em>{int(dom["n_win"].iloc[1])} 个窗口，MSWD {float(dom["MSWD"].iloc[1]):.2f}'
-             f'</em></span></li>')
-    P.append(f'<li><i class="sw-off"></i><span class="lg"><b>未进入任何年龄域：{n_off} 个窗口</b>'
-             f'<em>域内相容性检验未通过，被分域步骤剥掉</em></span></li>')
-    P.append(f'<li class="wide">逐点差额：整段 {whole_age:.1f} − 主域 {main_age:.1f} = '
-             f'<b>{d_age:+.2f} Ma（{d_pct:+.2f}%）</b>，这就是「分域」这一步的贡献；'
-             f'整段积分是另一种算法，本例给 {bulk_age:.1f} Ma。</li>')
+    P.append('<li class="key"><b>怎么读</b>'
+             '<span class="k"><i class="sw-whole"></i>整段不分域：把全部窗口当成唯一一个域</span>'
+             '<span class="k"><i class="sw-d1"></i><i class="sw-d2"></i><i class="sw-d3"></i>'
+             '各年龄域均值（D1 / D2 / D3）</span>'
+             '<span class="k"><i class="sw-off"></i>没通过域内相容性检验、不进入任何域</span>'
+             '<span class="k">Δ 一律是「整段 − 主域」</span></li>')
+    for case, d in zip(CASES, data):
+        tag = f'{d["spot"]} {case["label"]}'
+        if not d["bands"]:
+            em = (f'共 {d["n_win"]} 个滑窗。整段 MSWD {d["whole_mswd"]:.2f} &lt; 判据上限 '
+                  f'{d["crit"]:.2f} → <b>整段就是常数</b>。域表里根本没有这个测点：'
+                  f'没有域可拆，灰虚线就是答案。整段积分（另一种算法）给 {d["bulk"]:.1f} Ma，'
+                  f'与窗口加权差 {abs(d["bulk"]-d["whole"])/d["whole"]*100:.2f}%。')
+        else:
+            segs = " · ".join(f'{b["name"]} {b["age"]:.1f} Ma（{b["n"]} 窗，MSWD {b["mswd"]:.2f}）'
+                              for b in d["bands"])
+            tail = (f'{d["n_off"]} 个窗口没通过域内相容性检验，被分域步骤剥掉。'
+                    if d["n_off"] else '没有一个窗口被剥掉。')
+            em = (f'共 {d["n_win"]} 个滑窗。{len(d["bands"])} 个域：{segs}。{tail}'
+                  f'整段 MSWD {d["whole_mswd"]:.2f} &gt; 上限 {d["crit"]:.2f} → 整段非常数，'
+                  f'整段 {d["whole"]:.1f} − 主域 {d["main_age"]:.1f} = '
+                  f'<b>{d["d_age"]:+.2f} Ma（{d["d_pct"]:+.2f}%）</b>。')
+        P.append(f'<li class="case"><b>{case["num"]} {tag} · 整段 {d["whole"]:.1f} Ma</b>'
+                 f'<em>{em}</em></li>')
     P.append('</ul>')
-
-    nums = {"spot": SPOT, "n_win": n_win, "n_off": n_off,
-            "whole_age": round(whole_age, 1), "main_age": round(main_age, 1),
-            "d2_age": round(bands[1][3], 1)}
-    return "\n".join(P), nums
+    P.append(figcaption(data))
+    return "\n".join(P), rows
 
 
-def inject(frag: str) -> None:
-    html = HTML.read_text(encoding="utf-8")
+def figcaption(data: list[dict]) -> str:
+    """图注。数字同样全部现算 —— 它和图上那三张图是同一批数。"""
+    c = []
+    c.append('<figcaption>三个测点都取自示例批次 <code>examples/EX2022A</code>，'
+             '上面的数字可以自行复现。')
+    for d in data:
+        if not d["bands"]:
+            c.append(f'<b>{d["spot"]}</b> 整段 MSWD {d["whole_mswd"]:.2f} 低于判据上限 '
+                     f'{d["crit"]:.2f}，<b>整段就是常数</b>：域表里根本没有它，'
+                     f'所以这里没有彩色实线，灰虚线就是答案。'
+                     f'整段积分（另一种算法）给 {d["bulk"]:.1f} Ma，'
+                     f'与窗口加权差 {abs(d["bulk"]-d["whole"])/d["whole"]*100:.2f}%。')
+        else:
+            ages = " / ".join(f'{b["age"]:.1f}' for b in d["bands"])
+            aa = d["bands"]
+            spread = max(b["age"] for b in aa) - min(b["age"] for b in aa)
+            up = all(aa[i]["age"] < aa[i+1]["age"] for i in range(len(aa)-1))
+            dn = all(aa[i]["age"] > aa[i+1]["age"] for i in range(len(aa)-1))
+            if up:
+                trend = (f'沿坑深年龄<b>递增</b>：浅部 {aa[0]["age"]:.1f} → '
+                         f'深部 {aa[-1]["age"]:.1f} Ma，是"核老边新"的常序')
+            elif dn:
+                trend = (f'沿坑深年龄<b>递减</b>：浅部 {aa[0]["age"]:.1f} → '
+                         f'深部 {aa[-1]["age"]:.1f} Ma')
+            else:
+                trend = ('沿坑深年龄<b>不单调</b>（' +
+                         " → ".join(f'{b["age"]:.1f}' for b in aa) +
+                         ' Ma）—— 不能用一个"核"一个"边"解释')
+            if d["n_off"]:
+                tail = (f'中间 <b>{d["n_off"]} 个空心点</b>没通过域内相容性检验，'
+                        f'被分域步骤剥掉了')
+            else:
+                tail = '<b>一个窗口都没被剥掉</b>'
+            extra = ""
+            if len(aa) >= 3 and abs(aa[-1]["age"] - aa[0]["age"]) < 5:
+                extra = (f'　注意 {aa[0]["name"]} 与 {aa[-1]["name"]} 的年龄几乎相同'
+                         f'（{aa[0]["age"]:.1f} 与 {aa[-1]["age"]:.1f} Ma）却是两个域 ——'
+                         f'「域」是<b>深度上连续的一段</b>，不是"年龄相同的所有窗口"。')
+            c.append(f'<b>{d["spot"]}</b> 分为 <b>{len(aa)} 段</b>平台 {ages} Ma，'
+                     f'域均值最大相差 <b>{spread:.1f} Ma（{spread/aa[0]["age"]*100:.1f}%）</b>；'
+                     f'{trend}，{tail}。整段不分域给 {d["whole"]:.1f} Ma，'
+                     f'它<b>不等于任何一段</b>。{extra}')
+    flat = "、".join(d["num"] for d in data if not d["bands"])
+    spl = "、".join(d["num"] for d in data if d["bands"])
+    if flat and spl:
+        c.append(f'{flat} 的灰虚线<b>就是年龄</b>（整段只有一个域，分域无事可做）；'
+                 f'{spl} 的灰虚线只是在回答"不做分域会得到什么"，<b>不是任何一个年龄</b>。')
+    c.append('</figcaption>')
+    return "\n      ".join(c)
+
+
+def inject(frag: str, html_path: pathlib.Path) -> None:
+    """把生成的片段就地替换进页面。
+
+    区间从 BEGIN 标记开始，到 `</ul>`（图例）为止；如果紧跟其后还有一个
+    `<figcaption>`，一并吃掉 —— 图注里的数字也是现算的，留着旧的会自相矛盾。
+    """
+    html = html_path.read_text(encoding="utf-8")
     i = html.find(BEGIN)
     if i == -1:
         i = html.find(LEGACY)
         if i == -1:
-            raise SystemExit(f"{HTML} 里找不到图的标记（既不是新版也不是旧版）")
+            raise SystemExit(f"{html_path} 里找不到图的标记（既不是新版也不是旧版）")
     tail = html[i:]
     k = tail.find('<ul class="figlegend">')
     if k == -1:
         j = i + tail.index("</svg>") + len("</svg>")          # 更早的版本没有图例
     else:
         j = i + tail.index("</ul>", k) + len("</ul>")
+        ahead = html[j:]
+        s = len(ahead) - len(ahead.lstrip())                  # 跳过空白后紧跟图注？
+        if ahead[s:].startswith("<figcaption>"):
+            j += s + ahead[s:].index("</figcaption>") + len("</figcaption>")
     assert html[i:j].count("<svg") == 1, "待替换区间里有多个 svg"
+    assert html[i:j].count("<figcaption") <= 1, "待替换区间里有多个图注"
     body = BEGIN + "\n" + "\n".join("      " + ln for ln in frag.splitlines())
-    HTML.write_text(html[:i] + body + html[j:], encoding="utf-8")
+    html_path.write_text(html[:i] + body + html[j:], encoding="utf-8")
 
 
 def main() -> int:
-    frag, nums = build()
-    inject(frag)
-    print(f"示例批次 {BATCH.name} / {SPOT}：窗口 {nums['n_win']} 个，"
-          f"其中 {nums['n_off']} 个未进入年龄域")
-    print(f"  整段 {nums['whole_age']} Ma · D1 {nums['main_age']} Ma · D2 {nums['d2_age']} Ma")
-    print(f"已写入 {HTML.relative_to(ROOT)}（{len(frag)} 字节的图 + 图例）")
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--html", default=str(HTML), help="注入目标（草稿时可以指向临时副本）")
+    ap.add_argument("--stdout", action="store_true", help="只把片段打到标准输出，不写文件")
+    args = ap.parse_args()
+
+    frag, rows = build()
+    if args.stdout:
+        print(frag)
+        return 0
+    inject(frag, pathlib.Path(args.html))
+
+    print(f"示例批次 {BATCH.name}，三个剖面形态：")
+    for r in rows:
+        doms = " | ".join(f'{b["name"]} {b["age"]:.1f}(n={b["n"]}, MSWD {b["mswd"]:.2f})'
+                          for b in r["bands"]) or "（域表里没有这个测点）"
+        print(f'  {r["spot"]} {r["case"]["label"]:<6s} 窗口 {r["n_win"]:>2d} 未归域 {r["n_off"]:>2d} | '
+              f'整段 {r["whole"]:.4f} MSWD {r["whole_mswd"]:.2f}/{r["crit"]:.2f} | {doms}')
+    print(f"已写入 {args.html}（{len(frag)} 字节的图 + 图例）")
     print("别忘了跑 `python tests/check_example_batch.py`：它会核对这张图里的数字。")
     return 0
 

@@ -60,6 +60,9 @@
   --line:#26402f; --line2:#35573f;
   --txt:#e6f0e9; --dim:#9db8a8; --faint:#6d8a79;
   --acc:#e8b04b; --acc2:#f2c86d; --grn:#5fb87a; --grn2:#8fd4a4;
+  /* 第三个年龄域的配色：绿、黄之外再来一种，保证三联图里三个域分得开。
+     深色主题用浅紫（在 #132019 上对比 8.6:1），浅色主题换成深紫（在 #fff 上 7.4:1）。 */
+  --vio:#a394f0;
   --code-bg:#0a120e; --btn-ink:#171108; --nav-bg:rgba(13,21,18,.88);
   --hero-a:rgba(95,184,122,.14); --hero-b:rgba(232,176,75,.10);
 }
@@ -71,6 +74,7 @@
   --line:#dedbd1; --line2:#c4c0b3;
   --txt:#22282a; --dim:#525b59; --faint:#646e6b;
   --acc:#8a5208; --acc2:#a6630a; --grn:#1c6b4a; --grn2:#155c3e;
+  --vio:#4b3fae;
   --code-bg:#f4f2ec; --btn-ink:#ffffff; --nav-bg:rgba(251,250,247,.88);
   --hero-a:rgba(28,107,74,.10); --hero-b:rgba(138,82,8,.08);
 }
@@ -200,25 +204,42 @@ a.doc:hover{border-color:var(--acc);transform:translateY(-3px)}
 .fig .solid-D2{stroke:var(--acc);stroke-width:2.6}
 .fig .txt-D1{fill:var(--grn2);font-size:12.5px;font-weight:600;font-family:var(--sans)}
 .fig .txt-D2{fill:var(--acc);font-size:12.5px;font-weight:600;font-family:var(--sans)}
+.fig .dot-D3{fill:var(--vio)}
+.fig .band-D3{fill:var(--vio);opacity:.10}
+.fig .solid-D3{stroke:var(--vio);stroke-width:2.6}
+.fig .txt-D3{fill:var(--vio);font-size:12.5px;font-weight:600;font-family:var(--sans)}
+/* 三联图的面板标题：左边是形态，右边是整段判据，共用一行 */
+.fig .fig-cap{fill:var(--txt);font-size:13.5px;font-weight:600;font-family:var(--sans)}
+.fig .fig-num{fill:var(--acc);font-family:var(--mono);font-weight:700}
+.fig .fig-cap-sub{fill:var(--dim);font-weight:400}
+.fig .fig-sub{fill:var(--faint);font-size:12px;font-family:var(--mono)}
 .fig .fig-whole{stroke:var(--faint);stroke-width:1.8}
 .fig .fig-off-note{fill:var(--faint);font-size:12px;font-family:var(--sans)}
+/* 域标签与过渡带注记会被数据点穿过去。描一圈面板底色的边（paint-order 让描边在字形下），
+   等于给文字压出一条可读的缝 —— 比挪位置稳，因为点在哪是数据决定的。 */
+.fig .txt-D1,.fig .txt-D2,.fig .txt-D3,.fig .fig-off-note{
+  stroke:var(--card);stroke-width:3.5;paint-order:stroke fill;stroke-linejoin:round}
 /* 图例放在图**下方**的 HTML 里。画进坐标系内一定会压住某个角上的数据 ——
    实测图例放右上角正好盖掉 D2 那 3 个高年龄窗口。 */
 .figlegend{list-style:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));
   gap:12px 26px;margin:18px 0 0;padding:16px 18px;background:var(--bg2);
   border:1px solid var(--line);border-radius:10px}
-.figlegend li{display:flex;align-items:flex-start;gap:10px;line-height:1.5}
-.figlegend .lg{display:flex;flex-direction:column;gap:2px}
 .figlegend b{color:var(--txt);font-family:var(--mono);font-size:13.5px;font-weight:600;
   white-space:nowrap}
 .figlegend em{color:var(--faint);font-size:12.5px;font-style:normal}
-.figlegend li.wide{grid-column:1/-1;border-top:1px dashed var(--line);padding-top:11px;
-  color:var(--faint);font-size:12.5px;display:block;line-height:1.7}
-.figlegend li.wide b{color:var(--dim);font-size:12.5px}
-.figlegend i{display:inline-block;flex-shrink:0;margin-top:.42em}
+/* 三联图的图例：第一行"怎么读"，之后每个测点一行。
+   序号写进 <b> 里 —— 单独放一个元素（<i>）时它会被挤到上一行，因为 li 是 block。 */
+.figlegend li.key{grid-column:1/-1;display:block;color:var(--dim);font-size:13px;line-height:1.7}
+.figlegend li.key span.k{display:inline-block;margin:3px 20px 3px 0}
+.figlegend li.case{grid-column:1/-1;display:block;margin-top:15px;padding-top:14px;
+  border-top:1px dashed var(--line)}
+.figlegend li.case b{white-space:normal}
+.figlegend li.case em{display:block;margin-top:4px;line-height:1.65}
+.figlegend i{display:inline-block;vertical-align:-1px;margin-right:5px}
 i.sw-whole{width:18px;height:0;border-top:2px dashed var(--faint)}
 i.sw-d1{width:18px;height:4px;border-radius:2px;background:var(--grn)}
 i.sw-d2{width:18px;height:4px;border-radius:2px;background:var(--acc)}
+i.sw-d3{width:18px;height:4px;border-radius:2px;background:var(--vio)}
 i.sw-off{width:11px;height:11px;border-radius:50%;border:1.4px solid var(--faint)}
 figcaption{color:var(--dim);font-size:14px;margin-top:16px;line-height:1.7}
 figcaption b{color:var(--txt)}
@@ -467,140 +488,347 @@ footer .row{display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px}
     <p class="figscroll-hint">图较宽，可左右滑动查看完整流程</p>
   </div>
 
-  <h3 style="margin:52px 0 6px">那么"分域"这一步到底买到了什么？</h3>
-  <p class="sub" style="margin-bottom:20px">下面这张图是示例批次里 S01 这个真实测点，
-    每个点是一个 4 秒滑窗，误差棒是该窗口的 1σ。</p>
+  <h3 style="margin:52px 0 6px">"分域"这一步到底买到了什么？三种剖面形态</h3>
+  <p class="sub" style="margin-bottom:20px">下面三个都是示例批次里的<b>真实测点</b>，每个点是一个 4 秒滑窗，误差棒是该窗口的 1σ。
+    同样叫"分域"，三种形态下的结论完全不同。</p>
 
   <figure class="figbox rv" style="margin:0">
     <!-- ==== 分域前后对比图：由 tools/gen_docs_split_figure.py 生成，请勿手改 ==== -->
       <div class="figscroll">
-      <svg class="fig" viewBox="0 0 900 372" role="img" aria-labelledby="figSplitT figSplitD">
-      <title id="figSplitT">S01 测点：整段一个数，与分域后的阶梯</title>
-      <desc id="figSplitD">同一个剥蚀坑的 35 个滑窗年龄。灰虚线是整段加权平均出的 459.0 Ma —— 它不对应任何一个窗口；两条实线是两个年龄域的均值。中间 18 个窗口没通过域内相容性检验，被分域步骤剥掉了。</desc>
-      <clipPath id="cpSplit"><rect x="88" y="40" width="782" height="266"/></clipPath>
-      <rect x="0" y="0" width="900" height="372" rx="14" class="fig-bg"/>
-      <line class="fig-grid" x1="88" y1="287.9" x2="870" y2="287.9"/>
-      <text class="fig-tick" x="76" y="291.9" text-anchor="end">425</text>
-      <line class="fig-grid" x1="88" y1="232.7" x2="870" y2="232.7"/>
-      <text class="fig-tick" x="76" y="236.7" text-anchor="end">450</text>
-      <line class="fig-grid" x1="88" y1="177.4" x2="870" y2="177.4"/>
-      <text class="fig-tick" x="76" y="181.4" text-anchor="end">475</text>
-      <line class="fig-grid" x1="88" y1="122.2" x2="870" y2="122.2"/>
-      <text class="fig-tick" x="76" y="126.2" text-anchor="end">500</text>
-      <line class="fig-grid" x1="88" y1="67.0" x2="870" y2="67.0"/>
-      <text class="fig-tick" x="76" y="71.0" text-anchor="end">525</text>
-      <text class="fig-axis" transform="translate(24,173) rotate(-90)" text-anchor="middle">年龄 (Ma)</text>
-      <rect class="band-D1" x="127.1" y="40" width="286.1" height="266"/>
-      <rect class="band-D2" x="776.2" y="40" width="59.3" height="266"/>
-      <line class="fig-grid" x1="88.0" y1="40" x2="88.0" y2="306"/>
-      <text class="fig-tick" x="88.0" y="326" text-anchor="middle">0</text>
-      <line class="fig-grid" x1="244.4" y1="40" x2="244.4" y2="306"/>
-      <text class="fig-tick" x="244.4" y="326" text-anchor="middle">0.2</text>
-      <line class="fig-grid" x1="400.8" y1="40" x2="400.8" y2="306"/>
-      <text class="fig-tick" x="400.8" y="326" text-anchor="middle">0.4</text>
-      <line class="fig-grid" x1="557.2" y1="40" x2="557.2" y2="306"/>
-      <text class="fig-tick" x="557.2" y="326" text-anchor="middle">0.6</text>
-      <line class="fig-grid" x1="713.6" y1="40" x2="713.6" y2="306"/>
-      <text class="fig-tick" x="713.6" y="326" text-anchor="middle">0.8</text>
-      <line class="fig-grid" x1="870.0" y1="40" x2="870.0" y2="306"/>
-      <text class="fig-tick" x="870.0" y="326" text-anchor="middle">1</text>
-      <g clip-path="url(#cpSplit)">
-      <line class="fig-ebar" x1="128.4" y1="230.7" x2="128.4" y2="198.1"/>
-      <circle class="dot-D1" cx="128.4" cy="214.4" r="3.4"/>
-      <line class="fig-ebar" x1="148.5" y1="237.3" x2="148.5" y2="205.9"/>
-      <circle class="dot-D1" cx="148.5" cy="221.6" r="3.4"/>
-      <line class="fig-ebar" x1="168.7" y1="226.8" x2="168.7" y2="195.6"/>
-      <circle class="dot-D1" cx="168.7" cy="211.2" r="3.4"/>
-      <line class="fig-ebar" x1="188.9" y1="224.0" x2="188.9" y2="192.8"/>
-      <circle class="dot-D1" cx="188.9" cy="208.4" r="3.4"/>
-      <line class="fig-ebar" x1="209.1" y1="218.1" x2="209.1" y2="186.7"/>
-      <circle class="dot-D1" cx="209.1" cy="202.4" r="3.4"/>
-      <line class="fig-ebar" x1="229.3" y1="232.5" x2="229.3" y2="201.9"/>
-      <circle class="dot-D1" cx="229.3" cy="217.2" r="3.4"/>
-      <line class="fig-ebar" x1="249.4" y1="245.8" x2="249.4" y2="218.1"/>
-      <circle class="dot-D1" cx="249.4" cy="232.0" r="3.4"/>
-      <line class="fig-ebar" x1="269.6" y1="235.7" x2="269.6" y2="210.6"/>
-      <circle class="dot-D1" cx="269.6" cy="223.2" r="3.4"/>
-      <line class="fig-ebar" x1="289.8" y1="262.1" x2="289.8" y2="236.5"/>
-      <circle class="dot-D1" cx="289.8" cy="249.3" r="3.4"/>
-      <line class="fig-ebar" x1="310.0" y1="257.6" x2="310.0" y2="232.0"/>
-      <circle class="dot-D1" cx="310.0" cy="244.8" r="3.4"/>
-      <line class="fig-ebar" x1="330.2" y1="246.5" x2="330.2" y2="218.2"/>
-      <circle class="dot-D1" cx="330.2" cy="232.3" r="3.4"/>
-      <line class="fig-ebar" x1="350.3" y1="253.6" x2="350.3" y2="225.6"/>
-      <circle class="dot-D1" cx="350.3" cy="239.6" r="3.4"/>
-      <line class="fig-ebar" x1="370.5" y1="227.3" x2="370.5" y2="188.7"/>
-      <circle class="dot-D1" cx="370.5" cy="208.0" r="3.4"/>
-      <line class="fig-ebar" x1="390.7" y1="204.7" x2="390.7" y2="166.5"/>
-      <circle class="dot-D1" cx="390.7" cy="185.6" r="3.4"/>
-      <line class="fig-ebar-off" x1="410.9" y1="185.9" x2="410.9" y2="142.1"/>
-      <circle class="fig-dot-off" cx="410.9" cy="164.0" r="3.4"/>
-      <line class="fig-ebar-off" x1="431.1" y1="153.3" x2="431.1" y2="114.5"/>
-      <circle class="fig-dot-off" cx="431.1" cy="133.9" r="3.4"/>
-      <line class="fig-ebar-off" x1="451.2" y1="168.3" x2="451.2" y2="130.7"/>
-      <circle class="fig-dot-off" cx="451.2" cy="149.5" r="3.4"/>
-      <line class="fig-ebar-off" x1="471.4" y1="159.5" x2="471.4" y2="118.1"/>
-      <circle class="fig-dot-off" cx="471.4" cy="138.8" r="3.4"/>
-      <line class="fig-ebar-off" x1="491.6" y1="176.5" x2="491.6" y2="139.5"/>
-      <circle class="fig-dot-off" cx="491.6" cy="158.0" r="3.4"/>
-      <line class="fig-ebar-off" x1="511.8" y1="198.0" x2="511.8" y2="159.8"/>
-      <circle class="fig-dot-off" cx="511.8" cy="178.9" r="3.4"/>
-      <line class="fig-ebar-off" x1="532.0" y1="216.0" x2="532.0" y2="172.5"/>
-      <circle class="fig-dot-off" cx="532.0" cy="194.3" r="3.4"/>
-      <line class="fig-ebar-off" x1="552.1" y1="254.1" x2="552.1" y2="215.1"/>
-      <circle class="fig-dot-off" cx="552.1" cy="234.6" r="3.4"/>
-      <line class="fig-ebar-off" x1="572.3" y1="269.6" x2="572.3" y2="230.9"/>
-      <circle class="fig-dot-off" cx="572.3" cy="250.2" r="3.4"/>
-      <line class="fig-ebar-off" x1="592.5" y1="278.8" x2="592.5" y2="240.5"/>
-      <circle class="fig-dot-off" cx="592.5" cy="259.6" r="3.4"/>
-      <line class="fig-ebar-off" x1="612.7" y1="285.7" x2="612.7" y2="243.6"/>
-      <circle class="fig-dot-off" cx="612.7" cy="264.6" r="3.4"/>
-      <line class="fig-ebar-off" x1="632.9" y1="274.3" x2="632.9" y2="224.7"/>
-      <circle class="fig-dot-off" cx="632.9" cy="249.5" r="3.4"/>
-      <line class="fig-ebar-off" x1="653.0" y1="238.7" x2="653.0" y2="204.1"/>
-      <circle class="fig-dot-off" cx="653.0" cy="221.4" r="3.4"/>
-      <line class="fig-ebar-off" x1="673.2" y1="245.8" x2="673.2" y2="204.3"/>
-      <circle class="fig-dot-off" cx="673.2" cy="225.1" r="3.4"/>
-      <line class="fig-ebar-off" x1="693.4" y1="249.0" x2="693.4" y2="193.8"/>
-      <circle class="fig-dot-off" cx="693.4" cy="221.4" r="3.4"/>
-      <line class="fig-ebar-off" x1="713.6" y1="258.6" x2="713.6" y2="203.1"/>
-      <circle class="fig-dot-off" cx="713.6" cy="230.8" r="3.4"/>
-      <line class="fig-ebar-off" x1="733.8" y1="254.3" x2="733.8" y2="197.7"/>
-      <circle class="fig-dot-off" cx="733.8" cy="226.0" r="3.4"/>
-      <line class="fig-ebar-off" x1="753.9" y1="234.4" x2="753.9" y2="173.5"/>
-      <circle class="fig-dot-off" cx="753.9" cy="204.0" r="3.4"/>
-      <line class="fig-ebar" x1="774.1" y1="186.8" x2="774.1" y2="144.4"/>
-      <circle class="dot-D2" cx="774.1" cy="165.6" r="3.4"/>
-      <line class="fig-ebar" x1="794.3" y1="140.0" x2="794.3" y2="79.1"/>
-      <circle class="dot-D2" cx="794.3" cy="109.6" r="3.4"/>
-      <line class="fig-ebar" x1="814.5" y1="124.6" x2="814.5" y2="60.3"/>
-      <circle class="dot-D2" cx="814.5" cy="92.5" r="3.4"/>
+      <svg class="fig" viewBox="0 0 900 690" role="img" aria-labelledby="figSplitT figSplitD">
+      <title id="figSplitT">同一个示例批次里的三种剖面形态：均一 / 核边分明 / 复杂变化</title>
+      <desc id="figSplitD">三个真实测点，每个点是一个 4 秒滑窗，误差棒是 1σ。灰虚线是整段不分域的加权平均：在 ① 里它就是答案，在 ②③ 里它不对应任何一个窗口。彩色实线是两个或三个年龄域的均值，空心圈是没通过域内相容性检验、不进入任何年龄域的窗口。</desc>
+      <rect x="0" y="0" width="900" height="690" rx="14" class="fig-bg"/>
+      <g class="case" data-spot="S43">
+      <text class="fig-cap" x="78" y="29"><tspan class="fig-num">①</tspan>  S43 · 均一<tspan class="fig-cap-sub">　整段就是答案</tspan></text>
+      <text class="fig-sub" x="872" y="29" text-anchor="end">整段 MSWD 1.11 / 上限 1.49 → 整段常数</text>
+      <line class="fig-grid" x1="78" y1="185.1" x2="872" y2="185.1"/>
+      <text class="fig-tick" x="66" y="189.1" text-anchor="end">420</text>
+      <line class="fig-grid" x1="78" y1="152.6" x2="872" y2="152.6"/>
+      <text class="fig-tick" x="66" y="156.6" text-anchor="end">440</text>
+      <line class="fig-grid" x1="78" y1="120.0" x2="872" y2="120.0"/>
+      <text class="fig-tick" x="66" y="124.0" text-anchor="end">460</text>
+      <line class="fig-grid" x1="78" y1="87.5" x2="872" y2="87.5"/>
+      <text class="fig-tick" x="66" y="91.5" text-anchor="end">480</text>
+      <line class="fig-grid" x1="78" y1="55.0" x2="872" y2="55.0"/>
+      <text class="fig-tick" x="66" y="59.0" text-anchor="end">500</text>
+      <line class="fig-grid" x1="78.0" y1="40" x2="78.0" y2="190"/>
+      <text class="fig-tick" x="78.0" y="207" text-anchor="middle">0</text>
+      <line class="fig-grid" x1="236.8" y1="40" x2="236.8" y2="190"/>
+      <text class="fig-tick" x="236.8" y="207" text-anchor="middle">0.2</text>
+      <line class="fig-grid" x1="395.6" y1="40" x2="395.6" y2="190"/>
+      <text class="fig-tick" x="395.6" y="207" text-anchor="middle">0.4</text>
+      <line class="fig-grid" x1="554.4" y1="40" x2="554.4" y2="190"/>
+      <text class="fig-tick" x="554.4" y="207" text-anchor="middle">0.6</text>
+      <line class="fig-grid" x1="713.2" y1="40" x2="713.2" y2="190"/>
+      <text class="fig-tick" x="713.2" y="207" text-anchor="middle">0.8</text>
+      <line class="fig-grid" x1="872.0" y1="40" x2="872.0" y2="190"/>
+      <text class="fig-tick" x="872.0" y="207" text-anchor="middle">1</text>
+      <clipPath id="cpCase0"><rect x="78" y="40" width="794" height="150"/></clipPath>
+      <g clip-path="url(#cpCase0)">
+      <line class="fig-ebar" x1="119.0" y1="139.9" x2="119.0" y2="108.0"/>
+      <circle class="dot-D1" cx="119.0" cy="124.0" r="3.4"/>
+      <line class="fig-ebar" x1="139.5" y1="132.4" x2="139.5" y2="102.3"/>
+      <circle class="dot-D1" cx="139.5" cy="117.4" r="3.4"/>
+      <line class="fig-ebar" x1="160.0" y1="144.7" x2="160.0" y2="116.5"/>
+      <circle class="dot-D1" cx="160.0" cy="130.6" r="3.4"/>
+      <line class="fig-ebar" x1="180.4" y1="154.3" x2="180.4" y2="124.0"/>
+      <circle class="dot-D1" cx="180.4" cy="139.1" r="3.4"/>
+      <line class="fig-ebar" x1="200.9" y1="152.8" x2="200.9" y2="120.7"/>
+      <circle class="dot-D1" cx="200.9" cy="136.8" r="3.4"/>
+      <line class="fig-ebar" x1="221.4" y1="157.5" x2="221.4" y2="114.5"/>
+      <circle class="dot-D1" cx="221.4" cy="136.0" r="3.4"/>
+      <line class="fig-ebar" x1="241.9" y1="149.2" x2="241.9" y2="108.0"/>
+      <circle class="dot-D1" cx="241.9" cy="128.6" r="3.4"/>
+      <line class="fig-ebar" x1="262.4" y1="117.8" x2="262.4" y2="70.8"/>
+      <circle class="dot-D1" cx="262.4" cy="94.3" r="3.4"/>
+      <line class="fig-ebar" x1="282.9" y1="136.1" x2="282.9" y2="86.2"/>
+      <circle class="dot-D1" cx="282.9" cy="111.1" r="3.4"/>
+      <line class="fig-ebar" x1="303.4" y1="130.9" x2="303.4" y2="91.7"/>
+      <circle class="dot-D1" cx="303.4" cy="111.3" r="3.4"/>
+      <line class="fig-ebar" x1="323.9" y1="141.0" x2="323.9" y2="96.0"/>
+      <circle class="dot-D1" cx="323.9" cy="118.5" r="3.4"/>
+      <line class="fig-ebar" x1="344.3" y1="161.9" x2="344.3" y2="130.9"/>
+      <circle class="dot-D1" cx="344.3" cy="146.4" r="3.4"/>
+      <line class="fig-ebar" x1="364.8" y1="147.0" x2="364.8" y2="115.1"/>
+      <circle class="dot-D1" cx="364.8" cy="131.1" r="3.4"/>
+      <line class="fig-ebar" x1="385.3" y1="155.9" x2="385.3" y2="126.4"/>
+      <circle class="dot-D1" cx="385.3" cy="141.1" r="3.4"/>
+      <line class="fig-ebar" x1="405.8" y1="144.9" x2="405.8" y2="115.2"/>
+      <circle class="dot-D1" cx="405.8" cy="130.1" r="3.4"/>
+      <line class="fig-ebar" x1="426.3" y1="154.8" x2="426.3" y2="125.6"/>
+      <circle class="dot-D1" cx="426.3" cy="140.2" r="3.4"/>
+      <line class="fig-ebar" x1="446.8" y1="157.7" x2="446.8" y2="124.5"/>
+      <circle class="dot-D1" cx="446.8" cy="141.1" r="3.4"/>
+      <line class="fig-ebar" x1="467.3" y1="152.9" x2="467.3" y2="118.3"/>
+      <circle class="dot-D1" cx="467.3" cy="135.6" r="3.4"/>
+      <line class="fig-ebar" x1="487.8" y1="134.3" x2="487.8" y2="88.5"/>
+      <circle class="dot-D1" cx="487.8" cy="111.4" r="3.4"/>
+      <line class="fig-ebar" x1="508.3" y1="129.5" x2="508.3" y2="85.5"/>
+      <circle class="dot-D1" cx="508.3" cy="107.5" r="3.4"/>
+      <line class="fig-ebar" x1="528.7" y1="127.5" x2="528.7" y2="86.3"/>
+      <circle class="dot-D1" cx="528.7" cy="106.9" r="3.4"/>
+      <line class="fig-ebar" x1="549.2" y1="110.1" x2="549.2" y2="74.3"/>
+      <circle class="dot-D1" cx="549.2" cy="92.2" r="3.4"/>
+      <line class="fig-ebar" x1="569.7" y1="133.5" x2="569.7" y2="100.9"/>
+      <circle class="dot-D1" cx="569.7" cy="117.2" r="3.4"/>
+      <line class="fig-ebar" x1="590.2" y1="114.4" x2="590.2" y2="73.3"/>
+      <circle class="dot-D1" cx="590.2" cy="93.9" r="3.4"/>
+      <line class="fig-ebar" x1="610.7" y1="95.2" x2="610.7" y2="52.5"/>
+      <circle class="dot-D1" cx="610.7" cy="73.8" r="3.4"/>
+      <line class="fig-ebar" x1="631.2" y1="113.8" x2="631.2" y2="64.4"/>
+      <circle class="dot-D1" cx="631.2" cy="89.1" r="3.4"/>
+      <line class="fig-ebar" x1="651.7" y1="123.6" x2="651.7" y2="77.8"/>
+      <circle class="dot-D1" cx="651.7" cy="100.7" r="3.4"/>
+      <line class="fig-ebar" x1="672.2" y1="154.1" x2="672.2" y2="109.1"/>
+      <circle class="dot-D1" cx="672.2" cy="131.6" r="3.4"/>
+      <line class="fig-ebar" x1="692.7" y1="177.5" x2="692.7" y2="138.9"/>
+      <circle class="dot-D1" cx="692.7" cy="158.2" r="3.4"/>
+      <line class="fig-ebar" x1="713.1" y1="164.9" x2="713.1" y2="128.3"/>
+      <circle class="dot-D1" cx="713.1" cy="146.6" r="3.4"/>
+      <line class="fig-ebar" x1="733.6" y1="149.3" x2="733.6" y2="111.9"/>
+      <circle class="dot-D1" cx="733.6" cy="130.6" r="3.4"/>
+      <line class="fig-ebar" x1="754.1" y1="125.2" x2="754.1" y2="97.2"/>
+      <circle class="dot-D1" cx="754.1" cy="111.2" r="3.4"/>
+      <line class="fig-ebar" x1="774.6" y1="117.4" x2="774.6" y2="90.5"/>
+      <circle class="dot-D1" cx="774.6" cy="104.0" r="3.4"/>
+      <line class="fig-ebar" x1="795.1" y1="111.7" x2="795.1" y2="77.2"/>
+      <circle class="dot-D1" cx="795.1" cy="94.4" r="3.4"/>
+      <line class="fig-ebar" x1="815.6" y1="137.0" x2="815.6" y2="99.9"/>
+      <circle class="dot-D1" cx="815.6" cy="118.4" r="3.4"/>
       </g>
-      <line class="fig-whole" x1="88" y1="212.8" x2="870" y2="212.8" stroke-dasharray="7 4"/>
-      <line class="solid-D1" x1="127.1" y1="224.2" x2="413.2" y2="224.2"/>
-      <text class="txt-D1" x="270.1" y="214.2" text-anchor="middle">D1 453.8</text>
-      <line class="solid-D2" x1="776.2" y1="134.9" x2="835.4" y2="134.9"/>
-      <text class="txt-D2" x="805.8" y="124.9" text-anchor="middle">D2 494.3</text>
-      <text class="fig-off-note" x="594.7" y="58" text-anchor="middle">18 个混合/过渡窗口（未进入任何年龄域）</text>
-      <rect class="fig-frame" x="88" y="40" width="782" height="266"/>
-      <text class="fig-axis" x="479" y="358" text-anchor="middle">剥蚀时间 τ（0 = 激光开，1 = 激光关）　→ 坑深方向</text>
+      <line class="fig-whole" x1="78" y1="122.5" x2="872" y2="122.5" stroke-dasharray="7 4"/>
+      <rect class="fig-frame" x="78" y="40" width="794" height="150"/>
+      </g>
+      <g class="case" data-spot="S34">
+      <text class="fig-cap" x="78" y="253"><tspan class="fig-num">②</tspan>  S34 · 核边分明<tspan class="fig-cap-sub">　一分为二正好</tspan></text>
+      <text class="fig-sub" x="872" y="253" text-anchor="end">整段 MSWD 5.08 / 上限 1.49 → 整段非常数</text>
+      <line class="fig-grid" x1="78" y1="387.8" x2="872" y2="387.8"/>
+      <text class="fig-tick" x="66" y="391.8" text-anchor="end">450</text>
+      <line class="fig-grid" x1="78" y1="330.0" x2="872" y2="330.0"/>
+      <text class="fig-tick" x="66" y="334.0" text-anchor="end">500</text>
+      <line class="fig-grid" x1="78" y1="272.1" x2="872" y2="272.1"/>
+      <text class="fig-tick" x="66" y="276.1" text-anchor="end">550</text>
+      <text class="fig-axis" transform="translate(22,339) rotate(-90)" text-anchor="middle">年龄 (Ma)</text>
+      <rect class="band-D1" x="117.7" y="264" width="266.8" height="150"/>
+      <rect class="band-D2" x="387.7" y="264" width="457.4" height="150"/>
+      <line class="fig-grid" x1="78.0" y1="264" x2="78.0" y2="414"/>
+      <text class="fig-tick" x="78.0" y="431" text-anchor="middle">0</text>
+      <line class="fig-grid" x1="236.8" y1="264" x2="236.8" y2="414"/>
+      <text class="fig-tick" x="236.8" y="431" text-anchor="middle">0.2</text>
+      <line class="fig-grid" x1="395.6" y1="264" x2="395.6" y2="414"/>
+      <text class="fig-tick" x="395.6" y="431" text-anchor="middle">0.4</text>
+      <line class="fig-grid" x1="554.4" y1="264" x2="554.4" y2="414"/>
+      <text class="fig-tick" x="554.4" y="431" text-anchor="middle">0.6</text>
+      <line class="fig-grid" x1="713.2" y1="264" x2="713.2" y2="414"/>
+      <text class="fig-tick" x="713.2" y="431" text-anchor="middle">0.8</text>
+      <line class="fig-grid" x1="872.0" y1="264" x2="872.0" y2="414"/>
+      <text class="fig-tick" x="872.0" y="431" text-anchor="middle">1</text>
+      <clipPath id="cpCase1"><rect x="78" y="264" width="794" height="150"/></clipPath>
+      <g clip-path="url(#cpCase1)">
+      <line class="fig-ebar" x1="119.3" y1="380.5" x2="119.3" y2="358.1"/>
+      <circle class="dot-D1" cx="119.3" cy="369.3" r="3.4"/>
+      <line class="fig-ebar" x1="140.0" y1="378.5" x2="140.0" y2="354.3"/>
+      <circle class="dot-D1" cx="140.0" cy="366.4" r="3.4"/>
+      <line class="fig-ebar" x1="160.6" y1="389.6" x2="160.6" y2="362.9"/>
+      <circle class="dot-D1" cx="160.6" cy="376.2" r="3.4"/>
+      <line class="fig-ebar" x1="181.3" y1="401.5" x2="181.3" y2="377.2"/>
+      <circle class="dot-D1" cx="181.3" cy="389.3" r="3.4"/>
+      <line class="fig-ebar" x1="202.0" y1="392.7" x2="202.0" y2="364.1"/>
+      <circle class="dot-D1" cx="202.0" cy="378.4" r="3.4"/>
+      <line class="fig-ebar" x1="222.6" y1="392.3" x2="222.6" y2="360.4"/>
+      <circle class="dot-D1" cx="222.6" cy="376.3" r="3.4"/>
+      <line class="fig-ebar" x1="243.3" y1="366.4" x2="243.3" y2="337.8"/>
+      <circle class="dot-D1" cx="243.3" cy="352.1" r="3.4"/>
+      <line class="fig-ebar" x1="263.9" y1="350.3" x2="263.9" y2="326.9"/>
+      <circle class="dot-D1" cx="263.9" cy="338.6" r="3.4"/>
+      <line class="fig-ebar" x1="284.6" y1="369.6" x2="284.6" y2="345.5"/>
+      <circle class="dot-D1" cx="284.6" cy="357.5" r="3.4"/>
+      <line class="fig-ebar" x1="305.2" y1="373.8" x2="305.2" y2="351.1"/>
+      <circle class="dot-D1" cx="305.2" cy="362.5" r="3.4"/>
+      <line class="fig-ebar" x1="325.9" y1="389.5" x2="325.9" y2="366.5"/>
+      <circle class="dot-D1" cx="325.9" cy="378.0" r="3.4"/>
+      <line class="fig-ebar" x1="346.6" y1="381.4" x2="346.6" y2="353.8"/>
+      <circle class="dot-D1" cx="346.6" cy="367.6" r="3.4"/>
+      <line class="fig-ebar" x1="367.2" y1="356.0" x2="367.2" y2="330.4"/>
+      <circle class="dot-D1" cx="367.2" cy="343.2" r="3.4"/>
+      <line class="fig-ebar" x1="387.9" y1="338.2" x2="387.9" y2="313.0"/>
+      <circle class="dot-D2" cx="387.9" cy="325.6" r="3.4"/>
+      <line class="fig-ebar" x1="408.5" y1="313.8" x2="408.5" y2="290.2"/>
+      <circle class="dot-D2" cx="408.5" cy="302.0" r="3.4"/>
+      <line class="fig-ebar" x1="429.2" y1="307.7" x2="429.2" y2="282.4"/>
+      <circle class="dot-D2" cx="429.2" cy="295.0" r="3.4"/>
+      <line class="fig-ebar" x1="449.9" y1="313.9" x2="449.9" y2="288.3"/>
+      <circle class="dot-D2" cx="449.9" cy="301.1" r="3.4"/>
+      <line class="fig-ebar" x1="470.5" y1="319.1" x2="470.5" y2="293.4"/>
+      <circle class="dot-D2" cx="470.5" cy="306.2" r="3.4"/>
+      <line class="fig-ebar" x1="491.2" y1="318.4" x2="491.2" y2="289.8"/>
+      <circle class="dot-D2" cx="491.2" cy="304.1" r="3.4"/>
+      <line class="fig-ebar" x1="511.8" y1="313.2" x2="511.8" y2="285.2"/>
+      <circle class="dot-D2" cx="511.8" cy="299.2" r="3.4"/>
+      <line class="fig-ebar" x1="532.5" y1="304.4" x2="532.5" y2="276.5"/>
+      <circle class="dot-D2" cx="532.5" cy="290.5" r="3.4"/>
+      <line class="fig-ebar" x1="553.1" y1="304.0" x2="553.1" y2="276.5"/>
+      <circle class="dot-D2" cx="553.1" cy="290.3" r="3.4"/>
+      <line class="fig-ebar" x1="573.8" y1="320.5" x2="573.8" y2="292.9"/>
+      <circle class="dot-D2" cx="573.8" cy="306.7" r="3.4"/>
+      <line class="fig-ebar" x1="594.5" y1="327.8" x2="594.5" y2="301.1"/>
+      <circle class="dot-D2" cx="594.5" cy="314.5" r="3.4"/>
+      <line class="fig-ebar" x1="615.1" y1="333.3" x2="615.1" y2="306.6"/>
+      <circle class="dot-D2" cx="615.1" cy="320.0" r="3.4"/>
+      <line class="fig-ebar" x1="635.8" y1="335.2" x2="635.8" y2="307.3"/>
+      <circle class="dot-D2" cx="635.8" cy="321.2" r="3.4"/>
+      <line class="fig-ebar" x1="656.4" y1="331.9" x2="656.4" y2="307.2"/>
+      <circle class="dot-D2" cx="656.4" cy="319.5" r="3.4"/>
+      <line class="fig-ebar" x1="677.1" y1="341.0" x2="677.1" y2="315.6"/>
+      <circle class="dot-D2" cx="677.1" cy="328.3" r="3.4"/>
+      <line class="fig-ebar" x1="697.8" y1="336.3" x2="697.8" y2="310.8"/>
+      <circle class="dot-D2" cx="697.8" cy="323.5" r="3.4"/>
+      <line class="fig-ebar" x1="718.4" y1="341.9" x2="718.4" y2="316.4"/>
+      <circle class="dot-D2" cx="718.4" cy="329.1" r="3.4"/>
+      <line class="fig-ebar" x1="739.1" y1="331.9" x2="739.1" y2="306.4"/>
+      <circle class="dot-D2" cx="739.1" cy="319.1" r="3.4"/>
+      <line class="fig-ebar" x1="759.7" y1="326.3" x2="759.7" y2="301.0"/>
+      <circle class="dot-D2" cx="759.7" cy="313.6" r="3.4"/>
+      <line class="fig-ebar" x1="780.4" y1="333.8" x2="780.4" y2="307.3"/>
+      <circle class="dot-D2" cx="780.4" cy="320.5" r="3.4"/>
+      <line class="fig-ebar" x1="801.1" y1="334.4" x2="801.1" y2="303.0"/>
+      <circle class="dot-D2" cx="801.1" cy="318.7" r="3.4"/>
+      <line class="fig-ebar" x1="821.7" y1="345.9" x2="821.7" y2="314.2"/>
+      <circle class="dot-D2" cx="821.7" cy="330.0" r="3.4"/>
+      </g>
+      <line class="fig-whole" x1="78" y1="333.5" x2="872" y2="333.5" stroke-dasharray="7 4"/>
+      <line class="solid-D1" x1="117.7" y1="365.4" x2="384.5" y2="365.4"/>
+      <text class="txt-D1" x="251.1" y="356.4" text-anchor="middle">D1 469.3</text>
+      <line class="solid-D2" x1="387.7" y1="312.7" x2="845.0" y2="312.7"/>
+      <text class="txt-D2" x="616.3" y="303.7" text-anchor="middle">D2 514.9</text>
+      <rect class="fig-frame" x="78" y="264" width="794" height="150"/>
+      </g>
+      <g class="case" data-spot="S18">
+      <text class="fig-cap" x="78" y="477"><tspan class="fig-num">③</tspan>  S18 · 复杂变化<tspan class="fig-cap-sub">　只拆得动一部分</tspan></text>
+      <text class="fig-sub" x="872" y="477" text-anchor="end">整段 MSWD 3.39 / 上限 1.49 → 整段非常数</text>
+      <line class="fig-grid" x1="78" y1="622.3" x2="872" y2="622.3"/>
+      <text class="fig-tick" x="66" y="626.3" text-anchor="end">425</text>
+      <line class="fig-grid" x1="78" y1="588.2" x2="872" y2="588.2"/>
+      <text class="fig-tick" x="66" y="592.2" text-anchor="end">450</text>
+      <line class="fig-grid" x1="78" y1="554.0" x2="872" y2="554.0"/>
+      <text class="fig-tick" x="66" y="558.0" text-anchor="end">475</text>
+      <line class="fig-grid" x1="78" y1="519.9" x2="872" y2="519.9"/>
+      <text class="fig-tick" x="66" y="523.9" text-anchor="end">500</text>
+      <rect class="band-D1" x="117.7" y="488" width="147.5" height="150"/>
+      <rect class="band-D2" x="260.6" y="488" width="250.7" height="150"/>
+      <rect class="band-D3" x="673.5" y="488" width="163.4" height="150"/>
+      <line class="fig-grid" x1="78.0" y1="488" x2="78.0" y2="638"/>
+      <text class="fig-tick" x="78.0" y="655" text-anchor="middle">0</text>
+      <line class="fig-grid" x1="236.8" y1="488" x2="236.8" y2="638"/>
+      <text class="fig-tick" x="236.8" y="655" text-anchor="middle">0.2</text>
+      <line class="fig-grid" x1="395.6" y1="488" x2="395.6" y2="638"/>
+      <text class="fig-tick" x="395.6" y="655" text-anchor="middle">0.4</text>
+      <line class="fig-grid" x1="554.4" y1="488" x2="554.4" y2="638"/>
+      <text class="fig-tick" x="554.4" y="655" text-anchor="middle">0.6</text>
+      <line class="fig-grid" x1="713.2" y1="488" x2="713.2" y2="638"/>
+      <text class="fig-tick" x="713.2" y="655" text-anchor="middle">0.8</text>
+      <line class="fig-grid" x1="872.0" y1="488" x2="872.0" y2="638"/>
+      <text class="fig-tick" x="872.0" y="655" text-anchor="middle">1</text>
+      <clipPath id="cpCase2"><rect x="78" y="488" width="794" height="150"/></clipPath>
+      <g clip-path="url(#cpCase2)">
+      <line class="fig-ebar" x1="119.0" y1="568.5" x2="119.0" y2="544.6"/>
+      <circle class="dot-D1" cx="119.0" cy="556.6" r="3.4"/>
+      <line class="fig-ebar" x1="139.5" y1="572.1" x2="139.5" y2="548.0"/>
+      <circle class="dot-D1" cx="139.5" cy="560.0" r="3.4"/>
+      <line class="fig-ebar" x1="160.0" y1="567.0" x2="160.0" y2="544.9"/>
+      <circle class="dot-D1" cx="160.0" cy="556.0" r="3.4"/>
+      <line class="fig-ebar" x1="180.4" y1="564.9" x2="180.4" y2="541.4"/>
+      <circle class="dot-D1" cx="180.4" cy="553.1" r="3.4"/>
+      <line class="fig-ebar" x1="200.9" y1="574.5" x2="200.9" y2="552.5"/>
+      <circle class="dot-D1" cx="200.9" cy="563.5" r="3.4"/>
+      <line class="fig-ebar" x1="221.4" y1="567.4" x2="221.4" y2="544.8"/>
+      <circle class="dot-D1" cx="221.4" cy="556.1" r="3.4"/>
+      <line class="fig-ebar" x1="241.9" y1="578.4" x2="241.9" y2="553.6"/>
+      <circle class="dot-D1" cx="241.9" cy="566.0" r="3.4"/>
+      <line class="fig-ebar" x1="262.4" y1="601.3" x2="262.4" y2="575.7"/>
+      <circle class="dot-D2" cx="262.4" cy="588.5" r="3.4"/>
+      <line class="fig-ebar" x1="282.9" y1="619.5" x2="282.9" y2="592.3"/>
+      <circle class="dot-D2" cx="282.9" cy="605.9" r="3.4"/>
+      <line class="fig-ebar" x1="303.4" y1="625.5" x2="303.4" y2="603.2"/>
+      <circle class="dot-D2" cx="303.4" cy="614.4" r="3.4"/>
+      <line class="fig-ebar" x1="323.9" y1="618.2" x2="323.9" y2="598.1"/>
+      <circle class="dot-D2" cx="323.9" cy="608.1" r="3.4"/>
+      <line class="fig-ebar" x1="344.4" y1="602.3" x2="344.4" y2="582.3"/>
+      <circle class="dot-D2" cx="344.4" cy="592.3" r="3.4"/>
+      <line class="fig-ebar" x1="364.9" y1="594.7" x2="364.9" y2="577.0"/>
+      <circle class="dot-D2" cx="364.9" cy="585.9" r="3.4"/>
+      <line class="fig-ebar" x1="385.3" y1="610.6" x2="385.3" y2="588.3"/>
+      <circle class="dot-D2" cx="385.3" cy="599.4" r="3.4"/>
+      <line class="fig-ebar" x1="405.8" y1="612.6" x2="405.8" y2="588.7"/>
+      <circle class="dot-D2" cx="405.8" cy="600.7" r="3.4"/>
+      <line class="fig-ebar" x1="426.3" y1="624.3" x2="426.3" y2="600.4"/>
+      <circle class="dot-D2" cx="426.3" cy="612.3" r="3.4"/>
+      <line class="fig-ebar" x1="446.8" y1="619.8" x2="446.8" y2="590.4"/>
+      <circle class="dot-D2" cx="446.8" cy="605.1" r="3.4"/>
+      <line class="fig-ebar" x1="467.3" y1="603.4" x2="467.3" y2="576.0"/>
+      <circle class="dot-D2" cx="467.3" cy="589.7" r="3.4"/>
+      <line class="fig-ebar" x1="487.8" y1="596.9" x2="487.8" y2="566.5"/>
+      <circle class="dot-D2" cx="487.8" cy="581.7" r="3.4"/>
+      <line class="fig-ebar-off" x1="508.3" y1="563.7" x2="508.3" y2="529.7"/>
+      <circle class="fig-dot-off" cx="508.3" cy="546.7" r="3.4"/>
+      <line class="fig-ebar-off" x1="528.8" y1="563.0" x2="528.8" y2="527.4"/>
+      <circle class="fig-dot-off" cx="528.8" cy="545.2" r="3.4"/>
+      <line class="fig-ebar-off" x1="549.3" y1="553.9" x2="549.3" y2="519.4"/>
+      <circle class="fig-dot-off" cx="549.3" cy="536.7" r="3.4"/>
+      <line class="fig-ebar-off" x1="569.7" y1="561.0" x2="569.7" y2="529.3"/>
+      <circle class="fig-dot-off" cx="569.7" cy="545.2" r="3.4"/>
+      <line class="fig-ebar-off" x1="590.2" y1="588.0" x2="590.2" y2="556.8"/>
+      <circle class="fig-dot-off" cx="590.2" cy="572.4" r="3.4"/>
+      <line class="fig-ebar-off" x1="610.7" y1="598.4" x2="610.7" y2="567.6"/>
+      <circle class="fig-dot-off" cx="610.7" cy="583.0" r="3.4"/>
+      <line class="fig-ebar-off" x1="631.2" y1="600.8" x2="631.2" y2="570.2"/>
+      <circle class="fig-dot-off" cx="631.2" cy="585.5" r="3.4"/>
+      <line class="fig-ebar-off" x1="651.7" y1="599.4" x2="651.7" y2="569.1"/>
+      <circle class="fig-dot-off" cx="651.7" cy="584.3" r="3.4"/>
+      <line class="fig-ebar" x1="672.2" y1="588.6" x2="672.2" y2="560.1"/>
+      <circle class="dot-D3" cx="672.2" cy="574.3" r="3.4"/>
+      <line class="fig-ebar" x1="692.7" y1="571.3" x2="692.7" y2="536.4"/>
+      <circle class="dot-D3" cx="692.7" cy="553.8" r="3.4"/>
+      <line class="fig-ebar" x1="713.2" y1="562.7" x2="713.2" y2="522.3"/>
+      <circle class="dot-D3" cx="713.2" cy="542.5" r="3.4"/>
+      <line class="fig-ebar" x1="733.7" y1="534.5" x2="733.7" y2="500.5"/>
+      <circle class="dot-D3" cx="733.7" cy="517.5" r="3.4"/>
+      <line class="fig-ebar" x1="754.2" y1="542.5" x2="754.2" y2="511.3"/>
+      <circle class="dot-D3" cx="754.2" cy="526.9" r="3.4"/>
+      <line class="fig-ebar" x1="774.6" y1="573.4" x2="774.6" y2="538.7"/>
+      <circle class="dot-D3" cx="774.6" cy="556.1" r="3.4"/>
+      <line class="fig-ebar" x1="795.1" y1="580.0" x2="795.1" y2="547.6"/>
+      <circle class="dot-D3" cx="795.1" cy="563.8" r="3.4"/>
+      <line class="fig-ebar" x1="815.6" y1="593.2" x2="815.6" y2="565.7"/>
+      <circle class="dot-D3" cx="815.6" cy="579.4" r="3.4"/>
+      </g>
+      <line class="fig-whole" x1="78" y1="576.4" x2="872" y2="576.4" stroke-dasharray="7 4"/>
+      <line class="solid-D1" x1="117.7" y1="558.7" x2="265.2" y2="558.7"/>
+      <text class="txt-D1" x="191.5" y="549.7" text-anchor="middle">D1 471.6</text>
+      <line class="solid-D2" x1="260.6" y1="598.6" x2="511.4" y2="598.6"/>
+      <text class="txt-D2" x="386.0" y="589.6" text-anchor="middle">D2 442.3</text>
+      <line class="solid-D3" x1="673.5" y1="554.4" x2="836.9" y2="554.4"/>
+      <text class="txt-D3" x="755.2" y="545.4" text-anchor="middle">D3 474.7</text>
+      <text class="fig-off-note" x="469.4" y="505" text-anchor="middle">8 个混合/过渡窗口（未进入任何年龄域）</text>
+      <rect class="fig-frame" x="78" y="488" width="794" height="150"/>
+      <text class="fig-axis" x="475" y="680" text-anchor="middle">剥蚀时间 τ（0 = 激光开，1 = 激光关）　→ 坑深方向</text>
+      </g>
       </svg>
       </div>
       <p class="figscroll-hint">图较宽，可左右滑动查看完整的坐标轴</p>
       <ul class="figlegend">
-      <li><i class="sw-whole"></i><span class="lg"><b>整段不分域 459.0 Ma</b><em>MSWD 3.97 > 判据上限 1.49 → 整段非常数</em></span></li>
-      <li><i class="sw-d1"></i><span class="lg"><b>D1 域均值 453.8 Ma</b><em>14 个窗口，MSWD 1.33</em></span></li>
-      <li><i class="sw-d2"></i><span class="lg"><b>D2 域均值 494.3 Ma</b><em>3 个窗口，MSWD 2.27</em></span></li>
-      <li><i class="sw-off"></i><span class="lg"><b>未进入任何年龄域：18 个窗口</b><em>域内相容性检验未通过，被分域步骤剥掉</em></span></li>
-      <li class="wide">逐点差额：整段 459.0 − 主域 453.8 = <b>+5.17 Ma（+1.14%）</b>，这就是「分域」这一步的贡献；整段积分是另一种算法，本例给 451.6 Ma。</li>
+      <li class="key"><b>怎么读</b><span class="k"><i class="sw-whole"></i>整段不分域：把全部窗口当成唯一一个域</span><span class="k"><i class="sw-d1"></i><i class="sw-d2"></i><i class="sw-d3"></i>各年龄域均值（D1 / D2 / D3）</span><span class="k"><i class="sw-off"></i>没通过域内相容性检验、不进入任何域</span><span class="k">Δ 一律是「整段 − 主域」</span></li>
+      <li class="case"><b>① S43 均一 · 整段 458.5 Ma</b><em>共 35 个滑窗。整段 MSWD 1.11 &lt; 判据上限 1.49 → <b>整段就是常数</b>。域表里根本没有这个测点：没有域可拆，灰虚线就是答案。整段积分（另一种算法）给 459.1 Ma，与窗口加权差 0.15%。</em></li>
+      <li class="case"><b>② S34 核边分明 · 整段 496.9 Ma</b><em>共 35 个滑窗。2 个域：D1 469.3 Ma（13 窗，MSWD 1.40） · D2 514.9 Ma（22 窗，MSWD 0.88）。没有一个窗口被剥掉。整段 MSWD 5.08 &gt; 上限 1.49 → 整段非常数，整段 496.9 − 主域 514.9 = <b>-18.02 Ma（-3.50%）</b>。</em></li>
+      <li class="case"><b>③ S18 复杂变化 · 整段 458.6 Ma</b><em>共 35 个滑窗。3 个域：D1 471.6 Ma（7 窗，MSWD 0.15） · D2 442.3 Ma（12 窗，MSWD 0.86） · D3 474.7 Ma（8 窗，MSWD 1.96）。8 个窗口没通过域内相容性检验，被分域步骤剥掉。整段 MSWD 3.39 &gt; 上限 1.49 → 整段非常数，整段 458.6 − 主域 442.3 = <b>+16.29 Ma（+3.68%）</b>。</em></li>
       </ul>
-    <figcaption>同一个剥蚀坑的 <b>35 个滑窗</b>。灰虚线是整段加权平均的
-      <b>459.0 Ma</b> —— <b>它不对应任何一个窗口</b>；两个年龄域分别是
-      <b>453.8 Ma</b>（绿，14 个窗口）与 <b>494.3 Ma</b>（黄，3 个窗口）。
-      两者相差 <b>+5.17 Ma（+1.14%）</b>，这 1.14% 就是"分域这一步"的贡献。
-      中间 <b>18 个空心点</b>没通过域内相容性检验，被分域步骤剥掉了 ——
-      整段平均却把它们一起算了进去，所以 459.0 Ma 既不等于 453.8 也不等于 494.3。
-      <br>图为 `examples/EX2022A` 的真实输出，可自行复现。</figcaption>
+      <figcaption>三个测点都取自示例批次 <code>examples/EX2022A</code>，上面的数字可以自行复现。
+            <b>S43</b> 整段 MSWD 1.11 低于判据上限 1.49，<b>整段就是常数</b>：域表里根本没有它，所以这里没有彩色实线，灰虚线就是答案。整段积分（另一种算法）给 459.1 Ma，与窗口加权差 0.15%。
+            <b>S34</b> 分为 <b>2 段</b>平台 469.3 / 514.9 Ma，域均值最大相差 <b>45.6 Ma（9.7%）</b>；沿坑深年龄<b>递增</b>：浅部 469.3 → 深部 514.9 Ma，是"核老边新"的常序，<b>一个窗口都没被剥掉</b>。整段不分域给 496.9 Ma，它<b>不等于任何一段</b>。
+            <b>S18</b> 分为 <b>3 段</b>平台 471.6 / 442.3 / 474.7 Ma，域均值最大相差 <b>32.4 Ma（6.9%）</b>；沿坑深年龄<b>不单调</b>（471.6 → 442.3 → 474.7 Ma）—— 不能用一个"核"一个"边"解释，中间 <b>8 个空心点</b>没通过域内相容性检验，被分域步骤剥掉了。整段不分域给 458.6 Ma，它<b>不等于任何一段</b>。　注意 D1 与 D3 的年龄几乎相同（471.6 与 474.7 Ma）却是两个域 ——「域」是<b>深度上连续的一段</b>，不是"年龄相同的所有窗口"。
+            ① 的灰虚线<b>就是年龄</b>（整段只有一个域，分域无事可做）；②、③ 的灰虚线只是在回答"不做分域会得到什么"，<b>不是任何一个年龄</b>。
+            </figcaption>
   </figure>
 </div></section>
 

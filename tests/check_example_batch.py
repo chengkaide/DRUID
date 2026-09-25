@@ -25,9 +25,10 @@
 5. **不分域（整段）口径**：整段加权平均的年龄与"与常数模型相容"的测点数。
    这条不经过分域，是**独立于第 4 条**的另一条判据：两者一起变，说明问题在
    更上游（归一化、外部重现性）；只有一条变，说明问题就在那一层。
-6. **落地页那张「分域前后」图**：它由 `tools/gen_docs_split_figure.py` 从本批次
-   算出来并写进 `docs/index.html`，是**发布出去的东西**。算法一改、图忘了重新生成，
-   页面上的数字就会与真实结果不符。这里把页面上的数字抓回来逐项比 ——
+6. **落地页那张三联图**（均一 / 核边分明 / 复杂变化）：它由
+   `tools/gen_docs_split_figure.py` 从本批次算出三个真实测点并写进
+   `docs/index.html`，是**发布出去的东西**。算法一改、图忘了重新生成，
+   页面上的数字就会与真实结果不符。这里把页面上每个测点的数字都抓回来逐项比 ——
    于是"过期的图"变成一次确定的失败，而不是等读者发现。
    数字对不上时：重跑 `python tools/gen_docs_split_figure.py`，
    确认新数值是对的，再更新本文件顶部的常量。
@@ -62,10 +63,23 @@ STRUCT = {None: 35, "多域(2)": 18, "均一": 15, "多域(3)": 15}
 # 这类从分布上看不出来的变化。
 WHOLE = {"行数": 48, "整段常数": 5, "MSWD中位": 4.4376,
          "首点年龄": 459.0069, "首点主域": 453.8410}
-# 落地页那张图上的数字（图上是大字，只到十分位）。
+# 落地页那张三联图上的数字（图上是大字，只到十分位）。三个测点各代表一种形态：
+# S43 均一（域表里没有它）、S34 核边分明（两段平台、无过渡带）、
+# S18 复杂变化（三段平台 + 8 个窗口的过渡带）。
 # 这些不是"另抄一份基线"，而是**从 docs/index.html 抓回来、与本次实跑比**——
 # 抓不到才算失败，抓到了对不上也算失败。
-DOC_FIG = {"整段": 459.0, "D1": 453.8, "D2": 494.3, "未归域": 18, "窗口数": 35}
+# "积分"只在均一那个测点的图注里出现，其余为 None（不检查）。
+DOC_FIG = {
+    "S43": {"整段": 458.5, "窗口数": 35, "未归域": 0, "整段MSWD": 1.11, "上限": 1.49,
+            "积分": 459.1, "域": {}},
+    "S34": {"整段": 496.9, "窗口数": 35, "未归域": 0, "整段MSWD": 5.08, "上限": 1.49,
+            "积分": None,
+            "域": {"D1": (469.3, 13, 1.40), "D2": (514.9, 22, 0.88)}},
+    "S18": {"整段": 458.6, "窗口数": 35, "未归域": 8, "整段MSWD": 3.39, "上限": 1.49,
+            "积分": None,
+            "域": {"D1": (471.6, 7, 0.15), "D2": (442.3, 12, 0.86),
+                   "D3": (474.7, 8, 1.96)}},
+}
 
 TOL_AGE = 1e-3         # Ma。基线是从导出的 xlsx 里取的（导出时 round(4)），
                        # 内存里的完整精度与之可能差 1e-4 量级，所以留 1e-3。
@@ -189,47 +203,105 @@ def main() -> int:
               WHOLE["首点主域"], TOL_AGE)
 
     print()
-    print("=== 文档里的「分域前后」图 ===")
+    print("=== 文档里的「分域前后」三联图 ===")
     doc = ROOT / "docs" / "index.html"
     if not getattr(ov, "empty", True) and doc.is_file() and "gen_docs_split_figure" in \
             doc.read_text(encoding="utf-8"):
         txt = doc.read_text(encoding="utf-8")
 
-        def from_doc(pat, cast, label):
-            m = re.search(pat, txt)
+        # 图例是"一个测点一行"（li.case）。必须先按行切开再抓 ——
+        # 在一整页上直接 re.search，某个测点的数会串到另一个测点头上，
+        # 而且串错了照样全部通过。
+        rows = dict(re.findall(r'<li class="case"><b>[^<]*?(S\d\d)(.*?)</li>', txt, re.S))
+        if not rows:
+            bad.append("文档里找不到三联图的图例行 —— 图被改坏或没生成？")
+            print("  FAIL 找不到图例行（li.case）")
+
+        def from_doc(pat, cast, label, src):
+            m = re.search(pat, src)
             if not m:
                 bad.append(f"文档图里找不到「{label}」—— 图被改坏或没生成？")
                 print(f"  FAIL 文档图里找不到「{label}」")
                 return None
             return cast(m.group(1))
 
-        first = ov["样品"].iloc[0]
-        d0 = dom[dom["样品"] == first]
-        got = {
-            "整段": from_doc(r"整段不分域 ([\d.]+) Ma</b>", float, "整段不分域"),
-            "D1": from_doc(r"D1 域均值 ([\d.]+) Ma</b>", float, "D1 域均值"),
-            "D2": from_doc(r"D2 域均值 ([\d.]+) Ma</b>", float, "D2 域均值"),
-            "未归域": from_doc(r"未进入任何年龄域：(\d+) 个窗口", int, "未归域窗口数"),
-            "窗口数": from_doc(r"同一个剥蚀坑的 (\d+) 个滑窗", int, "窗口数"),
-        }
-        want = {
-            "整段": round(float(ov["年龄_Ma"].iloc[0]), 1),
-            "D1": round(float(ov["主域年龄_Ma"].iloc[0]), 1),
-            "D2": round(float(d0["年龄_Ma"].iloc[1]), 1) if len(d0) > 1 else None,
-            "未归域": int(ov["n_win"].iloc[0]) - int(d0["n_win"].sum()),
-            "窗口数": int(ov["n_win"].iloc[0]),
-        }
-        for k, w in want.items():
-            g = got.get(k)
-            if g is None:
-                continue          # 已经在 from_doc 里记过失败了
-            if w is None:
-                print(f"  skip  {k}：本批次的该测点只有一个域，图上没有 D2")
+        scraped = {}
+        for spot, anchor in DOC_FIG.items():
+            row = rows.get(spot)
+            if row is None:
+                bad.append(f"文档图里没有测点 {spot} 的那一行")
+                print(f"  FAIL 文档图里没有测点 {spot}")
                 continue
-            check(f"图上 {k}", g, w)
-        for k, v in DOC_FIG.items():
-            check(f"图上 {k}（静态锚）", got.get(k), v)
-        print(f"  （图取自测点 {first}；重生成：python tools/gen_docs_split_figure.py）")
+            live = ov[ov["样品"] == spot]
+            if not len(live):
+                bad.append(f"实跑结果里没有测点 {spot}，而文档图里有")
+                print(f"  FAIL 实跑里没有测点 {spot}")
+                continue
+            live = live.iloc[0]
+            d0 = dom[dom["样品"] == spot].sort_values("tau")
+
+            got = {
+                "整段": from_doc(r"整段 ([\d.]+) Ma</b>", float, f"{spot} 整段", row),
+                "窗口数": from_doc(r"共 (\d+) 个滑窗", int, f"{spot} 窗口数", row),
+                "整段MSWD": from_doc(r"整段 MSWD ([\d.]+) &", float, f"{spot} 整段 MSWD", row),
+                "上限": from_doc(r"上限 ([\d.]+) →", float, f"{spot} 判据上限", row),
+            }
+            scraped[spot] = got
+
+            # ① 与本次实跑比
+            check(f"图上 {spot} 整段 (Ma)", got["整段"], round(float(live["年龄_Ma"]), 1))
+            check(f"图上 {spot} 窗口数", got["窗口数"], int(live["n_win"]))
+            check(f"图上 {spot} 整段 MSWD", got["整段MSWD"], round(float(live["MSWD"]), 2))
+            check(f"图上 {spot} 判据上限", got["上限"], round(float(live["相容上限"]), 2))
+
+            # 均一测点在域表里没有行 —— 那是"没有域可拆"，不是"35 个窗口全被剥掉"，
+            # 所以这里必须先判空，否则相减会得到一个很唬人的 35。
+            n_off = 0 if not len(d0) else int(live["n_win"]) - int(d0["n_win"].sum())
+            if not len(d0):
+                # 均一测点：域表里没有行，图注里会另给一个"整段积分"的数
+                got["积分"] = from_doc(r"整段积分（另一种算法）给 ([\d.]+) Ma", float,
+                                      f"{spot} 整段积分", row)
+                check(f"图上 {spot} 整段积分 (Ma)", got["积分"],
+                      round(float(live["整段积分年龄_Ma"]), 1))
+            if n_off:
+                got["未归域"] = from_doc(r"(\d+) 个窗口没通过域内相容性检验", int,
+                                        f"{spot} 未归域窗口数", row)
+                check(f"图上 {spot} 未归域窗口", got["未归域"], n_off)
+            else:
+                got["未归域"] = 0
+                # 均一测点没有"被剥掉的窗口"这回事，图上用的是另一句话
+                key = "没有一个窗口被剥掉" if len(d0) else "域表里根本没有这个测点"
+                if key in row:
+                    print(f"  ok   图上 {spot} 未归域窗口                  0")
+                else:
+                    bad.append(f"{spot} 实跑是 0 个未归域窗口，图上却没说（应有「{key}」）")
+                    print(f"  FAIL {spot} 未归域：实跑 0，图上没写「{key}」")
+
+            # ② 逐域比（域号 / 年龄 / 窗口数 / MSWD 四项一起，少一项都算不符）
+            got_dom = {n: (float(a), int(w), float(m)) for n, a, w, m in re.findall(
+                r"(D\d) ([\d.]+) Ma（(\d+) 窗，MSWD ([\d.]+)）", row)}
+            want_dom = {str(r["域"]): (round(float(r["年龄_Ma"]), 1), int(r["n_win"]),
+                                       round(float(r["MSWD"]), 2)) for _, r in d0.iterrows()}
+            if got_dom == want_dom:
+                print(f"  ok   图上 {spot} 的 {len(want_dom)} 个域（年龄/窗口数/MSWD）")
+            else:
+                bad.append(f"文档图里 {spot} 的域与实跑不符：页面 {got_dom}，实跑 {want_dom}")
+                print(f"  FAIL {spot} 域：页面 {got_dom} ≠ 实跑 {want_dom}")
+
+        # ③ 与静态锚比：两份独立来源同时对得上，才说明图既没手改也没过期
+        for spot, anchor in DOC_FIG.items():
+            got = scraped.get(spot)
+            if not got:
+                continue
+            for k, v in anchor.items():
+                if k == "域" or v is None:
+                    continue          # 域已在 ② 里按四项比过；None = 该测点没有这个数
+                if k not in got:
+                    bad.append(f"文档图里没抓到 {spot} 的「{k}」，而静态锚里有")
+                    print(f"  FAIL 图上 {spot} 缺 {k}")
+                    continue
+                check(f"图上 {spot} {k}（静态锚）", got[k], v)
+        print("  （三个测点各自代表一种形态；重生成：python tools/gen_docs_split_figure.py）")
     else:
         print("  skip  落地页里没有这张自动生成的图，或不分域表为空")
 

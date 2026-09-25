@@ -442,10 +442,13 @@ druid/
   改成**判断句小标题 + 违反代价 + 展开解释**；新增独立一节「先看这三个数」
   （91500 偏差 <1% / Ple 偏差 <3% / 协和度占比 >85%，各带实测值与判据原文）；
   ADEPT 接口先给一句话总结再上技术细节。
-- 新增「**分域前后对比图**」——同一个剥蚀坑的整段年龄 vs 各年龄域，
+- 新增「**分域前后**」**三联图** —— 同一个示例批次里的三种剖面形态：
+  ① **均一**（域表里根本没有这个测点，整体积分就够）、
+  ② **核边分明**（两段平台差 45.6 Ma，一个窗口都没被剥掉）、
+  ③ **复杂变化**（三段平台，中间有 8 个窗口不属于任何一段）。
   由仓库内脚本 [`tools/gen_docs_split_figure.py`](tools/gen_docs_split_figure.py)
-  从 `run_batch()` 的公开表算出并就地注入 `docs/index.html`；图上 5 个数字由
-  [`tests/check_example_batch.py`](tests/check_example_batch.py) 抓回核对。
+  从 `run_batch()` 的公开表算出并就地注入 `docs/index.html`；图上每个测点的数字
+  都由 [`tests/check_example_batch.py`](tests/check_example_batch.py) 按行抓回核对。
   **图是算出来的，不是手抄的** —— 算法一改、图忘了重新生成，测试会当场红。
 - 四份页面补齐 SEO 与社交分享：完整 `meta`（`title` / `description` /
   `keywords` / `canonical` / 双 `theme-color`）、Open Graph、Twitter 卡；
