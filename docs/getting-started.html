@@ -515,7 +515,7 @@ python -m druid.cli.reduce_batch -h</code></pre>
   <rect x="200" y="106" width="580" height="22" rx="6" fill="#EFEEE9" stroke="#D3D1C7"/>
   <rect x="393" y="106" width="194" height="22" rx="6" fill="#E1F5EE" stroke="#9FE1CB"/>
   <line x1="466" y1="94" x2="466" y2="140" stroke="#A32D2D" stroke-width="2"/>
-  <text x="466" y="88" font-size="11.5" text-anchor="middle" fill="#A32D2D">−0.25%　通过</text>
+  <text x="466" y="88" font-size="11.5" text-anchor="middle" fill="#A32D2D">−0.31%　通过</text>
   <text x="200" y="144" font-size="10" fill="#888780">−3%</text>
   <text x="780" y="144" font-size="10" text-anchor="end" fill="#888780">+3%</text>
 
@@ -524,7 +524,7 @@ python -m druid.cli.reduce_batch -h</code></pre>
   <rect x="200" y="196" width="580" height="22" rx="6" fill="#EFEEE9" stroke="#D3D1C7"/>
   <rect x="345" y="196" width="290" height="22" rx="6" fill="#E1F5EE" stroke="#9FE1CB"/>
   <line x1="578" y1="184" x2="578" y2="230" stroke="#A32D2D" stroke-width="2"/>
-  <text x="578" y="178" font-size="11.5" text-anchor="middle" fill="#A32D2D">+1.81%　通过</text>
+  <text x="578" y="178" font-size="11.5" text-anchor="middle" fill="#A32D2D">+1.85%　通过</text>
   <text x="200" y="234" font-size="10" fill="#888780">−6%</text>
   <text x="780" y="234" font-size="10" text-anchor="end" fill="#888780">+6%</text>
 
@@ -539,7 +539,7 @@ python -m druid.cli.reduce_batch -h</code></pre>
 
   <text x="30" y="362" font-size="12" fill="#5F5E5A">三条都过 → 数据可用。任一条不过，先查标样计数率与信号强度，不要在年龄上找解释。</text>
 </svg>
-<figcaption><b>图 5</b>　三个判据。② 里 Ple 的偏差偏正（+1.81%）在本项目里是<b>已知的系统性现象</b>：标样与样品计数率相差约一个数量级，
+<figcaption><b>图 5</b>　三个判据。② 里 Ple 的偏差偏正（+1.85%）在本项目里是<b>已知的系统性现象</b>：标样与样品计数率相差约一个数量级，
 单一线性因子消不掉非线性残差，所以流程里还有一步"二次校正"。这一条会在结果里明确标注。</figcaption>
 </figure>
 
@@ -821,7 +821,7 @@ EX2022A_U-Pb结果.handoff.json ← 给程序看（质控结论 + 交接约定�
 
 <h3>10.3　这份文档里的数字从哪来</h3>
 
-<p>第 <a href="#c6">六节</a>的三个判据数值（−0.25% / +1.81% / 93.8%）与
+<p>第 <a href="#c6">六节</a>的三个判据数值（−0.31% / +1.85% / 93.8%）与
 6.2 的"48 个测点里 5 个整段相容、MSWD 中位 4.44"，以及第 <a href="#c5">五节</a>的
 "85 个测点 → 样品 48 / 主标 21 / 监控 14 / 玻璃 2"，全部来自仓库自带的示例批次
 <code>examples/EX2022A</code>，由 <code>python tests\check_example_batch.py</code> 输出

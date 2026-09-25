@@ -47,6 +47,7 @@ if __package__ in (None, ""):
 
 from druid import __version__
 from druid.console import ensure_utf8_streams
+from druid.core.constants import REFERENCE_PRESETS
 from druid.io.handoff import export_handoff
 from druid.io.report import age68_column, export_batch
 from druid.qc import assess_batch, summary_lines
@@ -83,6 +84,12 @@ def build_parser() -> argparse.ArgumentParser:
     # ── 标样 ──
     ap.add_argument("--primary", default="91500", help="主标（用于归一化）")
     ap.add_argument("--secondary", default="Ple", help="监控标样（用于 QC 与 σext）")
+    ap.add_argument("--ref-preset", default="horstwood2016", choices=list(REFERENCE_PRESETS),
+                    help="标样参考值的口径预设（见 core.constants.REFERENCE_PRESETS）。"
+                         "默认 horstwood2016 = Horstwood et al. (2016) CA-ID-TIMS 推荐值；"
+                         "repo = 仓库第一版旧口径（复现历史结果用）；"
+                         "wiedenbeck1995 / self-consistent / isoclock 见源码注释。"
+                         "换口径是按同一个因子整体平移年龄，不是纠错。")
 
     # ── 单点还原 ──
     ap.add_argument("--trim", type=float, default=1.5,
@@ -163,6 +170,7 @@ def main(argv=None) -> int:
         out_excel=args.out,
         primary=args.primary,
         secondary=args.secondary,
+        ref_preset=args.ref_preset,
         trim=args.trim,
         blank_dur=args.blank_dur,
         n_sigma_common_pb=args.n_sigma_common_pb,

@@ -156,15 +156,20 @@ def test_sigma_ext_bound_is_flagged():
 # ═════════════════════════════════════════════════════════════════════════════
 def test_reference_self_consistency_flags_the_91500_anchor():
     """
-    91500 同时给了文献比值 R68=0.17928 与公认年龄 1062.4 Ma，两者不自洽：
-    R68 反算回年龄是 1063.04 Ma，差 **+0.0602%**。后果是全部样品年龄按同一个
-    因子整体偏老，且该标样 QC「偏差%」带一个固定地板。
+    `repo`（第一版）口径下，91500 同时给了文献比值 R68=0.17928 与公认年龄
+    1062.4 Ma，两者不自洽：R68 反算回年龄是 1063.04 Ma，差 **+0.0602%**。
+    后果是全部样品年龄按同一个因子整体偏老，且该标样 QC「偏差%」带一个固定地板。
 
-    这条检查就是把那个数字钉在这里 —— 以后谁把 R68 改成 0.17917（或把
-    age_Ma 改成 1063.04），这条会当场变 pass，提醒"全批年龄会整体平移"。
+    2026-09-25 默认口径改为 horstwood2016 之后，**默认档不再触发这条**
+    （那一份比值与年龄本来就自洽）；这个测试因此改成**显式用 repo 档**，
+    钉住两件事：① 选回第一版口径时，检查仍会如实把不自洽报出来；
+    ② 默认档确实是自洽的（否则「换个口径就修好了」这句话就是假的）。
     """
+    from druid.workflow import BatchConfig
+
+    # ① repo 档：如实报 WARN，且数值就是第一版那几个
     r = make_result()
-    k = keyed(assess_batch(r))
+    k = keyed(assess_batch(r, BatchConfig(data_dir=".", ref_preset="repo")))
     chk = k["reference.self_consistency"]
     assert chk.level == WARN
     assert "91500" in chk.data["standards"]
@@ -172,9 +177,13 @@ def test_reference_self_consistency_flags_the_91500_anchor():
     assert abs(d["R68"] - 0.17928) < 1e-9
     assert abs(d["age_Ma"] - 1062.4) < 1e-9
     assert 0.058 < d["diff_pct"] < 0.062, d["diff_pct"]
-
-    # 而本身自洽的标样（Plesovice 的 R68 是由年龄反算来的）不该被误报
     assert abs(d["diff_pct"]) > 0.02, "91500 就应当超出阈值"
+
+    # ② 默认档（horstwood2016）：比值与年龄自洽 → 这条必须变 PASS
+    k2 = keyed(assess_batch(make_result()))
+    chk2 = k2["reference.self_consistency"]
+    assert chk2.level == PASS, chk2
+    assert abs(chk2.data["standards"]["91500"]["diff_pct"]) < 0.02
 
 
 # ═════════════════════════════════════════════════════════════════════════════

@@ -13,6 +13,7 @@ from .constants import (
     MASSES_NEEDED,
     SUM_MASSES,
     STANDARDS,
+    REFERENCE_PRESETS,
     DOMAIN_SPAN_COLORS,
     CJK_FONTS,
     ROLE_GLASS,
@@ -30,7 +31,7 @@ from .deadtime import correct_channels, correct_rate
 __all__ = [
     # 常量
     "L238", "L235", "L232", "U238_U235", "HG202_204",
-    "MASSES_NEEDED", "SUM_MASSES", "STANDARDS",
+    "MASSES_NEEDED", "SUM_MASSES", "STANDARDS", "REFERENCE_PRESETS",
     "DOMAIN_SPAN_COLORS", "CJK_FONTS",
     "ROLE_PRIMARY", "ROLE_SECONDARY", "ROLE_UNKNOWN", "ROLE_GLASS", "ROLE_LABEL_CN",
     # 年代学

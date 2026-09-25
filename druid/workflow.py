@@ -46,6 +46,8 @@ from .core.constants import (
     ROLE_SECONDARY,
     ROLE_UNKNOWN,
     STANDARDS,
+    REFERENCE_PRESETS,
+    DEFAULT_REF_PRESET,
     U238_U235,
 )
 from .core.geochronology import age68, age75, age76
@@ -80,6 +82,15 @@ class BatchConfig:
     # ── 标样设置 ──
     primary: str = "91500"              # 主标名（用于归一化）
     secondary: str = "Ple"              # 监控标样名（用于 QC 与 σext 估计）
+
+    # 参考值口径预设（见 core.constants.REFERENCE_PRESETS）：
+    #   默认档 = constants.DEFAULT_REF_PRESET（2026-09-25 起为 "horstwood2016"，
+    #   即 Horstwood et al. (2016) 表 S2 的 CA-ID-TIMS 推荐值）；
+    #   "repo" ＝ 仓库第一版口径（保留，用来复现 2026-09-25 之前的结果）；
+    #   另有 wiedenbeck1995 / self-consistent / isoclock，见 constants.py。
+    # ⚠ 换档会让全部年龄按同一因子**整体平移** —— 这是口径变更，不是纠错。
+    #   默认档于 2026-09-25 由 "repo" 改为 "horstwood2016"（用户决定）。
+    ref_preset: str = DEFAULT_REF_PRESET
 
     # ── 单点还原 ──
     trim: float = 1.5                   # 剥蚀段两端各裁掉多少秒（避开开关激光瞬态）
@@ -120,6 +131,11 @@ class BatchConfig:
 
     def __post_init__(self):
         """把字符串路径统一转成 Path，并准备好输出目录。"""
+        if self.ref_preset and self.ref_preset not in REFERENCE_PRESETS:
+            # 早失败：预设名拼错时若静默退回默认，用户会以为换了口径、实际没换。
+            raise ValueError(
+                f"未知的参考值预设 ref_preset={self.ref_preset!r}；"
+                f"可用：{list(REFERENCE_PRESETS)}")
         self.data_dir = Path(self.data_dir)
         base = self.data_dir.name                       # 例如 "EX2022A"
         if self.out_excel is None:
@@ -740,7 +756,8 @@ def build_qc_table(res: pd.DataFrame, cfg: BatchConfig) -> pd.DataFrame:
                                        ROLE_LABEL_CN[ROLE_SECONDARY]):
             continue
         mu, se, mswd, n = weighted_mean(grp["年龄206_238"], grp["s68_1sig"])
-        ref = std_age(std_alias(name)) if std_alias(name) else float("nan")
+        ref = (std_age(std_alias(name), cfg.ref_preset)
+               if std_alias(name) else float("nan"))
         rows.append(dict(
             标样=name, 点数=n, 参考年龄_Ma=ref,
             加权平均年龄_Ma=mu, s2_Ma=2 * se, MSWD=mswd,
@@ -780,7 +797,7 @@ def apply_secondary_correction(res: pd.DataFrame, cfg: BatchConfig):
     把全部年龄乘以 kfac。所有 result 列的 σ 同步缩放。
     """
     alias = std_alias(cfg.secondary)
-    ref_age = std_age(alias) if alias else float("nan")
+    ref_age = std_age(alias, cfg.ref_preset) if alias else float("nan")
     if not np.isfinite(ref_age) or cfg.secondary == cfg.primary:
         return res, None
 
@@ -917,7 +934,8 @@ def run_batch(cfg: BatchConfig) -> BatchResult:
                       "不可用于定年。建议加入主标样后重跑。")
     else:
         try:
-            ref68, ref76 = std_ref(std_alias(cfg.primary) or cfg.primary)
+            ref68, ref76 = std_ref(std_alias(cfg.primary) or cfg.primary,
+                                   cfg.ref_preset)
         except KeyError:
             # 用户把"主标名"设成了一个标准库里没有的标样。
             # 没法查到它的参考比值，无法做外标归一化——明确报错而不是事后给错年龄。

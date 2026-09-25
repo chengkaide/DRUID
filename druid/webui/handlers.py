@@ -36,7 +36,7 @@ from ..workflow import BatchConfig, run_batch
 # 一次 BatchConfig 里所有允许从网页端调节的参数白名单。
 # 用白名单而不是直接用 request 里的键，是为了防止前端传脏参数直接进核心流程。
 _TUNABLE = {
-    "primary", "secondary",
+    "primary", "secondary", "ref_preset",
     "trim", "blank_dur", "n_sigma_common_pb", "deadtime_ns",
     "win", "step", "bulk",
     "sigma_ext68", "sigma_ext76",

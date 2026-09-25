@@ -55,6 +55,7 @@ import pandas as pd
 
 from .core.constants import ROLE_LABEL_CN, ROLE_PRIMARY, ROLE_SECONDARY, ROLE_UNKNOWN
 from .core.geochronology import age68
+from .core.constants import DEFAULT_REF_PRESET
 from .core.references import std_age, std_ref
 from .core.statistics import EXTERNAL_SCATTER_HI, EXTERNAL_SCATTER_LO
 
@@ -634,13 +635,17 @@ def _check_standards(result, cfg, th, out: List[Check]) -> None:
     # 91500 的 R68=0.17928 反算回年龄是 1063.04 Ma，而库里写的 age_Ma=1062.4，
     # 差 +0.0602%。后果是**全部样品年龄一致偏老 0.0602%**，
     # 而且 QC「偏差%」有一个 +0.0602% 的固定地板。
+    # 参考值预设（见 workflow.BatchConfig.ref_preset）：选了非默认口径时，
+    # 这条自洽性检查按**所选口径**判 —— 例如选了 horstwood2016，91500 的
+    # 比值与年龄本来就自洽，这条就该变绿（这正是"换个口径"的可见后果之一）。
+    preset = getattr(cfg, "ref_preset", DEFAULT_REF_PRESET)
     inc = {}
     for name in dict.fromkeys([cfg.primary, cfg.secondary]):
         try:
-            r68, _ = std_ref(name)
+            r68, _ = std_ref(name, preset)
         except KeyError:
             continue
-        a_ref = std_age(name)
+        a_ref = std_age(name, preset)
         a_from = _finite(age68(r68))
         if not (a_ref and math.isfinite(a_ref) and a_from):
             continue
@@ -1172,6 +1177,7 @@ def assess_batch(result, cfg=None, thresholds: Optional[QCThresholds] = None) ->
             sigma_ext68 = None
             sigma_ext76 = None
             bulk = str(result.info.get("bulk", "simple"))
+            ref_preset = DEFAULT_REF_PRESET   # 没给 cfg 时按产品默认档判自洽性
         cfg = _Cfg()
 
     out: List[Check] = []
