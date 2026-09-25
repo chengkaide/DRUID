@@ -779,7 +779,7 @@ EX2022A_U-Pb结果.handoff.json ← 给程序看（质控结论 + 交接约定�
   <tr><td class="n">core/constants.py</td><td>全部物理常量与标准物质库的唯一出处</td></tr>
   <tr><td class="n">--deadtime-ns 默认 0</td><td><code>--deadtime-ns</code> 默认 0 是刻意的：一旦默认开启，历史上所有未校正的结果就不再可比。要改默认值请先与人商量</td></tr>
   <tr><td class="n">204 显著性检验</td><td><sup>204</sup>Pb 只有几~几十 cps，<sup>204</sup>Hg 本底可达数百 cps。不做显著性检验就扣普通铅 = 把噪声当铅扣掉，对 <sup>207</sup>Pb 是灾难性的</td></tr>
-  <tr><td class="n">207Pb/206Pb 不做 F(τ)</td><td>它是 Pb 同位素内部比值，不随坑深分馏；窗口级 <sup>207</sup>Pb 只有约 130 个计数，套 F(τ) 只会注入噪声</td></tr>
+  <tr><td class="n">207Pb/206Pb 不做 F(τ)</td><td>它是 Pb 同位素内部比值，不随坑深分馏；窗口级 R76 的计数统计已在 1% 量级（4 s 窗口 <sup>207</sup>Pb 净计数中位约 9×10³），套 F(τ) 只会注入噪声</td></tr>
   <tr><td class="n">*.bat 文件</td><td>必须保持纯 ASCII + CRLF。cmd.exe 按代码页解析，中文注释会变乱码；而解释器路径里含中文用户名，所以中文路径只能靠运行时变量抵达</td></tr>
 </table>
 

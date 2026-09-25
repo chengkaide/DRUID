@@ -84,7 +84,7 @@
     --pur:#534AB7; --purbg:#EEEDFE; --purline:#AFA9EC;
     --tea:#0F6E56; --teabg:#E1F5EE; --tealine:#9FE1CB;
     --amb:#854F0B; --ambbg:#FAEEDA; --ambline:#FAC775;
-    --red:#A32D2D;
+    --red:#A32D2D; --redbg:#FDF6F6;
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);
@@ -112,7 +112,7 @@
   .note{border-left:3px solid var(--ambline);background:#FFFBF3;border-radius:0 10px 10px 0;
         padding:14px 18px;margin:0 0 18px;font-size:14px}
   .note p:last-child{margin:0}
-  .warn{border-left:3px solid #E24B4A;background:#FDF6F6;border-radius:0 10px 10px 0;
+  .warn{border-left:3px solid #E24B4A;background:var(--redbg);border-radius:0 10px 10px 0;
         padding:14px 18px;margin:0 0 18px;font-size:14px}
   .warn p:last-child{margin:0}
   figure{margin:26px 0 30px}
@@ -502,7 +502,22 @@ ADEPT 在<b>同一条随深度变化的年龄</b>上认出哪些区间构成真�
 和可直接引用的 MSWD。DRUID 的域表只作诊断用。</p>
 </div>
 
-<h2>六、三个容易做错的地方</h2>
+<h3>4. 有一批窗口只出现在一张表里</h3>
+
+<p>DRUID 在分域之后会把边界窗口剥掉（<code>refine_domains()</code>，目的是保住域内的纯度）。
+实测全批次 <b>180 / 1677 = 10.7% 的窗口不落在任何域里</b>，剥得最狠的几个测点一次丢掉 17~24 个窗口。</p>
+
+<p>关键在于：<b>这些窗口仍然留在 <code>剖面窗口</code> 表里</b>（那张表是 1677 行 = 全部窗口，
+不是"只留域内的"）。所以它们照旧会喂给 ADEPT，而 ADEPT 也可能在里头判出一个合格坪——
+实测有一个测点，DRUID 丢掉的那 18 个窗口整体是 463.45 ± 2.26 Ma（1σ）/ MSWD 4.41，
+不成坪；但 ADEPT 在同一段里找到了一个 <b>448 ± 3 Ma / n=11 / MSWD 0.67</b> 的坪。</p>
+
+<p>两边都"有道理"，这不是谁错了，而是取向不同：<b>DRUID 判据不符就剥边界、保域内纯度；
+ADEPT 是 PELT 分段 + 四步过滤、保分段完整性。</b>代价是同一个样品可能在两张表里
+各有一个"有效年龄"——这也是上面第 3 条"只选一套口径"的另一个理由。
+另外，DRUID 的拒绝<b>从不给理由</b>，ADEPT 会给（最常见的是 Filter 2 的方差阈值）。</p>
+
+<h2>六、四个容易做错的地方</h2>
 
 <h3>① <code>_1s</code> 是 1σ，不是 2σ</h3>
 <p>DRUID 的结果表里 <code>s68_1sig</code> 与 <code>s68_2sig</code> 是并列的两列。
@@ -517,6 +532,14 @@ ADEPT 在<b>同一条随深度变化的年龄</b>上认出哪些区间构成真�
 <p>DRUID 的 σ 构成是 <code>sqrt(内部 jackknife² + (外部重现性 × 比值)²)</code>，
 已经包含了标样散度。ADEPT 的 <code>calibration_uncertainty</code> 默认再乘 3%，
 所以接 DRUID 的数据时必须置 0。不置零的后果是量级级别的：<b>1.8 Ma → 13.7 Ma</b>。</p>
+
+<h3>④ 读表的时候，σ 的倍数和上面是反过来的一件事</h3>
+<p>上面①说的是<b>喂进去</b>的方向。反过来，<b>读出来</b>的时候也要当心：
+ADEPT 的 <code>Final total uncertainty (Ma)</code> 是 <b>1σ</b>，
+而 DRUID <code>深度剖面域</code> 表的 <code>s2_Ma</code> 是 <b>2σ</b>。
+τ 精确对齐的 8 对上，两边比值实测 <b>2.0000 ± 0.0003</b>（25 对含部分重叠的中位 2.011）。
+所以<b>两张表不能并排直接读，先把 DRUID 的数除以 2</b>——否则会得出
+"两个工具算出的不确定度差一倍"这种并不存在的结论。</p>
 
 <h2>七、谁负责什么</h2>
 
@@ -574,6 +597,19 @@ print(r$summary[, c('Analysis','Final age (Ma)','MSWD')])"</code></pre>
 <p>ADEPT 会读工作簿里的每一张表，只处理含 <code>Age68</code> 的那张，
 其余的表（结果 / 标样QC / 深度剖面域 / 不分域年龄 / 运行参数）会给出警告后跳过。
 所以直接把 DRUID 的结果工作簿整个丢给它就行，不需要先拆出那张表。</p>
+</div>
+
+<div class="warn">
+<p><b>ADEPT 自己写出来的 xlsx 是坏 XML，别用程序去读它。</b>
+它在 <code>output_path</code> 写出的 <code>&lt;批次&gt;_ADEPT.xlsx</code>，
+用 <code>openpyxl</code> / <code>pandas</code> 打开会直接报
+<code>ParseError: not well-formed (invalid token)</code>。根因是
+<code>深度剖面域</code> 那张表的中文列名（<code>年龄_Ma</code> / <code>MSWD_概率</code>）
+被 base-R 的写手写成了非法控制字节（每个文件固定 18 个）。
+<b>示例批次跑出来的产物也一样错</b>，所以这是长期存在的问题，不是某一次跑坏了。</p>
+<p>Excel 自己容错能打开，但表头是乱码；严格的解析器一律拒绝。
+绕法很简单：<b>报告里的数字全部从 ADEPT 另存的 CSV 读</b>（<code>full.csv</code> 是段级、
+<code>summary</code> 是坪级），不碰那个 xlsx。</p>
 </div>
 
 <footer>

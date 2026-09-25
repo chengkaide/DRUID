@@ -840,7 +840,7 @@ footer .row{display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px}
     <div class="card">
       <div class="no">原则 1</div>
       <h3>204Pb 普通铅校正，必须先通过显著性检验才做</h3>
-      <div class="cost"><b>违反的代价：</b>把噪声当普通铅扣掉，对计数本来就极少的 207Pb 是灾难性的。</div>
+      <div class="cost"><b>违反的代价：</b>把噪声当普通铅扣掉，而这份偏差几乎全落在 207Pb/206Pb 上（238U/235U ≈ 137.8，放射成因的 207Pb 本来就比 206Pb 少得多）。</div>
       <p class="det">204Pb 只有几~几十 cps，而 204Hg 本底可达数百 cps，两者做差后的残余往往就是噪声。
         所以只在 2σ 显著时才扣，不显著就整批不扣。</p>
     </div>
@@ -849,7 +849,8 @@ footer .row{display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px}
       <h3>207Pb/206Pb 不做 F(τ) 深度分馏校正</h3>
       <div class="cost"><b>违反的代价：</b>纯属给一个本来就没有系统漂移的量注入噪声。</div>
       <p class="det">它是 Pb 同位素比值，几乎不随坑深分馏（随坑深漂移的是 Pb/U 这类元素对比值）；
-        4 s 窗口的 207Pb 仅约 130 个计数。它仍参与标样归一化（F76），只是不做逐深度校正。</p>
+        4 s 窗口的 207Pb 净计数中位约 9×10³，计数统计已在 1% 量级 ——
+        能指望的 Pb-Pb 漂移远小于它。它仍参与标样归一化（F76），只是不做逐深度校正。</p>
     </div>
     <div class="card">
       <div class="no">原则 3</div>

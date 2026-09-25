@@ -14,10 +14,14 @@ druid.depth.windows —— 滑动窗口切分与逐窗口还原
 
 参数怎么选
 ----------
-win 太小 → 单个窗口内计数太少，207Pb 噪声爆炸
+win 太小 → 窗口里只剩几个 cycle（4 s 才 13 个），各通道计数统计都变差；
+           先撑不住的是计数本来就少的 204Pb（4 s 窗口净计数中位约 37）
 win 太大 → 把核-边过渡带糊在一起，看不出结构
 step 太小 → 相邻点几乎重复，图会很"滑"，但看不出更多信息
-本批实测的合理取值：win = 4 s，step = 1 s（约 25~35 个 cycle per window）
+本批实测的合理取值：win = 4 s，step = 1 s。
+cycle 周期实测 0.31871 s，所以 4 s 窗口只有 **12~13 个 cycle**
+（`剖面窗口` 表的 `n_cycles` 列就是这个数，示例批次中位 13）。
+重算：`python tools/window_scale_facts.py`
 """
 from __future__ import annotations
 
