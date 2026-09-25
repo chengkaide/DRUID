@@ -109,15 +109,34 @@ def make_depth_figure(prof: pd.DataFrame,
 
     # ── 每个年龄域的加权平均年龄：红线 + 文字标注 ──
     if summ is not None and len(summ):
+        # 文字抬离红线的距离用**点**而不是数据单位 —— 同一个偏移量画在
+        # 450 Ma 的点和 3000 Ma 的点上，视觉效果差着十几倍。
+        # 4 pt 在 fontsize=9 下约 0.6 个字高：够把文字抬离红线，
+        # 又不至于顶到相邻域的标注上去。
+        # （原先直接 va="bottom" 贴在 age_Ma 上，实测红线从字底穿过去，
+        #   几个域的标注看着像被划掉。）
+        t_lo = float(prof["t_mid"].iloc[0])
+        t_hi = float(prof["t_mid"].iloc[-1])
+        span = max(t_hi - t_lo, 1e-9)
         for _, s in summ.iterrows():
             if str(s["flag"]).startswith("mixed"):
                 continue                       # 过渡带不画，它没有地质意义
             lo, hi = int(s["i0"]), int(s["i1"]) - 1
             x0, x1 = prof["t_mid"].iloc[lo], prof["t_mid"].iloc[hi]
             ax[0].hlines(s["age_Ma"], x0, x1, color="#A32D2D", lw=1.8, zorder=4)
-            ax[0].text(0.5 * (x0 + x1), s["age_Ma"],
-                       f"{s['domain']}: {s['age_Ma']:.0f}±{2 * s['se_1sig']:.0f} Ma",
-                       fontsize=9, color="#A32D2D", va="bottom", ha="center", zorder=5)
+            txt = f"{s['domain']}: {s['age_Ma']:.0f}±{2 * s['se_1sig']:.0f} Ma"
+            xc = 0.5 * (x0 + x1)
+            # 贴着左右边界的域（最常见的是最后一个域）若还居中排版，
+            # 文字会越过坐标轴画到轴外去。改成贴住该域的内侧端点、向里展开。
+            if xc > t_lo + 0.80 * span:
+                tx, ha = x1, "right"
+            elif xc < t_lo + 0.20 * span:
+                tx, ha = x0, "left"
+            else:
+                tx, ha = xc, "center"
+            ax[0].annotate(txt, xy=(tx, s["age_Ma"]), xytext=(0, 4.0),
+                           textcoords="offset points", fontsize=9,
+                           color="#A32D2D", va="bottom", ha=ha, zorder=5)
 
     ax[0].set_ylabel("年龄 (Ma)", fontsize=11)
     ax[0].set_title(title, fontsize=12)

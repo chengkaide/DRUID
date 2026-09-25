@@ -221,18 +221,24 @@ def test_no_identifying_strings_in_tracked_files():
     """
     import subprocess
 
-    files = subprocess.run(
-        ["git", "-c", "core.quotePath=false",
-         "ls-files", "--cached", "--others", "--exclude-standard"],
-        cwd=str(ROOT), capture_output=True, text=True,
-        encoding="utf-8").stdout
-    if not files.strip():
+    def _git(*args) -> set:
+        out = subprocess.run(
+            ["git", "-c", "core.quotePath=false", *args],
+            cwd=str(ROOT), capture_output=True, text=True,
+            encoding="utf-8").stdout
+        return {ln for ln in out.splitlines() if ln.strip()}
+
+    # 已入库的 + 尚未 add 但也没被忽略的 —— 后者是"`git add .` 会顺手带走"的东西，
+    # 只看 --cached 会留一个真实的盲区（见 docstring）。
+    files = _git("ls-files", "--cached", "--others", "--exclude-standard")
+    if not files:
         return                    # 不是 git 仓库（例如从源码包解开的），跳过
+    tracked = _git("ls-files", "--cached")
 
     me = Path(__file__).name
     patterns = ["云龙", "锡矿", "YL-46", "20220301", "凯凯"]
     hits = []
-    for rel in files.splitlines():
+    for rel in sorted(files):
         if not rel.strip() or Path(rel).name == me:
             continue
         p = ROOT / rel
@@ -244,8 +250,36 @@ def test_no_identifying_strings_in_tracked_files():
             continue
         for k in patterns:
             if k in text:
-                hits.append(f"{rel}: 含 {k}")
-    assert not hits, "仓库里出现了可识别信息，请改成中性示例：" + "; ".join(hits)
+                where = "已入库" if rel in tracked else "未跟踪"
+                hits.append(f"[{where}] {rel}: 含 {k}")
+    if not hits:
+        return
+
+    n_tracked = sum(1 for h in hits if h.startswith("[已入库]"))
+    advice = (
+        "这些字会被推上公开仓库，而且收不回来。两种情形，修法不同：\n"
+        "  · 这份文件**要进仓库** → 把真名换成中性示例"
+        "（地名→`EX2022A`、样品→`S01`…、本机用户名→`<用户名>`）。\n"
+        "  · 这份文件**只是本地笔记、本就不该进仓库** → 加进本地排除文件：\n"
+        "        echo '<文件名>' >> .git/info/exclude\n"
+        "    它与 `.gitignore` 的区别：**.gitignore 入版本库、全队共享；\n"
+        "    .git/info/exclude 只对这台机器生效、不进版本库**。"
+        "本地笔记要用后者。\n"
+        "\n"
+        "⚠ 不要改这条测试。它刻意把**未跟踪文件**也算进来，是花过代价的：\n"
+        "曾经一份新写的文档在提交前混进了真实样品号，本地跑全绿、推上去 CI 才红。"
+        if n_tracked else
+        "这些文件还没 `git add`，但 `git add .` 会顺手把它们带走，所以现在就得处理。\n"
+        "若它们只是**本地笔记、本就不该进仓库** → 加进本地排除文件：\n"
+        "        echo '<文件名>' >> .git/info/exclude\n"
+        "（`.gitignore` 会入版本库、全队共享；`.git/info/exclude` 只对这台机器生效。\n"
+        " 本地笔记要用后者 —— 换一台机器 clone 下来本就没有这些文件。）\n"
+        "\n"
+        "⚠ 不要改这条测试。它刻意把未跟踪文件也算进来，是花过代价的：\n"
+        "曾经一份新写的文档在提交前混进了真实样品号，本地跑全绿、推上去 CI 才红。"
+    )
+    assert not hits, ("仓库里出现了可识别信息：\n  " + "\n  ".join(hits)
+                      + "\n\n" + advice)
 
 
 def test_ensure_utf8_streams_survives_a_cp1252_console():
