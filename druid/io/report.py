@@ -107,7 +107,7 @@ def write_excel(out_path, sheets: dict, freeze_header: bool = True) -> Path:
 
 def export_batch(cfg, result, version: str = "") -> Path:
     """
-    把 run_batch 的结果落成标准五表 Excel。
+    把 run_batch 的结果落成标准六表 Excel。
 
     为什么要单独拎出来
     ------------------
@@ -115,7 +115,7 @@ def export_batch(cfg, result, version: str = "") -> Path:
     如果两边各写一遍，早晚会出现"命令行跑的表多一列、网页跑的表少一列"
     这种最让人困惑的不一致。落盘逻辑必须只有一份。
 
-    五张表及其分工
+    六张表及其分工
     --------------
         结果        逐点一行：比值、三个年龄体系、协和度、质控量
         标样QC      每个标样一行：加权平均 vs 参考值

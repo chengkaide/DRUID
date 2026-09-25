@@ -115,7 +115,7 @@ footer .row{display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px}
 <body>
 
 <nav><div class="wrap">
-  <div class="logo">DR<b>UI</b>D<small>v2.2.2</small></div>
+  <div class="logo">DR<b>UI</b>D<small>v2.4.0</small></div>
   <div class="links">
     <a href="#docs">文档</a><a href="#why">为什么不同</a><a href="#principles">设计原则</a>
     <a href="#output">输出</a><a href="#adept">ADEPT 接口</a>
@@ -134,7 +134,8 @@ footer .row{display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px}
     <span class="badge"><i>无 scipy</i> — 统计内核自实现</span>
     <span class="badge">网页界面 <i>纯标准库</i>，无 npm 无构建</span>
     <span class="badge">CI <i>4 平台 × Python 版本</i></span>
-    <span class="badge">自检 <i>30 项</i> + 端到端数值回归</span>
+    <span class="badge">自检 <i>80 项</i> + 端到端数值回归</span>
+    <span class="badge">质控 <i>25 条检查项</i>，含机读交接文件</span>
   </div>
   <div class="cta">
     <a class="btn pri" href="#start">快速开始</a>
@@ -198,7 +199,7 @@ footer .row{display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px}
       <line x1="170" y1="90" x2="226" y2="90" stroke="#5fb87a" stroke-width="1.5" marker-end="url(#ar)"/>
       <rect x="770" y="60" width="140" height="60" rx="10" fill="#132019" stroke="#35573f"/>
       <text x="840" y="85" text-anchor="middle" fill="#e6f0e9" font-size="15" font-weight="600">结果.xlsx</text>
-      <text x="840" y="107" text-anchor="middle" class="flow-lbl">五个工作表</text>
+      <text x="840" y="107" text-anchor="middle" class="flow-lbl">六个工作表</text>
       <line x1="710" y1="90" x2="766" y2="90" stroke="#5fb87a" stroke-width="1.5" marker-end="url(#ar)"/>
       <line x1="840" y1="120" x2="840" y2="196" stroke="#e8b04b" stroke-width="1.5" marker-end="url(#ar)"/>
       <text x="848" y="160" class="flow-lbl">「剖面窗口」表</text>
@@ -233,18 +234,25 @@ footer .row{display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px}
 
 <!-- ============ 输出 ============ -->
 <section id="output" style="background:var(--bg2)"><div class="wrap">
-  <h2><span class="num">04</span>一份 Excel，五张表，先看三个数</h2>
-  <p class="sub">从逐点结果到标样质控再到逐深度剖面，全部参数可追溯。</p>
+  <h2><span class="num">04</span>一个批次两份文件，六张表，先看三个数</h2>
+  <p class="sub">一份 Excel 给人看（六张表），一份 <code>.handoff.json</code> 给程序读；
+    从逐点结果到标样质控再到逐深度剖面，全部参数可追溯。</p>
   <div class="outgrid rv">
     <div class="out"><h4>结果</h4><p>每行一个测点：计数率、三种体系年龄与 1σ/2σ、协和度、深度结构</p></div>
     <div class="out"><h4>标样QC</h4><p>主标与监控标样的加权平均年龄、MSWD、与推荐值的偏差</p></div>
     <div class="out"><h4>深度剖面域</h4><p>BIC 检出的年龄域：τ、年龄与 MSWD（与 ADEPT 同口径）</p></div>
+    <div class="out"><h4>不分域年龄</h4><p>把整段剥蚀当作一个域的年龄基准。与分域主域、整段积分三种口径并排，差额正好是「分域这一步」的贡献</p></div>
     <div class="out"><h4>剖面窗口</h4><p>逐窗口年龄剖面，列名按 ADEPT 输入约定对齐，可直接喂入</p></div>
     <div class="out"><h4>运行参数</h4><p>本次运行全部参数与被跳过的文件，半年后也能复现</p></div>
   </div>
   <div class="notebox rv">
     <b>三个数判断数据能不能用：</b>① 91500 偏差绝对值 &lt; 1%；② 监控标样 Ple 偏差绝对值 &lt; 3%；
     ③ 协和度落在 90–110% 的样品占比 &gt; 85%。三项都过，数据可用。
+  </div>
+  <div class="notebox rv">
+    <b>「不分域年龄」表不是一份年龄清单。</b>它把整个剥蚀段当成唯一一个域来算，
+    示例批次 48 个样品测点里只有 <b>5 个</b>与「整段只有一个年龄」相容；
+    其余的整段值是几个年龄的加权混合，<b>只能用于横向对比，不能定年</b>。要定年请看「深度剖面域」表。
   </div>
 </div></section>
 
@@ -266,7 +274,7 @@ adept(<span class="s">"EX2022A_U-Pb结果.xlsx"</span>,
 <section id="start" style="background:var(--bg2)"><div class="wrap">
   <h2><span class="num">06</span>快速开始</h2>
   <p class="sub">仓库里带着一个匿名示例批次（85 个测点），装好环境就能跑通。</p>
-  <pre><span class="c"># 跑一个批次，结果写成 Excel（五张表）</span>
+  <pre><span class="c"># 跑一个批次：Excel（六张表）+ 一份 .handoff.json（给程序读的质控交接）</span>
 python -m druid.cli.reduce_batch --dir examples/EX2022A --out 结果.xlsx
 
 <span class="c"># 秒级自检：不需要 pytest，只需要 numpy / pandas</span>
@@ -278,7 +286,7 @@ python tests/check_example_batch.py</pre>
     也可以双击「启动数据处理工具.bat」用网页界面，全程不需要命令行。</div>
   <div class="facts rv">
     <div class="fact"><div class="n">85</div><div class="d">示例测点随仓库发布，可复现文档中的每个数字</div></div>
-    <div class="fact"><div class="n">30</div><div class="d">项自检 + 真实批次的端到端数值回归</div></div>
+    <div class="fact"><div class="n">80</div><div class="d">项自检 + 真实批次的端到端数值回归</div></div>
     <div class="fact"><div class="n">4</div><div class="d">个平台 × Python 版本的 CI（含 Windows）</div></div>
   </div>
 </div></section>
@@ -306,7 +314,7 @@ python tests/check_example_batch.py</pre>
 <footer><div class="wrap">
   <div class="row">
     <div><b style="color:var(--txt)">DRUID</b> · Depth-Resolved U–Pb Isotope Data reduction<br>
-      LA-ICP-MS 锆石 U-Pb 定年数据还原 · v2.2.2 · 许可证 MIT</div>
+      LA-ICP-MS 锆石 U-Pb 定年数据还原 · v2.4.0 · 许可证 MIT</div>
     <div style="text-align:right">
       代码与数据：<a href="https://github.com/chengkaide/DRUID">github.com/chengkaide/DRUID</a><br>
       配套工具：<a href="https://github.com/chengkaide/ADEPT">ADEPT</a>（R 包，坪年龄与 MSWD 判定）
