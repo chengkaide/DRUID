@@ -51,9 +51,13 @@ from .core.constants import (
 from .core.geochronology import age68, age75, age76
 from .core.references import std_age, std_alias, std_ref
 from .core.statistics import external_scatter, robust_mask, weighted_mean
-from .depth.domains import merge_close, refine_domains, segment, summarize_segments
+from .depth.domains import (merge_close, refine_domains, segment,
+                            summarize_segments, whole_spot_stats)
 from .depth.fractionation import bracket_F, profile_ages
 from .depth.windows import window_profile, window_sums
+# 只取一个列名常量，不调用任何写盘函数：report 层不 import workflow
+# （鸭子类型），所以这条依赖是单向的。
+from .io.report import AGE68_COLUMN
 from .io.sequence import read_sequence, sequence_summary, spot_csv_path
 # 质控判定的阈值对象。放在这里是因为 AGENTS.md 的守则：可调参数集中在 BatchConfig，
 # 不许散落。`qc` 只依赖 `core`，所以 workflow → qc 不构成循环。
@@ -172,6 +176,11 @@ class BatchResult:
     # （Analysis / Time / Age68 / Age68_1s），可以直接写盘交给 R 端做
     # 加权平均与 MSWD，不需要转录或改列名。
     windows: pd.DataFrame = field(default_factory=pd.DataFrame)
+    # **不分域**的整段年龄，每行一个样品测点（**含均一点**，这是与 `domains`
+    # 最大的区别 —— `domains` 只收多域点，均一点在里面没有行，所以做不了
+    # 跨测点的横向对比）。表里把三种口径并排：不分域窗口加权平均、
+    # 分域主域、结果表的整段积分。
+    overall: pd.DataFrame = field(default_factory=pd.DataFrame)
 
 
 def _log(cfg: BatchConfig, msg: str) -> None:
@@ -576,14 +585,25 @@ def run_depth_analysis(spots, brack_for, ref68, sd68, cfg: BatchConfig):
 
     返回
     ----
-    (struct, domains, windows)
+    (struct, domains, windows, overall)
         struct  : 每个点的结构标签列表，如 "均一" / "多域(2)"，长度 = len(spots)
         domains : 多域点的各年龄域明细 DataFrame
         windows : 逐窗口年龄剖面，列名按 ADEPT 的 Format 4 对齐
+        overall : **不分域**的整段年龄，每行一个样品测点
+
+    `domains` 与 `overall` 的关系
+    -----------------------------
+        overall  每个样品测点一行，**不做任何分域** —— 整段一个数
+        domains  只收多域点，**分域之后**每个域一行
+
+    两者相减，差的就是"分域"这一步的全部贡献，中间不掺口径差异
+    （同一套窗口、同一个 F(τ)、同一个反比方差加权口径）。
+    均一点在 `domains` 里没有行，所以想做跨测点对比只能靠 `overall`。
     """
     struct: List[str] = []
     dom_rows: List[dict] = []
     win_rows: List[dict] = []
+    whole_rows: List[dict] = []
     plot_dir = cfg.plot_dir if cfg.plot else None
     pdf = None
     if cfg.plot:
@@ -610,6 +630,49 @@ def run_depth_analysis(spots, brack_for, ref68, sd68, cfg: BatchConfig):
         prof, segs, summ, tag = out
         struct.append(tag)
 
+        # ── 不分域：整段当作一个域，与域级完全同一口径 ──
+        # 刻意在分域结果之前算、且不读 segs/summ 任何一个数：它要回答的就是
+        # "不做分域会得到什么"，沾一点分域的信息就不再是那个问题的答案了。
+        ws = whole_spot_stats(prof)
+        dom = summ[summ["flag"] == "age domain"]
+        nd = len(dom)
+        if nd:
+            # 参照取"主域"＝窗口数最多的那个真年龄域（多域点上它就是主期次）
+            j = int(dom["n_win"].to_numpy().argmax())
+            dom_age = float(dom["age_Ma"].iloc[j])
+            dom_se = float(dom["se_1sig"].iloc[j])
+            dom_n = int(dom["n_win"].iloc[j])
+            dom_name = str(dom["domain"].iloc[j])
+        else:
+            dom_age = dom_se = float("nan")
+            dom_n = 0
+            dom_name = "—"
+        whole_rows.append(dict(
+            序号=int(tr.idx) + 1,
+            样品=tr.sample,
+            文件=Path(tr.path).stem,
+            深度结构=tag,
+            n_win=ws["n_win"],
+            tau范围=f"{ws['tau0']:.2f}-{ws['tau1']:.2f}",
+            年龄_Ma=ws["age_Ma"], s2_Ma=2 * ws["se_1sig"],
+            MSWD=ws["mswd"], MSWD_概率=ws["mswd_prob"],
+            相容上限=ws["mswd_crit"],
+            # "非常数"≠"有两个年龄域"。这里只做**统计**判定（MSWD 是否与
+            # 常数年龄模型相容）；而分域流程还额外要求**地质显著**
+            # （merge_close 的 ≥5% 判据，见 depth/domains.py）。
+            # 所以会出现"分域后是均一、整段却不是常数"的点 —— 那多半是
+            # 未完全校正的残余倾斜，不是两期事件。两者不是矛盾，是两级判据。
+            判定="整段常数" if ws["mswd_ok"] else "整段非常数",
+            漂移_Ma=ws["drift_Ma"],
+            域数=nd, 主域=dom_name,
+            主域年龄_Ma=dom_age, 主域s2_Ma=2 * dom_se, 主域n_win=dom_n,
+            # 不分域 − 主域。这个差就是"分域"这一步对这个测点做了什么：
+            # 接近 0 说明分域是多余的，差得远说明核边真的不同期。
+            Δ年龄_Ma=ws["age_Ma"] - dom_age,
+            Δ年龄_pct=((ws["age_Ma"] - dom_age) / dom_age * 100
+                     if np.isfinite(dom_age) and dom_age else np.nan),
+        ))
+
         # 逐窗口剖面：全部窗口都收，不只是多域点 —— 均一的点同样需要一个
         # 带不确定度的坪年龄。列名在这里就对齐 ADEPT 的 Format 4，
         # 下游不需要任何转录或改名。
@@ -635,10 +698,10 @@ def run_depth_analysis(spots, brack_for, ref68, sd68, cfg: BatchConfig):
             from .depth.figures import save_depth_figure
             png = plot_dir / f"{int(tr.idx) + 1:02d}_{tr.sample}_{tag}.png"
             save_depth_figure(prof, segs, title, png, summ=summ,
-                              with_207=False, pdf=pdf)
+                              with_207=False, pdf=pdf, whole=ws)
 
         # 多域的才写明细表，避免结果表里塞进一堆无信息的行
-        nd = int((summ["flag"] == "age domain").sum())
+        # （nd 在算不分域对照时已经数过，这里不再重复数一遍）
         if nd > 1:
             for _, s in summ.iterrows():
                 dom_rows.append(dict(
@@ -661,7 +724,8 @@ def run_depth_analysis(spots, brack_for, ref68, sd68, cfg: BatchConfig):
     # 防御：异常路径可能导致 struct 与结果行数不一致
     if len(struct) != len(spots):
         struct = struct[:len(spots)] + [""] * max(0, len(spots) - len(struct))
-    return struct, pd.DataFrame(dom_rows), pd.DataFrame(win_rows)
+    return (struct, pd.DataFrame(dom_rows), pd.DataFrame(win_rows),
+            pd.DataFrame(whole_rows))
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -886,11 +950,25 @@ def run_batch(cfg: BatchConfig) -> BatchResult:
         spots, variants, alt, ref68, cal["pmask"], cfg)
 
     # ⑨ 深度剖面
-    struct, domains, windows = run_depth_analysis(spots, brack_for, ref68, sd68, cfg)
+    struct, domains, windows, overall = run_depth_analysis(
+        spots, brack_for, ref68, sd68, cfg)
     res["深度结构"] = struct
     ns = int(res["深度结构"].str.startswith("多域").sum())
     _log(cfg, f"\n[4] 深度剖面结构判别：{ns} / "
               f"{int((res['类型'] == ROLE_LABEL_CN[ROLE_UNKNOWN]).sum())} 个样品测点检出多年龄域")
+
+    # 不分域对照表：把结果表里的"整段积分"并进去，三种口径同表可比。
+    # ⚠ 这里刻意用 AGE68_COLUMN（未做监控标样二次校正），不用 age68_column(res)：
+    # 窗口级 Age68 走的是 F(τ) 逐窗口校正、**没有**二次校正，对照列必须同一基准，
+    # 否则"不分域 vs 整段积分"的差里会混进一个整体缩放因子。
+    if not overall.empty:
+        overall["整段积分年龄_Ma"] = overall["序号"].map(
+            res.set_index("序号")[AGE68_COLUMN])
+        overall["Δ整段_pct"] = ((overall["年龄_Ma"] - overall["整段积分年龄_Ma"])
+                             / overall["整段积分年龄_Ma"] * 100)
+        n_ok = int((overall["判定"] == "整段常数").sum())
+        _log(cfg, f"    不分域整段年龄：{n_ok} / {len(overall)} 个测点与"
+                  f"『整段只有一个年龄』相容（其余只可用于横向对比，不可定年）")
 
     # ⑩ QC + 二次校正
     qc = build_qc_table(res, cfg)
@@ -910,4 +988,4 @@ def run_batch(cfg: BatchConfig) -> BatchResult:
         warning=uncal_note,
     )
     return BatchResult(results=res, qc=qc, domains=domains, info=info,
-                       spots=spots, windows=windows)
+                       spots=spots, windows=windows, overall=overall)

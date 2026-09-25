@@ -27,11 +27,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 class FakeResult:
     """够 `qc.assess_batch` / `handoff.build_payload` 用的最小替身。"""
 
-    def __init__(self, results, qc, info, windows):
+    def __init__(self, results, qc, info, windows, overall=None):
         self.results = results
         self.qc = qc
         self.info = info
         self.windows = windows
+        # 「不分域年龄」表。`None` 与"空表"都表示**没有这张表** ——
+        # 质控层对这两种情形有专门报法（不能读成 pass），所以两者都要能构造。
+        self.overall = pd.DataFrame() if overall is None else overall
 
 
 def make_windows(plan: dict) -> pd.DataFrame:
@@ -55,7 +58,7 @@ def make_windows(plan: dict) -> pd.DataFrame:
 def make_result(unknown=None, standards=None, mode="已校准",
                 sd68=0.011, sd76=0.036, corr=None, info_extra=None,
                 calibrate_column=True, rejected=None, skipped=None,
-                bulk="simple"):
+                bulk="simple", whole=None):
     """
     构造一个假 BatchResult。
 
@@ -63,6 +66,7 @@ def make_result(unknown=None, standards=None, mode="已校准",
     ----
     unknown : [{sample, age, conc, f206, u, struct, s1, ftau}]，每个 dict 一个样品测点。
               缺省字段有默认值。`struct` 用 "" / "均一" / "多域(2)"。
+              另外认三个只影响「不分域年龄」表的键：`whole_mswd` / `whole_ok` / `drift`。
     standards : [(名字, 角色, 点数, 参考年龄, 实测加权平均, MSWD)]；给 None 用一套
               "一切正常"的默认值。
     mode : 结果表 `校准状态` 列的值（"已校准" / "未校准"）。
@@ -71,11 +75,13 @@ def make_result(unknown=None, standards=None, mode="已校准",
     calibrate_column : 是否生成 `年龄206_238_QC校正` 列。
     rejected : info["rejected_primary"]
     skipped : info["skipped"]
+    whole : 「不分域年龄」表的行；None 表示按 unknown 自动生成一份"每个测点
+            整段都相容"的健康表（形状对，不代表数值真实）。测异常路径就自己传。
     """
     unk = unknown if unknown is not None else [
         dict(sample="S01", age=450.0), dict(sample="S02", age=455.0),
     ]
-    rows, win_plan = [], {}
+    rows, win_plan, whole_rows = [], {}, []
     for i, u in enumerate(unk, start=1):
         name = u["sample"]
         rows.append(dict(
@@ -95,6 +101,21 @@ def make_result(unknown=None, standards=None, mode="已校准",
             深度结构=u.get("struct", ""),
         ))
         win_plan[f"{i:02d} {name}"] = u.get("windows", [u["age"]] * 30)
+        # 「不分域年龄」表的一行。列名与 workflow 的产出对齐 ——
+        # 质控层与交接块都按这些列名取数，列名对不上会当场红。
+        struct = u.get("struct", "")
+        nd = 2 if struct.startswith("多域") else 1
+        whole_rows.append(dict(
+            序号=i, 样品=name, 文件=f"B_{i}", 深度结构=struct,
+            n_win=30, tau范围="0.00-1.00",
+            年龄_Ma=u["age"], s2_Ma=2 * u.get("s1", 3.0),
+            MSWD=u.get("whole_mswd", 1.0), MSWD_概率=0.5, 相容上限=1.5,
+            判定="整段常数" if u.get("whole_ok", True) else "整段非常数",
+            漂移_Ma=u.get("drift", 0.0),
+            域数=nd, 主域="D1", 主域年龄_Ma=u["age"], 主域s2_Ma=2 * u.get("s1", 3.0),
+            主域n_win=30, Δ年龄_Ma=0.0, Δ年龄_pct=0.0,
+            整段积分年龄_Ma=u["age"], Δ整段_pct=0.0,
+        ))
 
     # 标样行：只需要让 `类型` 计数正确，其余列给占位值
     n_prim = n_sec = 0
@@ -146,7 +167,9 @@ def make_result(unknown=None, standards=None, mode="已校准",
     if info_extra:
         info.update(info_extra)
 
-    return FakeResult(res, qc, info, make_windows(win_plan))
+    return FakeResult(res, qc, info, make_windows(win_plan),
+                      pd.DataFrame(whole_rows) if whole is None
+                      else pd.DataFrame(whole))
 
 
 def keyed(checks) -> dict:

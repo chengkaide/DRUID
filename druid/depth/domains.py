@@ -33,6 +33,29 @@ from ..core.statistics import chi2_sf, weighted_mean
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 〇、"常数年龄模型"的相容判据（全模块唯一定义）
+# ─────────────────────────────────────────────────────────────────────────────
+def mswd_acceptance(n_win: int, alpha: float = 2.0) -> float:
+    """
+    MSWD 的相容上限：低于它才认为"这一段只有一个年龄"。
+
+        MSWD ≤ 1 + α·√(2/(n−1))        （默认 α = 2，约 2σ）
+
+    为什么必须只有一份定义
+    ----------------------
+    这个式子原先在 `refine_domains`（默认参数 α=2.0）与 `summarize_segments`
+    （硬编码 `1.0 + 2.0*sqrt(...)`）里各写了一遍。两处一旦不一致，就会出现
+    "精修时认为这个域没问题、汇总时又把它标成过渡带"这种自相矛盾的结果，
+    而且**不报错**——只是某一个域莫名其妙被丢掉。现在两处都调这里。
+
+    ⚠ 这个判据用的是**窗口数** n，而窗口是重叠的（win/step > 1，
+    实测 ρ = 0.75），真实独立观测数比 n 小约一倍多。所以上限偏**宽松**：
+    方向是漏杀混合窗口，不会错杀真年龄域。详见 AGENTS.md「已知地雷」。
+    """
+    return 1.0 + alpha * np.sqrt(2.0 / max(int(n_win) - 1, 1))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 一、BIC 引导的二叉分割
 # ─────────────────────────────────────────────────────────────────────────────
 def _sse(a: np.ndarray, w: np.ndarray) -> float:
@@ -177,7 +200,7 @@ def refine_domains(prof: pd.DataFrame,
             mu, _, mswd, k = weighted_mean(a[lo:hi], s[lo:hi])
             if not np.isfinite(mswd):     # 只有 1 个点时 MSWD 无定义
                 continue
-            crit = 1.0 + alpha * np.sqrt(2.0 / max(k - 1, 1))
+            crit = mswd_acceptance(k, alpha)
             if mswd <= crit:              # 通过相容性检验 → 本域 OK
                 continue
             # 看看左右边界外侧各有一个候选窗口
@@ -285,7 +308,7 @@ def summarize_segments(prof: pd.DataFrame,
 
     for j, (lo, hi) in enumerate(segs):
         mu, se, mswd, k = weighted_mean(a[lo:hi], s[lo:hi])
-        crit = 1.0 + 2.0 * np.sqrt(2.0 / max(k - 1, 1))
+        crit = mswd_acceptance(k)
         interior = 0 < j < nseg - 1                      # 是否为中间段
         mixed = (interior and (k <= mixed_max_frac * n_tot or mswd > crit)) or (k < 3)
         # ADEPT 用 pf(mswd, k-1, Inf, lower.tail=FALSE)，等价于
@@ -308,3 +331,75 @@ def summarize_segments(prof: pd.DataFrame,
     df.loc[keep, "domain"] = [f"D{i + 1}" for i in range(int(keep.sum()))]
     df.loc[~keep, "domain"] = "—"
     return df
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 五、不分域：把整段当作一个域
+# ─────────────────────────────────────────────────────────────────────────────
+def whole_spot_stats(prof: pd.DataFrame, alpha: float = 2.0) -> dict:
+    """
+    **不分域**的整段年龄 —— 刻意不做 BIC 分割、不做边界精修、不做伪域合并，
+    把全部窗口当作一个域，用与域级**完全相同的口径**（反比方差加权平均 +
+    χ² 上尾）算出一个年龄。
+
+    它回答的不是"这个颗粒几岁"，而是：
+
+        "如果我不做任何分域，这个测点会报出什么？"
+
+    有了它，`剖面窗口`（逐窗口）→ 本函数（整段一个数）→「深度剖面域」
+    （分域后的各个数）就是一条完整可对照的链：**相邻两级之差，正好是那一级
+    处理步骤的全部贡献**，中间不掺任何口径差异。这也是它对"跨测点横向对比"
+    特别有用的原因 —— 全部测点走同一条路，不再有的点多一行、有的点没有行
+    （`深度剖面域` 只收多域点，均一点在里面是没有行的）。
+
+    ⚠ 读法（这条必须传到下游）
+    --------------------------
+    `mswd` 明显大于 1 时，这个年龄**不是任何一期地质事件的年龄**，而是几个
+    年龄按权重的混合值。实测示例批次（窗口 4 s / 步长 1 s）48 个样品测点里
+    只有 5 个（10%）的整段 MSWD ≤ 1.5，中位 4.4，最大的到 196：
+
+        mswd_ok 为真 → 整段确实只有一个年龄，这个数可以直接用；
+        mswd_ok 为假 → 只可用于横向对比，**不可用于定年**。
+
+    另有一个次要成因：窗口重叠让相邻窗口不独立，会把 MSWD 系统性压小一点。
+    所以这个判据偏宽松 —— 真报出 MSWD 大，那就一定更大。
+
+    参数
+    ----
+    prof  : window_profile 结果，需含 age68 / s_age68（即已经过 F(τ) 校正）
+    alpha : 相容判据的倍数，含义同 refine_domains，默认 2
+
+    返回
+    ----
+    dict，字段：
+        n_win     参与加权平均的窗口数（weighted_mean 已剔除 NaN 与非正 σ）
+        tau0/tau1 全部窗口的归一化深度范围
+        age_Ma    整段加权平均年龄
+        se_1sig   该均值的 1σ（**未**按 MSWD 膨胀，与域级表同口径、可直接相减）
+        mswd      加权偏差均方
+        mswd_prob 卡方上尾概率（与 ADEPT 的 MSWD probability 同口径）
+        mswd_crit 相容上限 = mswd_acceptance(n_win, alpha)
+        mswd_ok   整段是否与"单一常数年龄"相容
+        drift_Ma  末窗口 − 首窗口的年龄差，残余倾斜的直接度量
+    """
+    a = prof["age68"].to_numpy(float)
+    s = prof["s_age68"].to_numpy(float)
+    mu, se, mswd, k = weighted_mean(a, s)
+    crit = mswd_acceptance(k, alpha)
+    ok = bool(np.isfinite(mswd) and mswd <= crit)
+    # ADEPT 用 pf(mswd, k-1, Inf, lower.tail=FALSE)，等价于 chi2_sf(mswd*(k-1), k-1)
+    # —— **要乘 (k-1)**，与 summarize_segments 同一个口径。
+    prob = chi2_sf(mswd * (k - 1), k - 1) if k >= 2 else float("nan")
+    tau = prof["tau"].to_numpy(float)
+    # 漂移只用**参与加权平均的那批窗口**的首末，这样才能与 mswd 自洽
+    # （若首窗口的年龄是 NaN，直接取 a[0] 会得到一个假的 nan 漂移）
+    keep = np.isfinite(a) & np.isfinite(s) & (s > 0)
+    av = a[keep]
+    return dict(
+        n_win=k,
+        tau0=float(tau[0]) if tau.size else float("nan"),
+        tau1=float(tau[-1]) if tau.size else float("nan"),
+        age_Ma=mu, se_1sig=se,
+        mswd=mswd, mswd_prob=prob, mswd_crit=crit, mswd_ok=ok,
+        drift_Ma=float(av[-1] - av[0]) if av.size >= 2 else float("nan"),
+    )

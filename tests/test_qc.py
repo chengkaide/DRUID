@@ -292,8 +292,11 @@ def test_clean_names_pass():
 def test_check_keys_are_ascii_unique_and_stable():
     """
     下游按 key 分支，所以 key 必须：① 全 ASCII（下游可能是别的语言写的）；
-    ② 不重复；③ 是下面这份清单。**改这份清单等于改对外契约**，
-    改的时候必须同时升 druid.handoff 的 schema 版本。
+    ② 不重复；③ 是下面这份清单。
+
+    **增删检查项都要同步这份清单**（否则这里会红）。至于 `druid.handoff`
+    的 schema 版本：**只有改字段名 / 改语义 / 改类型才升**，增项属于兼容扩展
+    不升 —— 下游必须容忍未知的检查项（见 handoff.py 模块 docstring）。
     """
     k = keyed(assess_batch(make_result()))
     for key in k:
@@ -311,11 +314,69 @@ def test_check_keys_are_ascii_unique_and_stable():
         "samples.concordance", "samples.common_lead", "data.name_hygiene",
         "handoff.windows", "handoff.adept_dropout", "handoff.old_core_windows",
         "samples.multi_domain", "data.skipped_files", "samples.method_difference",
+        "samples.whole_spot", "samples.unresolved_structure",
     }
     missing = expected - set(k)
     extra = set(k) - expected
     assert not missing, f"少了检查项（下游在等它）：{sorted(missing)}"
-    assert not extra, f"多了未登记的检查项（请一并更新本清单与 schema 版本）：{sorted(extra)}"
+    assert not extra, f"多了未登记的检查项（请一并更新本清单）：{sorted(extra)}"
+
+
+def test_whole_spot_summary_is_an_info_with_the_compatibility_count():
+    """
+    「不分域整段年龄」的汇总条目是 **info**，不是 pass/warn ——
+    它汇报的是横向对比的统一基准与"有多少点的整段平均值本身有意义"，
+    不是好坏判断。数值必须来自表，不能在这里另算。
+    """
+    r = make_result(unknown=[
+        dict(sample="A", age=450.0, whole_ok=True),
+        dict(sample="B", age=460.0, whole_ok=False, whole_mswd=7.0),
+    ])
+    chk = keyed(assess_batch(r))["samples.whole_spot"]
+    assert chk.level == INFO, "这是信息项，不判好坏"
+    assert chk.data["n_spots"] == 2 and chk.data["n_compatible"] == 1
+    assert abs(chk.data["compatible_frac"] - 0.5) < 1e-12
+
+
+def test_whole_spot_flags_the_uniform_spots_that_are_not_constant():
+    """
+    「分域后仍报均一、整段却已非常数」的测点占比超阈值 → warn。
+
+    这一类必须在质控里报出来，因为它们在「深度剖面域」表里**没有行**
+    （那张表只收多域点），只看域表是发现不了的。`spots` 要能点出是谁。
+    """
+    r = make_result(unknown=[
+        dict(sample="U1", age=450.0, whole_ok=False, whole_mswd=6.0),
+        dict(sample="U2", age=451.0, whole_ok=False, whole_mswd=8.0),
+        dict(sample="U3", age=452.0, whole_ok=True, whole_mswd=1.1),
+    ])
+    chk = keyed(assess_batch(r))["samples.unresolved_structure"]
+    assert chk.level == WARN
+    assert chk.data["n_uniform"] == 3 and chk.data["n_unresolved"] == 2
+    assert len(chk.data["spots"]) == 2, "要点出是哪几个测点，不能只说个数"
+
+
+def test_whole_spot_never_reports_pass_when_the_table_is_missing():
+    """
+    没有这张表 ≠ 这张表没问题。两条都必须报 warn —— 报 pass 或报 0 都会被
+    下游读成"查过了、没问题"，而那正是最坏的误读。
+    """
+    k = keyed(assess_batch(make_result(whole=[])))     # 空表 = 与"没有这张表"同义
+    for key in ("samples.whole_spot", "samples.unresolved_structure"):
+        assert k[key].level == WARN, key
+        assert "无数据" in (k[key].title + k[key].observed), key
+
+
+def test_whole_spot_threshold_changes_only_the_verdict():
+    """与其它阈值一样：只改判词，`observed` 与 data 里的数值必须一字不变。"""
+    r = make_result(unknown=[dict(sample="U1", age=450.0, whole_ok=False),
+                             dict(sample="U2", age=451.0, whole_ok=True)])
+    base = keyed(assess_batch(r))["samples.unresolved_structure"]     # 1/2 = 50%，不算超
+    tight = keyed(assess_batch(r, None, QCThresholds(
+        unresolved_structure_frac_warn=0.1)))["samples.unresolved_structure"]
+    assert base.level == INFO and tight.level == WARN
+    assert base.observed == tight.observed
+    assert base.data["n_unresolved"] == tight.data["n_unresolved"]
 
 
 def test_checks_are_sorted_by_severity():

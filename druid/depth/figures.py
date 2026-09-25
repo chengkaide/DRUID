@@ -8,6 +8,7 @@ druid.depth.figures —— 深度剖面图
     │  年龄剖面（206Pb/238U ±2σ）                            │
     │  ＋ 207Pb/206Pb 叠加（可选）                           │
     │  ＋ 年龄域底色 ＋ 各域加权平均年龄的红线标注            │
+    │  ＋ 整段不分域加权平均的灰虚线（可选，横贯全段）         │
     ├──────────────────────────────────────────────────────┤
     │  238U 信号强度 —— 激光打到不同环带的直接指示            │
     ├──────────────────────────────────────────────────────┤
@@ -55,7 +56,8 @@ def make_depth_figure(prof: pd.DataFrame,
                       segs: Sequence[Tuple[int, int]],
                       title: str,
                       summ: Optional[pd.DataFrame] = None,
-                      with_207: bool = True):
+                      with_207: bool = True,
+                      whole: Optional[dict] = None):
     """
     绘制一个测点的深度剖面图。
 
@@ -66,6 +68,11 @@ def make_depth_figure(prof: pd.DataFrame,
     title     : 图标题
     summ      : summarize_segments 的输出，用于画每个域的平均年龄红线
     with_207  : 是否叠加 207Pb/206Pb（年轻锆石叠加只会增加混乱，可关掉）
+    whole     : whole_spot_stats 的输出。传了就在年龄栏叠加一条**横贯全段**的
+                灰虚线＝不分域加权平均。它与各域红线是同一套窗口、同一个 F(τ)、
+                同一个加权口径，**只差"分域"这一步**：所以虚线与红线分开的幅度，
+                就是分域这个动作在图上到底动了多少。落在两条红线之间的那种
+                （最常见）说明整段平均既不是核也不是边，是个混合值。
 
     返回
     ----
@@ -138,6 +145,19 @@ def make_depth_figure(prof: pd.DataFrame,
                            textcoords="offset points", fontsize=9,
                            color="#A32D2D", va="bottom", ha=ha, zorder=5)
 
+    # ── 不分域：整段加权平均，横贯全段的一条虚线 ──
+    # 与上面的域红线同一套窗口、同一个 F(τ)、同一个加权口径，只差"分域"这一步；
+    # 所以两线分开多少，就是分域这个动作在图上到底动了多少。
+    # 判据文字并进图例、不在轴内另加标注：实测（多域点与均一点各一试）
+    # 轴内任何位置都会压到数据点或误差棒 —— 曲线密的时候只有图例是空的。
+    if whole and np.isfinite(whole.get("age_Ma", np.nan)):
+        mu = float(whole["age_Ma"])
+        mswd = float(whole["mswd"])
+        ax[0].axhline(mu, color="#4A4A4A", lw=1.5, ls=(0, (6, 3)), zorder=3.5,
+                      label=f"整段不分域 {mu:.0f} Ma（MSWD {mswd:.3g}·"
+                            + ("整段常数" if whole.get("mswd_ok") else "整段非常数")
+                            + "）")
+
     ax[0].set_ylabel("年龄 (Ma)", fontsize=11)
     ax[0].set_title(title, fontsize=12)
     ax[0].legend(fontsize=9, loc="best", framealpha=0.9)
@@ -159,7 +179,7 @@ def make_depth_figure(prof: pd.DataFrame,
 
 def save_depth_figure(prof, segs, title, out_path, summ=None,
                       dpi: int = 140, with_207: bool = True,
-                      pdf=None) -> Path:
+                      pdf=None, whole=None) -> Path:
     """
     画完直接存盘并释放内存。
 
@@ -174,7 +194,7 @@ def save_depth_figure(prof, segs, title, out_path, summ=None,
           传入则同时把该图追加进多页 PDF。**推荐在循环里一边画一边写入 PDF
           并立即关闭**，避免几十个 Figure 同时驻留内存。
     """
-    fig = make_depth_figure(prof, segs, title, summ, with_207=with_207)
+    fig = make_depth_figure(prof, segs, title, summ, with_207=with_207, whole=whole)
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path, dpi=dpi, bbox_inches="tight")

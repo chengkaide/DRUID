@@ -366,6 +366,13 @@ def run_job(cfg: BatchConfig, task) -> None:
             summary["multi_domain"] = int(struct.str.startswith("多域").sum())
         # domains 可能为空（关掉了深度判别）
         summary["n_domains"] = 0 if result.domains is None else int(len(result.domains))
+        # 不分域（整段）口径：全部测点走同一条路。前端据此可以直接显示
+        # "48 个测点里 5 个的整段年龄能直接用"，不必让用户去翻表。
+        ov = getattr(result, "overall", None)
+        if ov is not None and not getattr(ov, "empty", True) and "判定" in ov.columns:
+            summary["n_whole_spot"] = int(len(ov))
+            summary["whole_spot_compatible"] = int(
+                (ov["判定"].astype(str) == "整段常数").sum())
         task.summary = summary
     except Exception as e:                           # noqa: BLE001
         # 摘要算失败不应该让整个任务失败 —— Excel 已经写好了

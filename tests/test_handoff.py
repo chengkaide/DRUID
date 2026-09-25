@@ -33,11 +33,13 @@ from druid.io.handoff import (                                       # noqa: E40
     ADEPT_INPUT, SCHEMA, build_payload, default_path, export_handoff,
 )
 
-#: 顶层键集合。**改这里等于改对外契约**，改的时候要一起升 SCHEMA。
+#: 顶层键集合。**增删都要同步这里**，否则 `test_top_level_keys_are_stable`
+#: 会红。但注意：`druid.handoff` 的 schema 版本**只在做破坏性改动时才升**
+#: （改字段名 / 改语义 / 改类型），增字段属于兼容扩展，不升 —— 见 handoff.py。
 TOP_KEYS = {
     "schema", "generated_at", "tool", "batch", "verdict", "config", "counts",
-    "conventions", "calibration", "standards", "samples", "checks", "handoff",
-    "intentionally_omitted",
+    "conventions", "calibration", "standards", "samples", "whole_spot",
+    "checks", "handoff", "intentionally_omitted",
 }
 
 #: 每个样品允许出现的键。**故意没有加权平均年龄** —— 见模块 docstring。
@@ -223,6 +225,38 @@ def test_adept_block_agrees_with_the_dropout_check():
 # ═════════════════════════════════════════════════════════════════════════════
 # 路径与写盘
 # ═════════════════════════════════════════════════════════════════════════════
+def test_whole_spot_block_lists_every_spot_with_a_compatibility_flag():
+    """
+    每个样品测点都要有一行 —— 这正是它与 `samples`（岩样级描述统计）
+    以及「深度剖面域」表（只收多域点）的区别。`mswd_compatible` 把
+    "这个整段平均值能不能用"变成可机读的布尔量，下游不必自己猜阈值。
+    """
+    p = build_payload(None, make_result(unknown=[
+        dict(sample="A", age=450.0, whole_ok=True),
+        dict(sample="B", age=1150.0, struct="多域(2)", whole_ok=False,
+             whole_mswd=50.0),
+    ]), version="2.4.0")
+    w = p["whole_spot"]
+    assert w["n_spots"] == 2
+    assert w["n_compatible"] == 1 and abs(w["compatible_frac"] - 0.5) < 1e-12
+    assert [d["sample"] for d in w["per_spot"]] == ["A", "B"]
+    a, b = w["per_spot"]
+    assert a["mswd_compatible"] is True and b["mswd_compatible"] is False
+    assert b["n_domains"] == 2
+    assert isinstance(a["age_ma"], float) and a["age_ma"] == 450.0
+    # 键名一律 ASCII（下游可能是任何语言写的），中文只出现在说明性字符串里
+    for d in w["per_spot"]:
+        assert all(k.isascii() for k in d), sorted(d)
+    # numpy 标量与 NaN 两个序列化坑对每个块都适用，这里也要过一遍
+    _strict_load(json.dumps(p, ensure_ascii=False, allow_nan=False))
+
+
+def test_whole_spot_block_is_empty_when_the_table_is_absent():
+    """没有这张表就给空 dict —— 不要顺手编一份出来（编的那份没人知道是假的）。"""
+    p = build_payload(None, make_result(whole=[]), version="2.4.0")
+    assert p["whole_spot"] == {}
+
+
 def test_default_path_sits_next_to_the_excel():
     class _C:
         out_excel = Path("D:/out/BATCH_U-Pb结果.xlsx")

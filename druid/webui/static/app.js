@@ -325,6 +325,13 @@ function renderOutputs(s) {
     if (sm.multi_domain !== undefined && sm.n_samples) {
       cards.push(['多年龄域样品', `${sm.multi_domain} / ${sm.n_samples}`, '']);
     }
+    // 不分域（整段）口径：全部测点同一条路。只有 0 个可用才标红 ——
+    // 多数批次本来就会有相当比例的混合点（核边结构），那不是异常。
+    if (sm.n_whole_spot) {
+      cards.push(['不分域年龄可用',
+                  `${sm.whole_spot_compatible} / ${sm.n_whole_spot}`,
+                  sm.whole_spot_compatible > 0 ? '' : 'bad']);
+    }
     $('stats').hidden = false;
     $('stats').innerHTML = cards.map(([k, v, c]) =>
       `<div class="stat"><div class="k">${esc(k)}</div><div class="v ${c}">${esc(v)}</div></div>`).join('');

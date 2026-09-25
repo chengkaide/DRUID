@@ -13,6 +13,8 @@ from .domains import (
     refine_domains,
     merge_close,
     summarize_segments,
+    mswd_acceptance,
+    whole_spot_stats,
 )
 from .figures import (
     make_depth_figure,
@@ -23,5 +25,6 @@ __all__ = [
     "window_edges", "window_profile", "window_sums",
     "bracket_F", "profile_ages", "profile_ages_76", "compare_fractionation",
     "segment", "refine_domains", "merge_close", "summarize_segments",
+    "mswd_acceptance", "whole_spot_stats",
     "make_depth_figure", "save_depth_figure",
 ]

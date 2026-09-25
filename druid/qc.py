@@ -108,6 +108,13 @@ class QCThresholds:
     f206_warn_pct: float = 2.0               # 普通铅占比高于此值算"高"
     f206_warn_frac: float = 0.10             # 高于该值的测点占比超过此值 → warn
 
+    # ── 不分域（整段）口径 ──
+    # "分域后判为均一、但整段的 MSWD 已经拒绝了常数年龄模型"的测点占比。
+    # 实测示例批次 10/15（67%）—— 这一类在「深度剖面域」表里**没有行**
+    # （那张表只收多域点），所以不看「不分域年龄」表就永远发现不了。
+    # 0.5：超过一半就值得停下来看一眼，而不是继续往下交。
+    unresolved_structure_frac_warn: float = 0.50
+
     # ── 计数率匹配（基体效应）──
     # 5 倍：单点线性归一化在这个量级上还过得去，再大就会留下明显的非线性残差。
     count_rate_ratio_warn: float = 5.0
@@ -865,6 +872,99 @@ def _check_samples(result, cfg, th, out: List[Check]) -> None:
         collide={k: v for k, v in collide.items()}))
 
 
+def _check_whole_spot(result, cfg, th, out: List[Check]) -> None:
+    """
+    **不分域（整段）口径**的两条检查项。
+
+    为什么值得单独一组
+    ------------------
+    「深度剖面域」表只收多域点 —— 均一点在里面**没有行**。所以只看那张表，
+    "分域之后仍然只报均一、而整段的 MSWD 其实已经拒绝了常数年龄模型"这类
+    测点是看不见的。`overall`（不分域年龄表）把**全部**测点按同一口径列出来，
+    下面两件事才变得可见：
+
+        ① 有多少测点的整段年龄可以直接用（与常数年龄模型相容）；
+        ② 有多少测点在分域之后仍带着未解决的结构 —— 它们给出的"年龄"
+           要么是几个年龄的加权混合值，要么是被残余倾斜拉出来的数。
+
+    ⚠ 本组是**只读**的：所有数值都取自 depth 层已经算好的 `overall` 表，
+    这里一个数都不重算。质检层一旦开始自己算年龄，就会出现"报告里的数
+    和表里的数不一样"，而且没人知道该信哪个。
+    """
+    ov = getattr(result, "overall", None)
+    if ov is None or getattr(ov, "empty", True):
+        # 缺数据既不能报 pass 也不能报 0 —— 两种都会被下游读成"没问题"。
+        out.append(_mk(
+            "samples.whole_spot", WARN, "不分域整段年龄：无数据",
+            observed="结果对象里没有「不分域年龄」表",
+            criterion="该表由 depth 层产出；缺失时本组检查项无法进行",
+            detail="若用的是旧版结果对象、或本次运行跳过了深度分析，这张表"
+                   "本来就不存在。**不要把这一条读成『通过』。**"))
+        out.append(_mk(
+            "samples.unresolved_structure", WARN, "分域未解决的结构：无数据",
+            observed="结果对象里没有「不分域年龄」表",
+            criterion="同上", detail="缺数据不等于没问题。"))
+        return
+
+    mswd_s, verdict_s = _col(ov, "MSWD"), _col(ov, "判定")
+    if mswd_s is None or verdict_s is None:
+        out.append(_mk(
+            "samples.whole_spot", WARN, "不分域整段年龄：列缺失",
+            observed="「不分域年龄」表里没有 MSWD / 判定 列",
+            criterion="该表应按固定列名产出（见 io/report.export_batch）",
+            detail="缺列说明产出方与质控层对表的定义已经不一致，"
+                   "**同样不要读成通过**。"))
+        out.append(_mk(
+            "samples.unresolved_structure", WARN, "分域未解决的结构：列缺失",
+            observed="同上", criterion="同上", detail="缺列不等于没问题。"))
+        return
+
+    mswd = pd.to_numeric(mswd_s, errors="coerce")
+    is_const = verdict_s.astype(str) == "整段常数"
+    n_total = int(len(ov))
+    n_ok = int(is_const.sum())
+    frac_ok = (n_ok / n_total) if n_total else float("nan")
+    mswd_med = _finite(mswd.median())
+    mswd_max = _finite(mswd.max())
+    d_bulk = pd.to_numeric(_col(ov, "Δ整段_pct"), errors="coerce")
+    age = pd.to_numeric(_col(ov, "年龄_Ma"), errors="coerce")
+    out.append(_mk(
+        "samples.whole_spot", INFO, "不分域整段年龄：跨测点的统一口径基准",
+        observed=f"{n_ok} / {n_total} 个测点与『整段只有一个年龄』相容"
+                 f"（{_pct(frac_ok * 100)}），中位 MSWD "
+                 + (f"{mswd_med:.2f}" if mswd_med is not None else "—"),
+        criterion="信息项：这条不判好坏 —— 它给出的是横向对比的**统一基准**，"
+                  "以及有多少点的整段平均值本身有意义",
+        detail="相容的测点，整段年龄可以直接用；不相容的是几个年龄的加权"
+               "混合值，只能用于跨测点对比，**不能当定年结果**。"
+               "逐点数值见「不分域年龄」表。",
+        n_spots=n_total, n_compatible=n_ok, compatible_frac=frac_ok,
+        mswd_median=mswd_med, mswd_max=mswd_max,
+        age_median=_finite(age.median()),
+        delta_vs_bulk_pct_median=_finite(d_bulk.median())))
+
+    # ② 分域之后仍报均一、但整段已经非常数 —— 只看域表发现不了的那一类
+    n_dom = pd.to_numeric(_col(ov, "域数"), errors="coerce")
+    uni = (n_dom == 1) if n_dom is not None else pd.Series(False, index=ov.index)
+    n_uni = int(uni.sum())
+    bad = ov[uni & ~is_const]
+    n_bad = int(len(bad))
+    frac_bad = (n_bad / n_uni) if n_uni else float("nan")
+    lv = WARN if (n_bad and frac_bad > th.unresolved_structure_frac_warn) else INFO
+    labels = [f"{int(r['序号'])} {r['样品']}" for _, r in bad.head(8).iterrows()]
+    out.append(_mk(
+        "samples.unresolved_structure", lv,
+        "分域后仍报『均一』、但整段已不是常数年龄的测点",
+        observed=f"{n_bad} / {n_uni} 个均一测点的整段 MSWD 拒绝了常数模型"
+                 f"（{_pct(frac_bad * 100)}）",
+        criterion=f"占比 ≤ {_pct(th.unresolved_structure_frac_warn * 100)}",
+        detail="这些点在「深度剖面域」表里**没有行**，只看域表是发现不了的。"
+               "多为未完全校正的残余倾斜，也可能是 σext 偏小 —— 用"
+               "「不分域年龄」表的 Δ年龄_pct 与逐点剖面图确认，"
+               "别直接把它们的整段年龄当定年结果。",
+        n_uniform=n_uni, n_unresolved=n_bad, frac=frac_bad, spots=labels))
+
+
 def _check_handoff(result, cfg, th, out: List[Check]) -> None:
     """
     ⑤ 交接给 ADEPT 会发生什么 —— 这一组是本模块存在的主要理由。
@@ -1079,6 +1179,7 @@ def assess_batch(result, cfg=None, thresholds: Optional[QCThresholds] = None) ->
     _check_standards(result, cfg, th, out)
     _check_uncertainty(result, cfg, th, out)
     _check_samples(result, cfg, th, out)
+    _check_whole_spot(result, cfg, th, out)
     _check_handoff(result, cfg, th, out)
     _check_process(result, cfg, th, out)
 

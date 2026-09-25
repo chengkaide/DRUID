@@ -137,6 +137,15 @@ def _summary_lines(result) -> list:
         conc = unk["协和度_pct"]
         lines.append(f"    协和度：中位 {conc.median():.1f}%，"
                      f"落在 90–110% 的占 {(conc.between(90, 110)).mean():.0%}")
+    # 不分域（整段）口径 —— 全部测点走同一条路，跨测点对比就靠它。
+    # getattr 容错：旧版结果对象（或测试里伪造的）没有 overall 这个字段。
+    ov = getattr(result, "overall", None)
+    if ov is not None and not getattr(ov, "empty", True) and "判定" in ov.columns:
+        n_ok = int((ov["判定"].astype(str) == "整段常数").sum())
+        lines.append(
+            f"    不分域整段年龄：{n_ok}/{len(ov)} 个测点与『整段只有一个年龄』"
+            f"相容，中位 MSWD {ov['MSWD'].median():.2f}"
+            f"（其余仅可用于横向对比，不可定年）")
     return lines
 
 
@@ -193,7 +202,8 @@ def main(argv=None) -> int:
     print("\n" + "=" * 72)
     print(f"[7] 结果已写出：{out_path}")
     print(f"    结果 {len(result.results)} 行 / QC {len(result.qc)} 行 "
-          f"/ 多域明细 {len(result.domains)} 行")
+          f"/ 多域明细 {len(result.domains)} 行 "
+          f"/ 不分域年龄 {len(getattr(result, 'overall', []))} 行")
     for line in _summary_lines(result):
         print(line)
     if handoff_path is not None:

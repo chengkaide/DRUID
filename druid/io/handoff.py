@@ -302,6 +302,79 @@ def _block_samples(result, th: QCThresholds) -> List[Dict[str, object]]:
     return out
 
 
+def _block_whole_spot(result) -> Dict[str, object]:
+    """
+    **不分域（整段）口径**的数据块。
+
+    为什么交接文件里必须有它
+    ------------------------
+    `samples` 块给的是"每个岩样各测点的描述统计"，回答不了"把每个测点当整体
+    看时它几岁"；`handoff.adept` 块管的只是喂给 ADEPT 的那张窗口表。
+    跨测点做**同口径**横向对比（哪个测点需要分域、分域前后差多少），
+    缺的就是这一块：每行一个样品测点，全部走同一条处理路径。
+
+    ⚠ `mswd_compatible` 为 false 的行，`age_ma` 是几个年龄的加权混合值
+    （示例批次 48 个测点里有 43 个如此），**不可当作定年结果**，只能用于对比。
+    这也正是它有用的地方：它把"这个测点能不能用一个数代表"变成了一个
+    可机读的布尔量，下游不必自己看着 MSWD 猜阈值。
+    """
+    ov = getattr(result, "overall", None)
+    if ov is None or getattr(ov, "empty", True):
+        return {}
+    cols = ov.columns
+    # (交接名, 表里的中文列名)。中文列名只出现在这一处映射里 —— 键名一律
+    # ASCII 是模块级约定（下游可能是任何语言写的）。
+    key_map = [
+        ("i", "序号"), ("sample", "样品"), ("n_windows", "n_win"),
+        ("age_ma", "年龄_Ma"), ("age_ma_2s", "s2_Ma"),
+        ("mswd", "MSWD"), ("mswd_prob", "MSWD_概率"), ("drift_ma", "漂移_Ma"),
+        ("n_domains", "域数"), ("main_domain", "主域"),
+        ("main_domain_age_ma", "主域年龄_Ma"),
+        ("delta_vs_main_domain_pct", "Δ年龄_pct"),
+        ("bulk_age_ma", "整段积分年龄_Ma"),
+        ("delta_vs_bulk_pct", "Δ整段_pct"),
+    ]
+    int_keys = {"i", "n_windows", "n_domains"}
+    # ⚠ 字符串列必须显式列出来，**不能靠 `_f()` 兜底** —— `_f("S01")` 不抛异常，
+    # 它安静地返回 None，"样品" 就整列变成 null 了（下游按样品名找测点会
+    # 一个也找不到）。这个坑是 `test_whole_spot_block_lists_every_spot_...`
+    # 抓出来的。
+    str_keys = {"sample", "main_domain"}
+    per_spot: List[Dict[str, object]] = []
+    for _, r in ov.iterrows():
+        d: Dict[str, object] = {}
+        for out_name, cn in key_map:
+            if cn not in cols:
+                continue
+            v = r[cn]
+            if out_name in int_keys:
+                d[out_name] = int(v)
+            elif out_name in str_keys:
+                d[out_name] = str(v)
+            else:
+                d[out_name] = _f(v)
+        d["mswd_compatible"] = bool(str(r.get("判定", "")) == "整段常数")
+        per_spot.append(d)
+    n_ok = sum(1 for d in per_spot if d["mswd_compatible"])
+    mswd_med = (_f(pd.to_numeric(ov["MSWD"], errors="coerce").median())
+                if "MSWD" in cols else None)
+    return {
+        "what": "把整个剥蚀段当作一个域、不做任何分域时算出的年龄；"
+                "所有样品测点走同一条处理路径，用于跨测点的横向对比。",
+        "source": "druid.depth.domains.whole_spot_stats",
+        "definition": "全部窗口的年龄按 1/σ² 加权平均，与「深度剖面域」同一套窗口、"
+                      "同一个 F(τ)、同一个加权口径 —— 两级之差正好是『分域』"
+                      "这一步的贡献，中间不掺口径差异。",
+        "not_a_dating_result_when": "mswd_compatible 为 false（该年龄是几个年龄的"
+                                    "加权混合值，不代表任何一期事件）",
+        "n_spots": len(per_spot),
+        "n_compatible": n_ok,
+        "compatible_frac": (n_ok / len(per_spot)) if per_spot else None,
+        "mswd_median": mswd_med,
+        "per_spot": per_spot,
+    }
+
+
 def _block_handoff(checks) -> Dict[str, object]:
     """
     交接块。**信息全部取自质控检查项**，不在这里重算 ——
@@ -384,6 +457,9 @@ def build_payload(cfg, result, checks: Optional[Sequence] = None,
         "calibration": _block_calibration(cfg, result, checks),
         "standards": _block_standards(result),
         "samples": _block_samples(result, th),
+        # 不分域（整段）口径的逐测点数值。与 `samples`（岩样级描述统计）
+        # 和 `handoff.adept`（喂给 ADEPT 的窗口表）都不同，互不替代。
+        "whole_spot": _block_whole_spot(result),
         "checks": [c.as_dict() for c in checks],
         "handoff": _block_handoff(checks),
         # 这个字段是给"拿到 JSON 就开始算"的流程看的：说清楚哪些量**故意没给**。

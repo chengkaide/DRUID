@@ -107,13 +107,22 @@ def write_excel(out_path, sheets: dict, freeze_header: bool = True) -> Path:
 
 def export_batch(cfg, result, version: str = "") -> Path:
     """
-    把 run_batch 的结果落成标准四表 Excel。
+    把 run_batch 的结果落成标准五表 Excel。
 
     为什么要单独拎出来
     ------------------
     命令行（cli.reduce_batch）和网页界面（webui）都需要"跑完之后写出同样的表"。
     如果两边各写一遍，早晚会出现"命令行跑的表多一列、网页跑的表少一列"
     这种最让人困惑的不一致。落盘逻辑必须只有一份。
+
+    五张表及其分工
+    --------------
+        结果        逐点一行：比值、三个年龄体系、协和度、质控量
+        标样QC      每个标样一行：加权平均 vs 参考值
+        深度剖面域   **分域之后**每个域一行（只含多域点，均一点没有行）
+        不分域年龄   **不分域**每个样品测点一行（含均一点）——三种口径可比
+        剖面窗口    逐窗口年龄剖面，列名按 ADEPT Format 4 对齐（交给 R 端）
+        运行参数    本次运行的全部可调参数 + 被跳过的文件
 
     这里刻意**没有 import workflow**：只要传入的对象带 results/qc/domains/info
     四个属性即可（鸭子类型），因此不存在循环依赖，写层的单元测试也好做。
@@ -128,6 +137,14 @@ def export_batch(cfg, result, version: str = "") -> Path:
     }
     if result.domains is not None and not getattr(result.domains, "empty", True):
         sheets["深度剖面域"] = result.domains.round(3)
+    # 不分域年龄：每行一个样品测点（**含均一点**），三种口径并排。
+    # 与「深度剖面域」同一套窗口、同一个 F(τ)、同一个反比方差加权口径，
+    # 只差"分域"这一步 —— 所以两张表可以直接相减，读出来的就是分域做了什么。
+    # 用 getattr 而不是 result.overall：写层对 BatchResult 只做鸭子类型，
+    # 老的（或测试里伪造的）结果对象没有这个字段时也不能崩。
+    overall = getattr(result, "overall", None)
+    if overall is not None and not getattr(overall, "empty", True):
+        sheets["不分域年龄"] = overall.round(3)
     # 逐窗口年龄剖面。列名按 ADEPT 的 Format 4 对齐
     # （Analysis / Time / Age68 / Age68_1s），这张表可以直接交给 R 端
     # 做加权平均与 MSWD。

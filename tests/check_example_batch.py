@@ -22,6 +22,9 @@
    区间从 420~644 撑成 333~1044 Ma。
 3. **行数与角色分布**：序列表有没有被正确解析（顺带覆盖 CSV 版序列表）。
 4. **深度结构分布**：域判别的结果，改动 BIC / MSWD 判据会立刻反映到这里。
+5. **不分域（整段）口径**：整段加权平均的年龄与"与常数模型相容"的测点数。
+   这条不经过分域，是**独立于第 4 条**的另一条判据：两者一起变，说明问题在
+   更上游（归一化、外部重现性）；只有一条变，说明问题就在那一层。
 
 改了算法就有数字变化是正常的 —— 那时候要**重新确认基线并更新这里的常量**，
 而不是把容差放宽。容差放宽等于把这个检查废掉。
@@ -36,7 +39,8 @@ sys.path.insert(0, str(ROOT))
 BATCH = ROOT / "examples" / "EX2022A"
 
 # ── 基线（2026-09-19 由 examples/EX2022A 实跑得到，与真实批次逐格一致）──────
-ROWS = {"结果": 83, "标样QC": 2, "深度剖面域": 91, "剖面窗口": 1677}
+ROWS = {"结果": 83, "标样QC": 2, "深度剖面域": 91, "剖面窗口": 1677,
+        "不分域年龄": 48}
 ROLES = {"样品": 48, "主标": 21, "监控标样": 14}
 QC = {                       # 标样 -> (加权平均年龄 Ma, 偏差 %)
     "91500": (1059.7543, -0.2490),
@@ -45,6 +49,12 @@ QC = {                       # 标样 -> (加权平均年龄 Ma, 偏差 %)
 AGE = {"中位": 458.0686, "5%": 420.1799, "95%": 643.5333}   # 只统计样品
 CONC = {"中位": 101.3006, "90-110%占比": 0.9375}
 STRUCT = {None: 35, "多域(2)": 18, "均一": 15, "多域(3)": 15}
+# 不分域（整段）口径 —— 2.4.0 新增的那条路径：整段加权平均 + MSWD 相容判定。
+# 它不经过 BIC 分域，所以动 `whole_spot_stats` / `mswd_acceptance` /
+# `weighted_mean` 都会立刻反映到这里。首点锚（S01）是防"全员同步偏移"
+# 这类从分布上看不出来的变化。
+WHOLE = {"行数": 48, "整段常数": 5, "MSWD中位": 4.4376,
+         "首点年龄": 459.0069, "首点主域": 453.8410}
 
 TOL_AGE = 1e-3         # Ma。基线是从导出的 xlsx 里取的（导出时 round(4)），
                        # 内存里的完整精度与之可能差 1e-4 量级，所以留 1e-3。
@@ -92,7 +102,7 @@ def main() -> int:
     print("=== 行数 ===")
     for name, want in ROWS.items():
         got = {"结果": len(res), "标样QC": len(qc), "深度剖面域": len(dom),
-               "剖面窗口": len(win)}[name]
+               "剖面窗口": len(win), "不分域年龄": len(result.overall)}[name]
         check(f"{name} 行数", got, want)
 
     print()
@@ -147,6 +157,25 @@ def main() -> int:
         if k is None:
             continue
         check(k, int(vc.get(k, 0)), want)
+
+    print()
+    print("=== 不分域（整段）口径 ===")
+    ov = result.overall
+    if getattr(ov, "empty", True):
+        # 空表必须判失败：它是"深度分析根本没跑"的信号，
+        # 而不是"这批数据没问题"。
+        bad.append("不分域年龄表是空的 —— 深度分析没跑到？")
+        print("  FAIL 不分域年龄表为空")
+    else:
+        check("行数（= 样品测点数）", len(ov), WHOLE["行数"])
+        is_const = ov["判定"].astype(str) == "整段常数"
+        check("整段常数测点数", int(is_const.sum()), WHOLE["整段常数"])
+        check("MSWD 中位", round(float(ov["MSWD"].median()), 4),
+              WHOLE["MSWD中位"], 1e-3)
+        check("首点整段年龄 (Ma)", round(float(ov["年龄_Ma"].iloc[0]), 4),
+              WHOLE["首点年龄"], TOL_AGE)
+        check("首点主域年龄 (Ma)", round(float(ov["主域年龄_Ma"].iloc[0]), 4),
+              WHOLE["首点主域"], TOL_AGE)
 
     print()
     if bad:
