@@ -26,8 +26,11 @@ LA-ICP-MS 锆石 U-Pb 数据还原工具。把 Qtegra/iCAP 导出的 cps 时间�
   有测试钉着）
 - 仓库布局：`druid/` 代码 · `examples/EX2022A/` 示例批次（85 个测点，样品名
   匿名成 `S01`…`S48`，标样保留）· `tests/` 自检 · `docs/` 文档站（四份页面）·
-  `tools/` 文档图的生成脚本与**可重算的数字测量脚本**
-  （`gen_docs_split_figure.py` 画三联图、`window_scale_facts.py` 量窗口尺度）
+  `tools/` 四个只读脚本 —— 入口都是 `python tools/<脚本>.py --help`：
+  `gen_docs_split_figure.py`（画落地页三联图并注入）·
+  `window_scale_facts.py`（量窗口尺度）·
+  `ref_value_impact.py`（91500 各口径档差多大，见 §10）·
+  `age_hist_by_sample.py`（按样品名分画幅画年龄分布柱状图，读现成的结果表即可）
 - Python 层：**只有 numpy / pandas / matplotlib / openpyxl / xlrd**。
   **没有 scipy** —— 年龄方程的不动点迭代、二分法、卡方上尾概率都是自己实现的，
   这不是疏漏而是设计：不依赖会变的第三方行为。
