@@ -22,7 +22,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "druid"
-version = "2.5.0"
+version = "2.6.0"
 description = "LA-ICP-MS 锆石 U-Pb 同位素数据还原工具（DRUID）"
 readme = "README.md"
 requires-python = ">=3.9"

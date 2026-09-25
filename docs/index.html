@@ -39,7 +39,7 @@
   "description": "把 Qtegra/iCAP 导出的 LA-ICP-MS 原始计数率时间序列还原为带不确定度的锆石 U-Pb 年龄、标样质控表与逐深度年龄剖面，「剖面窗口」表可直接交给 ADEPT 判定坪年龄与 MSWD。",
   "url": "https://chengkaide.github.io/DRUID/",
   "codeRepository": "https://github.com/chengkaide/DRUID",
-  "softwareVersion": "2.5.0",
+  "softwareVersion": "2.6.0",
   "applicationCategory": "ScienceApplication",
   "applicationSubCategory": "Geochronology",
   "operatingSystem": "Windows, Linux, macOS (Python ≥ 3.9)",
@@ -358,7 +358,7 @@ footer .row{display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px}
 <a class="skip" href="#main">跳到正文</a>
 
 <nav aria-label="主导航"><div class="wrap">
-  <div class="logo">DR<b>UI</b>D<small>v2.5.0</small></div>
+  <div class="logo">DR<b>UI</b>D<small>v2.6.0</small></div>
   <div class="links">
     <a href="#docs">文档</a><a href="#why">它做什么</a><a href="#principles">设计原则</a>
     <a href="#output">输出</a><a href="#gate">三个数</a><a href="#adept">ADEPT 接口</a>
@@ -385,7 +385,7 @@ footer .row{display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px}
     <span class="badge">网页界面 <i>纯标准库</i>，无 npm 无构建</span>
     <span class="badge">CI <i>4 平台 × Python 版本</i></span>
     <span class="badge">自检 <i>80 项</i> + 端到端数值回归</span>
-    <span class="badge">质控 <i>25 条检查项</i>，含机读交接文件</span>
+    <span class="badge">质控 <i>26 条检查项</i>，含机读交接文件</span>
   </div>
   <div class="cta">
     <a class="btn pri" href="#start">快速开始</a>
@@ -876,7 +876,7 @@ footer .row{display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px}
     </div>
     <div class="filecard">
       <div class="fn2">EX2022A_U-Pb结果.handoff.json</div>
-      <p>给程序读的<b>质控交接</b>：25 条带稳定 key 的检查项、四级结论、以及本次运行的完整参数。</p>
+      <p>给程序读的<b>质控交接</b>：26 条带稳定 key 的检查项、四级结论、以及本次运行的完整参数。</p>
       <p style="color:var(--faint);font-size:13px">下游按 <code>key</code> 分支，不要按标题文字匹配——文字会改，key 不会。</p>
     </div>
   </div>
@@ -1044,7 +1044,7 @@ python tests/check_example_batch.py</pre>
 <footer><div class="wrap">
   <div class="row">
     <div><b style="color:var(--txt)">DRUID</b> · Depth-Resolved U–Pb Isotope Data reduction<br>
-      LA-ICP-MS 锆石 U-Pb 定年数据还原 · v2.5.0 · 许可证 MIT</div>
+      LA-ICP-MS 锆石 U-Pb 定年数据还原 · v2.6.0 · 许可证 MIT</div>
     <div style="text-align:right">
       代码与数据：<a href="https://github.com/chengkaide/DRUID">github.com/chengkaide/DRUID</a><br>
       配套工具：<a href="https://github.com/chengkaide/ADEPT">ADEPT</a>（R 包，坪年龄与 MSWD 判定）

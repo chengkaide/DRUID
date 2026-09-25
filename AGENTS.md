@@ -232,6 +232,38 @@ workflow.py  编排层：BatchConfig 集中所有可调参数 + 十步 run_batch
    而窗口是重叠的（ρ=0.75），真实独立观测数比它小 ⇒ 判据偏**宽松**，
    方向是漏杀混合窗口、不会错杀真域。这个方向是刻意选的，别去"修正"它。
 
+### 年龄用途声明（A-13）的三条硬约束
+
+`qc.py` 的 `uncertainty.claim_scope` 回答的是**另一个问题**：前面每条检查各管一个
+事实（校准了没有、σext 是实测还是假设），而下游真正要问的是「**这批年龄我能拿它
+干什么**」。这个区别在**没有监控标样的批次**上最要紧（桂北：样品仓限制放不下 Ple）
+—— 绝对年龄的**数值**照样可用（它是主标归一化出来的，值本身不含 σext），
+但**误差棒**里有一块是写死的假设值。把两件事说成一句"这批判 warn"就把区别抹平了，
+实际后果是有人拿误差棒去论证「两个年龄在误差内一致」。
+
+判据是两根轴，各自单一门槛，不做加权：
+
+| 用途（claim id） | 门槛 |
+|---|---|
+| `relative_ordering` / `relative_age_comparison` | 只要本批有样品测点就成立，与 σext 无关 |
+| `absolute_age_value` | 校准状态 = 已校准 |
+| `absolute_age_uncertainty` | σext 是**本批实测**、且未触保护上下限（0.3% / 5%） |
+
+1. **它是派生的，所以不判 fail。** 一个数都不算，只把前面已报出的事实翻译成一张
+   「用途清单」。最严重的等级由原始条目承担（未校准时 `calibration.mode` 就是 fail），
+   这里再判一次只会让 `counts[fail]` 虚高、`headline` 把同一件事说两遍。
+2. **`reasons` 指回责任检查项的 key，理由不重述。** 每一项限制都带
+   `claim id → 责任检查项 key`（例如 `absolute_age_uncertainty →
+   uncertainty.sigma_ext_source`）。同一项主张可以被不同的病挡下（σext 是假设值 /
+   σext 触边界），**reasons 必须指向各自那一条**，否则下游会去查错地方。
+3. **`detail` 按实际原因分派。** 不能写成"没有监控标样"那一个故事的通用说明 ——
+   未校准也走这条分支，而那句话在那时是假的（那种批次往往**有**监控标样）。
+   `tests/test_qc.py` 的结构性测试要求每个 `reasons` 里的 key 都在 `detail` 里露过面，
+   漏一支会当场红（这个守护在本条落地时抓到过两处真缺口）。
+
+下游按 key 分支时**只读 `data`**（`usable_for` / `not_usable_for` / `reasons`），
+不要解析 `observed`。
+
 ## 6. 改动守则
 
 1. **物理常量只允许在 `core/constants.py` 出现一次。** 同一个衰变常数写两处，
@@ -493,7 +525,9 @@ Mud Tank（732.0 → 731.65 Ma），未列出的标样（如 Temora1）不受影
 1. **未校正列** `年龄206_238` 随口径平移（最大 0.83 Ma）—— 主标 QC 用的正是这一列；
 2. **无监控标样的批次**（如桂北：样品仓放不下 Ple）拿不到二次校正的吸收，
    这份平移**原封留在报出值里**（0.1–1.2 Ma）→ 这类批次必须写明用的哪一档；
-   qc 层对此给两条 WARN（`calibration.secondary_spots`、`uncertainty.sigma_ext_source`）；
+   qc 层对此给三条 WARN（`calibration.secondary_spots`、`uncertainty.sigma_ext_source`、
+   以及 `uncertainty.claim_scope` —— 最后这条把「值可用、误差棒不可用」写成机读的
+   用途清单，见 §5「年龄用途声明」）；
 3. **2026-09-25 之前的旧结果与新结果不可直接比** —— 并排读之前先确认是不是同一档，
    不然统一用 `--ref-preset repo` 重跑一次旧档。
 

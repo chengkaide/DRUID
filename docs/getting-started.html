@@ -51,7 +51,7 @@
       "about": {
         "@type": "SoftwareApplication",
         "name": "DRUID",
-        "softwareVersion": "2.5.0",
+        "softwareVersion": "2.6.0",
         "applicationCategory": "ScienceApplication"
       },
       "license": "https://opensource.org/licenses/MIT"
@@ -192,7 +192,7 @@
 
 <h1>DRUID 上手指南</h1>
 <p class="sub">从零跑通第一批 LA-ICP-MS 锆石 U-Pb 数据 —— 不需要任何编程经验</p>
-<p class="meta">对应 DRUID 2.5.0　·　2026-09-25　·　文中所有示例数字都来自仓库自带的示例批次 <code>examples/EX2022A</code>，可以自己跑出来核对</p>
+<p class="meta">对应 DRUID 2.6.0　·　2026-09-25　·　文中所有示例数字都来自仓库自带的示例批次 <code>examples/EX2022A</code>，可以自己跑出来核对</p>
 
 <div class="lead">
   <p style="margin:0 0 10px"><b>这份文档要解决的事</b>：你手上有一台 iCAP 仪器导出的 Qtegra 数据，想知道它给出的年龄能不能信、怎么写进文章。</p>
@@ -597,7 +597,7 @@ MSWD 与它的卡方概率都在同一口径上算，与 R 端 ADEPT 完全一�
 <pre><code>EX2022A_U-Pb结果.xlsx         ← 给人看（六张表）
 EX2022A_U-Pb结果.handoff.json ← 给程序看（质控结论 + 交接约定）</code></pre>
 
-<p>它把这一批数据的<b>判断</b>写成了机器能读的形式：25 条带稳定 key 的检查项、每条一个结论
+<p>它把这一批数据的<b>判断</b>写成了机器能读的形式：26 条带稳定 key 的检查项、每条一个结论
 （<code>fail</code> / <code>warn</code> / <code>info</code> / <code>pass</code>），以及"这批数据交给下游时会掉哪些测点、为什么"。</p>
 
 <p>平时用不到它，可以不管；但如果你要写脚本<b>批量汇总多个批次</b>，或者以后接一个自动解释工具，
@@ -829,7 +829,7 @@ EX2022A_U-Pb结果.handoff.json ← 给程序看（质控结论 + 交接约定�
 它们的口径与容差写在 <code>AGENTS.md</code> 的基线表里，改动算法时那张表会一起被检查。</p>
 
 <footer>
-  <p>DRUID 上手指南　·　对应版本 2.5.0　·　单文件自包含，离线可开</p>
+  <p>DRUID 上手指南　·　对应版本 2.6.0　·　单文件自包含，离线可开</p>
   <p>想深入原理：<code>docs/from-first-principles.html</code>（从放射性衰变讲到 MSWD，10 张图）　·　
      想知道两个工具怎么对接：<code>docs/druid-adept-dataflow.html</code></p>
 </footer>

@@ -65,6 +65,22 @@ FAIL, WARN, INFO, PASS = "fail", "warn", "info", "pass"
 LEVEL_ORDER = {FAIL: 0, WARN: 1, INFO: 2, PASS: 3}
 LEVEL_LABEL_CN = {FAIL: "不通过", WARN: "有前提", INFO: "说明", PASS: "通过"}
 
+#: 「本批年龄能用来做什么」的声明 id。**是契约**：下游按 id 分支，不要改字面量。
+#:
+#: 口径分两根轴 —— 「值」（年龄数值本身可不可信）与「不确定度」（误差棒能不能
+#: 用来论证一致性）。两者**不共命运**，这是这个表存在的全部理由：
+#: 没有监控标样的批次（如桂北），值照样能用，只有误差棒失去依据。
+#: 合成一句话报出去，就把这个区别抹平了。
+#:
+#: 只保留"会让下游做出不同决定"的四项。加一项的成本不只是这里几行，
+#: 还有以后每次都要读它。
+CLAIM_IDS = {
+    "relative_ordering": "批内按年龄排序、划分相对早晚",
+    "relative_age_comparison": "同一批、同一口径下的相对年龄对比",
+    "absolute_age_value": "把绝对年龄数值对外引用",
+    "absolute_age_uncertainty": "用年龄的误差棒论证两个年龄一致",
+}
+
 
 # ═════════════════════════════════════════════════════════════════════════════
 # 阈值
@@ -1141,6 +1157,114 @@ def _check_process(result, cfg, th, out: List[Check]) -> None:
         method_alt=alt.split("_")[-1], median_pct=med))
 
 
+def _check_claim_scope(result, cfg, th, out: List[Check]) -> None:
+    """
+    ⑦ **本批年龄「能用来做什么、不能用来做什么」** —— 把使用限制写成机读的。
+
+    为什么需要这一条
+    ----------------
+    前面每条检查各管一个事实：校准了没有、σext 是实测还是假设。但下游真正要问的
+    是另一句话 —— **这批年龄我能拿它干什么** —— 而这句话现在要靠人把几条 WARN
+    在脑子里拼起来。`verdict.level` 也帮不上忙：`warn` 既可能是「标样偏差略大、
+    不影响结论」，也可能是「误差棒里有一块根本是假设、结论要改口径」，
+    两者同一个等级，下游按等级分支就会把后者当噪音放过。
+
+    最典型的是**没有监控标样的批次**（桂北：样品仓限制放不下 Ple）：
+    绝对年龄的**数值**照样可用（它是主标归一化出来的，值本身不含 σext），
+    但**误差棒**里有一块是写死的假设值。说成一句「这批判 warn」就把区别抹平了，
+    实际后果是有人拿误差棒去论证「两个年龄在误差内一致」。
+
+    判据（两根轴，各自单一门槛，不做加权）
+    --------------------------------------
+        相对口径（排序 / 批内比较）   只要本批有样品测点就成立，与 σext 无关
+        绝对年龄的**值**              要求 校准状态 = 已校准
+        绝对年龄的**误差棒**          要求 σext 是**本批实测**、且未触保护上下限
+
+    为什么这里**不判 fail**
+    -----------------------
+    本条是**派生**的：它一个数都不算，只把前面几条已经报出来的事实翻译成一张
+    「用途清单」，并在 `reasons` 里指回**责任检查项的 key**（理由不在本条重述）。
+    最严重的等级由原始条目承担 —— 未校准时 `calibration.mode` 本身就是 fail，
+    这里再判一次只会让 `counts[fail]` 虚高、`headline` 把同一件事说两遍。
+    """
+    res = result.results
+    roles = _col(res, "类型")
+    n_unknown = int((roles == ROLE_LABEL_CN[ROLE_UNKNOWN]).sum()) if roles is not None else 0
+
+    mode_col = _col(res, "校准状态")
+    calibrated = bool(mode_col is not None and len(mode_col)
+                      and str(mode_col.iloc[0]) == "已校准")
+
+    # σext 的来源与是否触边界：与 `_check_uncertainty` 同一套判法。这里刻意各写
+    # 一遍而不去引用那一条的结论 —— 两条检查服务的对象不同：那条说「这个数从哪
+    # 来」，这条说「据此能主张什么」；耦合起来会让改动一处牵动另一处的措辞。
+    n_sec = int((roles == ROLE_LABEL_CN[ROLE_SECONDARY]).sum()) if roles is not None else 0
+    if cfg.sigma_ext68 is not None or cfg.sigma_ext76 is not None:
+        src = "forced"
+    elif n_sec:
+        src = "measured"
+    else:
+        src = "assumed"
+
+    sd68, sd76 = _finite(result.info.get("sd68")), _finite(result.info.get("sd76"))
+    bound = []
+    for label, v in (("206/238", sd68), ("207/206", sd76)):
+        if v is not None and (abs(v - EXTERNAL_SCATTER_LO) < 1e-12
+                              or abs(v - EXTERNAL_SCATTER_HI) < 1e-12):
+            bound.append(label)
+
+    # {claim id: None ＝ 可用；否则是**责任检查项的 key**}
+    scope: Dict[str, Optional[str]] = {cid: None for cid in CLAIM_IDS}
+    if not n_unknown:
+        # 没有样品测点就不存在"可解释的年龄"，四项全部不成立。
+        for cid in scope:
+            scope[cid] = "samples.present"
+    elif not calibrated:
+        scope["absolute_age_value"] = "calibration.mode"
+        scope["absolute_age_uncertainty"] = "calibration.mode"
+    elif src != "measured":
+        scope["absolute_age_uncertainty"] = "uncertainty.sigma_ext_source"
+    elif bound:
+        scope["absolute_age_uncertainty"] = "uncertainty.sigma_ext_bound"
+
+    usable = [c for c in CLAIM_IDS if scope[c] is None]
+    blocked = {c: r for c, r in scope.items() if r}
+    listed = "、".join(f"「{CLAIM_IDS[c]}」" for c in blocked)
+    # ⚠ `detail` 必须按**实际挡下它的原因**分派，不能写成「没有监控标样」那一个
+    # 故事的通用说明 —— 未校准也走这条分支，而那句话在那时是假的：它跟 σext 无关，
+    # 而且那种批次往往**有**监控标样。（本函数第一版就是这么写的，实跑出来才发现。）
+    # `tests/test_qc.py` 的结构性测试会检查每个 reason 都在 `detail` 里露过面，
+    # 所以这里漏一支会当场红，不会静默留一句错话。
+    why = []
+    if "samples.present" in blocked.values():
+        why.append("本批没有样品测点，不存在可解释的年龄（见 `samples.present`）。")
+    if "calibration.mode" in blocked.values():
+        why.append("未校准时 F=1，年龄只作相对参考 —— 连绝对年龄的**数值**都不成立"
+                   "（见 `calibration.mode`），误差棒更不必说。")
+    if "uncertainty.sigma_ext_source" in blocked.values():
+        why.append("没有监控标样时，绝对年龄的数值照样是主标归一化出来的（值本身不含"
+                   " σext），但误差棒里有一块是写死的假设值 —— 于是用它论证『两个年龄"
+                   "在误差内一致』没有依据（见 `uncertainty.sigma_ext_source`）。")
+    if "uncertainty.sigma_ext_bound" in blocked.values():
+        why.append("σext 触到了保护上下限，它表示的是一个缺口而不是一个测出来的量"
+                   "（见 `uncertainty.sigma_ext_bound`）。")
+    why.append("`reasons` 给出每一项限制的责任检查项 key，理由不在本条重述；"
+               "下游按 key 分支时**只读 `data`**，不要解析 `observed`。")
+    out.append(_mk(
+        "uncertainty.claim_scope", PASS if not blocked else WARN,
+        ("本批年龄的各项用途均成立" if not blocked
+         else f"本批年龄有使用限制，不可用于{listed}"),
+        observed=(f"可用 {len(usable)}/{len(CLAIM_IDS)} 项"
+                  + (f"、不可用 {len(blocked)} 项" if blocked else "")),
+        criterion="相对口径要求有样品测点；绝对年龄的『值』要求已校准；"
+                  "绝对年龄的『误差棒』要求 σext 为本批实测且未触保护边界",
+        detail="" if not blocked else "".join(why),
+        usable_for=usable, not_usable_for=list(blocked), reasons=dict(blocked),
+        labels=dict(CLAIM_IDS), n_claims=len(CLAIM_IDS),
+        calibrated=calibrated, n_unknown=n_unknown,
+        sigma_ext_source=src, sigma_ext_bound=bound))
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # 主入口
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1188,6 +1312,8 @@ def assess_batch(result, cfg=None, thresholds: Optional[QCThresholds] = None) ->
     _check_whole_spot(result, cfg, th, out)
     _check_handoff(result, cfg, th, out)
     _check_process(result, cfg, th, out)
+    # 放在最后：它是对前面全部事实的**派生汇总**（用途清单），自己不判事实。
+    _check_claim_scope(result, cfg, th, out)
 
     # 排序：先按严重程度，同级别按 key 字典序（保证同一份输入永远同一顺序，
     # 否则 diff 出来的报告会到处是无意义的行序变化）。

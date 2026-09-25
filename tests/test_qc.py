@@ -152,6 +152,106 @@ def test_sigma_ext_bound_is_flagged():
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+# 使用范围声明：把「这批年龄能用来干什么」写成机读的（A-13）
+#
+# 为什么单独一组：前面每条检查各管一个事实，而下游真正要问的是另一句话。
+# 这组测试钉住的是**事实与主张之间的翻译**，翻译错了不会有任何数值变化。
+# ═════════════════════════════════════════════════════════════════════════════
+def test_claim_scope_separates_value_from_uncertainty_without_a_monitor_standard():
+    """
+    桂北那类批次（样品仓放不下 Ple）的核心事实：**年龄的值能用、误差棒不能用**。
+
+    把这两件事合并成一句「这批判 warn」就把区别抹平了，实际后果是有人拿误差棒
+    去论证「两个年龄在误差内一致」。所以这里同时钉住两件相反的事：
+    不可用的那一项在 `not_usable_for` 里，**可用的那一项必须在 `usable_for` 里**
+    —— 后者才是这条检查真正的价值（它告诉你还剩什么）。
+    """
+    r = make_result(standards=[("91500", "主标", 5, 1062.4, 1059.75, 0.51)])
+    chk = keyed(assess_batch(r))["uncertainty.claim_scope"]
+    assert chk.level == WARN
+    d = chk.data
+    assert d["not_usable_for"] == ["absolute_age_uncertainty"]
+    assert "absolute_age_value" in d["usable_for"], "值本身不含 σext，不该被连坐"
+    assert d["reasons"]["absolute_age_uncertainty"] == "uncertainty.sigma_ext_source"
+    assert d["sigma_ext_source"] == "assumed"
+    assert d["n_unknown"] == 2 and d["calibrated"] is True
+
+
+def test_claim_scope_is_pass_when_sigma_ext_is_measured():
+    """有监控标样（默认 fixture 带 Ple 3 点）→ 四项全成立，显式报 pass 而不是省略。"""
+    chk = keyed(assess_batch(make_result()))["uncertainty.claim_scope"]
+    assert chk.level == PASS
+    assert chk.data["not_usable_for"] == []
+    assert len(chk.data["usable_for"]) == chk.data["n_claims"] == 4
+    assert chk.data["sigma_ext_source"] == "measured"
+
+
+def test_claim_scope_bound_sigma_ext_blocks_the_same_claim_for_a_different_reason():
+    """
+    「σext 是写死的假设值」与「σext 触了保护上下限」是两个不同的病，但挡的是
+    同一项主张。`reasons` 必须指向**各自**的责任检查项 —— 都指到 source 那一条
+    就等于把第二个病说成了第一个，下游去查会查错地方。
+    """
+    from druid.core.statistics import EXTERNAL_SCATTER_HI
+
+    d = keyed(assess_batch(make_result(sd76=EXTERNAL_SCATTER_HI)))[
+        "uncertainty.claim_scope"].data
+    assert d["sigma_ext_source"] == "measured", "默认批次的 σext 是实测的"
+    assert d["not_usable_for"] == ["absolute_age_uncertainty"]
+    assert d["reasons"]["absolute_age_uncertainty"] == "uncertainty.sigma_ext_bound"
+    assert d["sigma_ext_bound"], "触边界的通道要点出来"
+
+
+def test_claim_scope_without_calibration_blocks_every_absolute_claim():
+    """
+    未校准时 F=1，年龄只作相对参考 —— 连绝对年龄的**值**都不成立，误差棒更不必说。
+    但相对口径（排序 / 批内比较）仍然成立，不能一并抹掉。
+    另外这里钉住「本条不判 fail」：fail 由 `calibration.mode` 承担，
+    重复判一次只会让 counts[fail] 虚高、headline 把同一件事说两遍。
+    """
+    checks = assess_batch(make_result(mode="未校准"))
+    k = keyed(checks)
+    d = k["uncertainty.claim_scope"].data
+    assert set(d["usable_for"]) == {"relative_ordering", "relative_age_comparison"}
+    for cid in ("absolute_age_value", "absolute_age_uncertainty"):
+        assert d["reasons"][cid] == "calibration.mode", cid
+    assert k["calibration.mode"].level == FAIL
+    assert k["uncertainty.claim_scope"].level == WARN
+
+
+def test_claim_scope_partitions_completely_and_reasons_point_at_real_checks():
+    """
+    结构性守护，抓两种改坏：
+    ① 加了新 claim 却忘了在判据里给它一个去处（清单会分不干净）；
+    ② `reasons` 里写错 key —— 下游按 key 取值会**静默**拿到空，不会报错，
+       这种错只有在这里才抓得住。顺带要求被指到的条目本身确实是 WARN/FAIL
+       （指到一条 pass 等于说「这个限制没有理由」，那是自相矛盾）。
+    """
+    from druid.qc import CLAIM_IDS
+
+    cases = {
+        "有监控标样": make_result(),
+        "无监控标样": make_result(standards=[("91500", "主标", 5, 1062.4, 1059.75, 0.51)]),
+        "未校准": make_result(mode="未校准"),
+        "只有标样没有样品": make_result(unknown=[]),
+    }
+    for label, r in cases.items():
+        k = keyed(assess_batch(r))
+        d = k["uncertainty.claim_scope"].data
+        assert sorted(d["usable_for"] + d["not_usable_for"]) == sorted(CLAIM_IDS), label
+        assert not (set(d["usable_for"]) & set(d["not_usable_for"])), label
+        assert set(d["reasons"]) == set(d["not_usable_for"]), label
+        for cid, ref in d["reasons"].items():
+            assert ref in k, f"{label}：{cid} 指到了不存在的检查项 {ref}"
+            assert k[ref].level in (WARN, FAIL), f"{label}：{cid} 的理由 {ref} 并不严重"
+            # `detail` 是按原因分派的散文。漏写一支的症状是**一句与事实不符的解释**
+            # （第一版就把「没有监控标样」写成了通用说明，未校准时是假话），
+            # 所以这里要求每个 reason 都在 detail 里露过面。
+            assert ref in k["uncertainty.claim_scope"].detail, \
+                f"{label}：{cid} 的理由 {ref} 在 detail 里没交代"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 # 参考值自洽性：把上游未决的口径变成一条带数值的检查
 # ═════════════════════════════════════════════════════════════════════════════
 def test_reference_self_consistency_flags_the_91500_anchor():
@@ -320,6 +420,7 @@ def test_check_keys_are_ascii_unique_and_stable():
         "reference.self_consistency",
         "uncertainty.sigma_ext_source", "uncertainty.sigma_ext_bound",
         "uncertainty.count_rate_match", "uncertainty.secondary_correction",
+        "uncertainty.claim_scope",
         "samples.concordance", "samples.common_lead", "data.name_hygiene",
         "handoff.windows", "handoff.adept_dropout", "handoff.old_core_windows",
         "samples.multi_domain", "data.skipped_files", "samples.method_difference",
