@@ -55,6 +55,9 @@ from .depth.domains import merge_close, refine_domains, segment, summarize_segme
 from .depth.fractionation import bracket_F, profile_ages
 from .depth.windows import window_profile, window_sums
 from .io.sequence import read_sequence, sequence_summary, spot_csv_path
+# 质控判定的阈值对象。放在这里是因为 AGENTS.md 的守则：可调参数集中在 BatchConfig，
+# 不许散落。`qc` 只依赖 `core`，所以 workflow → qc 不构成循环。
+from .qc import QCThresholds
 from .reduction.ratios import reduce_interval
 from .reduction.trace import Tra, load_spot, window_mask
 
@@ -102,6 +105,11 @@ class BatchConfig:
     plot: bool = False                   # 是否生成逐点深度剖面图
     plot_dir: Optional[str] = None       # 图件目录
     verbose: bool = True                 # 是否打印进度
+
+    # ── 质控判定阈值（`druid.qc.assess_batch` 用）──
+    # 这些是**判断**的门槛，不参与任何数值计算：改它们只会改变"结论怎么措辞 /
+    # 报不报警"，不会改变算出来的年龄。默认值的出处在 QCThresholds 的注释里。
+    qc_thresholds: QCThresholds = field(default_factory=QCThresholds)
 
     # ── 内部派生 ──
     _out_dir: Path = field(default=None, repr=False)

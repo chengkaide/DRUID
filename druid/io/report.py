@@ -18,6 +18,28 @@ from pathlib import Path
 
 import pandas as pd
 
+# ── 样品年龄该取哪一列 ──
+# 结果表里有两套年龄：`年龄206_238`（只做外标归一化）与
+# `年龄206_238_QC校正`（再乘了监控标样的基体匹配系数）。报告"样品年龄"时应当
+# 优先用后者 —— 但**必须先判断该列在不在**，不能写成
+# `res.get("年龄206_238_QC校正", unk["年龄206_238"])`：
+# `DataFrame.get(key)` 拿到的是**整表**那一列，不是筛选后的子表，
+# 于是 43 个标样测点会混进"样品年龄"统计（中位 458.1 被抬到 460.9、
+# 5–95% 区间从 420~644 撑成 333~1044 Ma）。这个错在 CLI 与 webui 里
+# **各自发生过一次**，所以现在只有这一处定义。
+AGE68_COLUMN = "年龄206_238"
+AGE68_QC_COLUMN = "年龄206_238_QC校正"
+
+
+def age68_column(res: pd.DataFrame) -> str:
+    """
+    报告"样品年龄"时应当取哪一列。
+
+    有二次校正列就用它（那是最终交付口径），否则退回未校正列。
+    只返回**列名**，取值一律由调用方从自己的子表里取 —— 两步分开，别再合成一步。
+    """
+    return AGE68_QC_COLUMN if AGE68_QC_COLUMN in res.columns else AGE68_COLUMN
+
 
 def _auto_width(series: pd.Series, header: str) -> int:
     """

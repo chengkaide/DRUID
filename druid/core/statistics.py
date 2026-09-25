@@ -169,7 +169,16 @@ def robust_mask(v, k=3.0):
     return np.abs(v - med) <= k * mad, med
 
 
-def external_scatter(values, sigmas, lo=0.003, hi=0.05):
+#: 外部重现性估计的上下限保护。
+#: `external_scatter()` 在"监控标样不足 2 个"时返回**下限**、在散度算爆时返回**上限**
+#: ——也就是说这两个值表示的**不是一个测出来的量，而是一个缺口**。
+#: 下游（`druid.qc`）据此把"σext 取到了边界"报成一条质控项，所以这两个数
+#: 必须有唯一定义，不能同时写在函数默认值和质控模块里各一份。
+EXTERNAL_SCATTER_LO = 0.003
+EXTERNAL_SCATTER_HI = 0.05
+
+
+def external_scatter(values, sigmas, lo=EXTERNAL_SCATTER_LO, hi=EXTERNAL_SCATTER_HI):
     """
     由监控标样的实测散度估计 **外部重现性**（相对，1σ）。
 

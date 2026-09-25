@@ -162,16 +162,36 @@ python tests/check_example_batch.py
 
 ```
 core/        纯计算，无 I/O，可单独 import 测试   ← 谁都不依赖
-io/          读写：Qtegra CSV、序列 LIST、Excel 报表
+io/          读写：Qtegra CSV、序列 LIST、Excel 报表、质控交接 JSON
 reduction/   单点还原：装载、剥蚀段识别、同位素比值与 jackknife
 depth/       深度剖面：滑窗、F(τ) 分馏校正、BIC 年龄域判别、出图
+qc.py        质控判定：assess_batch(result) → list[Check]（只依赖 core，无 I/O）
 webui/       网页界面（任务管理 / 业务层 / HTTP 层 / 静态页）
 cli/         只做参数解析
 workflow.py  编排层：BatchConfig 集中所有可调参数 + 十步 run_batch
 ```
 
 **依赖只朝一个方向流**：`core ← io ← reduction ← depth ← workflow`。
+`qc` 只依赖 `core`（不依赖 io/reduction/depth），所以 `workflow` 能用它而不成环。
 想改算法去 `core`/`reduction`；想改流程顺序去 `workflow`。
+
+### 质控层（2.3.0 新增）的两条硬约束
+
+`druid/qc.py` 是「这批数据能不能用」的**唯一判定出处**，命令行与网页界面都调它。
+它是给下游程序（自动化质控 / 解释流程）读的，所以：
+
+1. **只读取、不重算。** 所有数值都取自 `run_batch()` 的产出
+   （`results` / `qc` / `windows` / `info`），这里绝不重新推导年龄。
+   质检层一旦开始算数，就会冒出「报告里的数和表里的数不一样」这种最难查的问题。
+2. **key 是契约，title 是给人看的。** 下游按 `key` 分支，不按标题文字匹配
+   （文字会改，key 不会）。**改 key = 改对外契约**，要升
+   `druid.io.handoff.SCHEMA`；增字段不算破坏性改动，不升。
+   `tests/test_qc.py` / `tests/test_handoff.py` 钉住键集合，改名会当场红。
+
+阈值全部集中在 `qc.QCThresholds`（frozen dataclass），可由
+`BatchConfig.qc_thresholds` 覆盖。**不要在检查项函数里写魔法数字** ——
+那会让"同一件事有两套阈值"。改阈值只改判词、不改任何 `observed` 数值，
+`tests/test_qc.py` 有一条测试专门钉这个。
 
 ## 6. 改动守则
 
@@ -260,6 +280,15 @@ adept("<批次>_U-Pb结果.xlsx",
 四个都不可省：一个 `_1s` 列说明不了剥蚀窗口在哪里结束，ADEPT 刻意不猜。
 
 **`_1s` 是 1σ，不是 2σ。** 结果表里 `s68_1sig` 与 `s68_2sig` 并列，拿错那列 MSWD 差 4 倍。
+
+**喂之前先看 `handoff.json` 的 `handoff.adept` 块。** 它会告诉你哪几个测点交给
+ADEPT 会被**静默丢掉**（`Age68 >= 1000 Ma` 的老核、或可用窗口不足 10 个的短采 ——
+ADEPT 输出一行年龄全 NA 的空行、不画图、不报错），以及每个是为什么。
+实测这套预测与本工具记录的真实掉点逐点一致（6 个真实批次，17/17）。
+
+**统计成功率时不要只数 ADEPT 的坪表。** `res$summary` 是一行一个坪（掉点的测点
+不出现），`res$full` 才是一行一个 PELT 段（掉点留一行年龄全 NA 的空行）。
+只数 `summary` 会把成功率算虚高。
 
 ## 9. 术语对照
 

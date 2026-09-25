@@ -26,8 +26,10 @@ from typing import Any, Dict, List, Optional
 
 from .. import __version__
 from ..core.constants import ROLE_LABEL_CN, ROLE_PRIMARY, ROLE_SECONDARY, ROLE_UNKNOWN
-from ..io.report import export_batch
+from ..io.handoff import export_handoff
+from ..io.report import age68_column, export_batch
 from ..io.sequence import read_sequence, sequence_summary, spot_csv_path
+from ..qc import assess_batch, summary_lines, verdict
 from ..reduction.trace import load_spot
 from ..workflow import BatchConfig, run_batch
 
@@ -300,9 +302,28 @@ def run_job(cfg: BatchConfig, task) -> None:
     result = run_batch(cfg)
     out_path = export_batch(cfg, result, version=__version__)
 
+    # 质控：与命令行共用同一套检查项与同一套排版（druid.qc），
+    # 免得"网页说能用、命令行说不能用"这种最难查的不一致。
+    try:
+        checks = assess_batch(result, cfg)
+        handoff_path = export_handoff(cfg, result, checks=checks,
+                                      version=__version__)
+        print("[8] 质控交接：%s" % handoff_path)
+        for line in summary_lines(checks, detail_ref=handoff_path.name):
+            print(line)
+    except Exception as e:                       # noqa: BLE001
+        # 交接文件写失败不该把整个任务判死 —— Excel 已经写好了。
+        # 但**必须**让用户在日志里看到，否则下游拿不到文件还以为是没跑。
+        checks, handoff_path = [], None
+        print("（质控交接生成失败，结果表不受影响）%s: %s"
+              % (type(e).__name__, e))
+
     # 登记产物，前端据此渲染下载清单。
     # 注意路径一律转 str ——  dict 里放 Path 对象没法 JSON 序列化。
     outputs = [dict(kind="excel", label="U-Pb 结果总表", path=str(out_path))]
+    if handoff_path is not None:
+        outputs.append(dict(kind="json", label="质控交接（给下游程序读）",
+                            path=str(handoff_path)))
 
     # 如果生成了图件，把 PDF 汇总册也挂上去（单张 PNG 太多，只给册子）
     if cfg.plot:
@@ -322,14 +343,17 @@ def run_job(cfg: BatchConfig, task) -> None:
             qc=result.qc.astype(object).where(result.qc.notna(), None).to_dict("records"),
             secondary_correction=result.info.get("secondary_correction"),
         )
+        # 质控结论给前端直接用，前端不必解析 JSON 才知道该显示什么颜色
+        if checks:
+            summary["verdict"] = verdict(checks)
         if len(unk):
             # ⚠ 与 CLI `_summary_lines` 同一段历史 bug 的副本：
             # `res.get("年龄206_238_QC校正", unk["年龄206_238"])` 在 QC 列存在时
             # 返回的是**整表**那一列，标样测点会混进"样品年龄"统计
             # （中位数被抬高、5–95% 区间被撑宽，详见 cli/reduce_batch.py 的注释）。
             # 先定列名，再从 unk 里取列，两步分开，不要再合成一步。
-            col = ("年龄206_238_QC校正"
-                   if "年龄206_238_QC校正" in res.columns else "年龄206_238")
+            # 列名怎么定统一在 io.report.age68_column()，别在这儿再写一遍。
+            col = age68_column(res)
             a = unk[col]
             q = a.quantile([0.05, 0.5, 0.95])
             summary["age_median"] = round(float(q[0.5]), 1)

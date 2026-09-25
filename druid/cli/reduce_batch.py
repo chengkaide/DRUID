@@ -16,6 +16,15 @@ druid.cli.reduce_batch —— 批处理命令行入口
 
 运行 -h 可查看全部参数。
 
+输出两个文件
+------------
+    <...>_U-Pb结果.xlsx             给人看的表（多 sheet）
+    <...>_U-Pb结果.handoff.json     给程序看的质控结论与交接契约
+
+第二个是下游（自动化质控 / 解释流程、ADEPT）的输入，schema 为
+`druid.handoff/1`；不想要就加 `--no-json`。质控结论同时会在末尾打印出来，
+所以人只看控制台也不会漏掉「这批数据能不能用」。
+
 `examples/EX2022A/` 是仓库自带的示例批次（真实数据，样品名已匿名成 S01…S48，
 标样原样保留），可以直接用来验证环境是否装好。
 """
@@ -38,7 +47,9 @@ if __package__ in (None, ""):
 
 from druid import __version__
 from druid.console import ensure_utf8_streams
-from druid.io.report import export_batch
+from druid.io.handoff import export_handoff
+from druid.io.report import age68_column, export_batch
+from druid.qc import assess_batch, summary_lines
 from druid.workflow import BatchConfig, run_batch
 
 
@@ -58,6 +69,16 @@ def build_parser() -> argparse.ArgumentParser:
                     help="生成逐点深度剖面 PNG 并汇总成 PDF")
     ap.add_argument("--plot-dir", default=None, help="图件输出目录")
     ap.add_argument("--quiet", action="store_true", help="不打印中间过程")
+
+    # ── 质控交接 ──
+    # 两个参数互斥：同一条命令里既说"写到哪儿"又说"别写"是自相矛盾，
+    # 让它当场报错，别猜用户想要哪个。
+    js = ap.add_mutually_exclusive_group()
+    js.add_argument("--json", default=None, metavar="PATH",
+                    help="质控交接 JSON 的输出路径。"
+                         "默认写在结果 Excel 旁边：<结果名>.handoff.json")
+    js.add_argument("--no-json", action="store_true",
+                    help="不写交接 JSON（只打印质控结论）")
 
     # ── 标样 ──
     ap.add_argument("--primary", default="91500", help="主标（用于归一化）")
@@ -106,8 +127,8 @@ def _summary_lines(result) -> list:
         # 5–95% 区间从 420~644 撑成 333~1044 Ma。
         # 打印出来的 n=48 又让人以为只统计了样品，所以这个错很难被看出来。
         # 先定列名，再从 unk 里取列，两步分开，不要再合成一步。
-        col = ("年龄206_238_QC校正"
-               if "年龄206_238_QC校正" in res.columns else "年龄206_238")
+        # 列名怎么定统一在 io.report.age68_column()，别在这儿再写一遍。
+        col = age68_column(res)
         a = unk[col]
         q = a.quantile([0.05, 0.5, 0.95])
         lines.append(
@@ -159,11 +180,30 @@ def main(argv=None) -> int:
     # 落盘：与网页界面共用 io.report.export_batch，保证两边产出的表完全一致
     out_path = export_batch(cfg, result, version=__version__)
 
+    # 质控：把「这批数据能不能用」从控制台散文变成可机读的检查项，
+    # 并写成交接 JSON 供下游（自动化质控 / 解释流程、ADEPT）读取。
+    # 先算检查项再写盘：写盘函数吃 checks，避免同一次运行里算两遍
+    # （算两遍就有一边被改坏而另一边没改的风险，早晚对不上）。
+    checks = assess_batch(result, cfg)
+    handoff_path = None
+    if not args.no_json:
+        handoff_path = export_handoff(cfg, result, checks=checks,
+                                      version=__version__, path=args.json)
+
     print("\n" + "=" * 72)
     print(f"[7] 结果已写出：{out_path}")
     print(f"    结果 {len(result.results)} 行 / QC {len(result.qc)} 行 "
           f"/ 多域明细 {len(result.domains)} 行")
     for line in _summary_lines(result):
+        print(line)
+    if handoff_path is not None:
+        print(f"[8] 质控交接已写出：{handoff_path}")
+    else:
+        print("[8] 质控交接：按 --no-json 跳过，仅打印结论")
+    # detail_ref 跟着实际情况走：没写盘就别指着一个不存在的文件说"见这里"。
+    for line in summary_lines(checks,
+                              detail_ref=(handoff_path.name
+                                          if handoff_path is not None else None)):
         print(line)
     print("=" * 72)
     return 0
