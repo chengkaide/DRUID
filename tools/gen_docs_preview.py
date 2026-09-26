@@ -6,8 +6,9 @@
 
 它出三样东西，全部来自示例批次 `examples/EX2022A` 的**真实输出**：
 
-  1. 一张**逐深度年龄剖面**：`S21` 的窗口点（含 1σ 误差棒）、两个年龄域的均值线、
-     一段过渡带，以及整段不分域口径 —— 最后那个用右侧竖直箭头标出"不分域会差多少"。
+  1. 一张**逐深度年龄剖面**：某个真实测点的窗口点（含 1σ 误差棒）、各年龄域的
+     均值线，以及整段不分域口径 —— 最后那个用右侧竖直箭头标出"不分域会差多少"。
+     哪个测点见下面 `SPOT` 那段注释（判据是"能不能一眼看懂分域"，不是"落差最大"）。
   2. 三条核心质控判据的状态条（`standards.primary_bias` /
      `standards.secondary_bias` / `samples.concordance`），
      值、判据、结论**直接取自 `qc.assess_batch()`**，不另抄一份。
@@ -36,6 +37,9 @@
    这件事已经收进 `collect()` 了，这里只管用。
 5. 质控层给的字符串里带 `<` `>`（判据）和 ASCII 负号（偏差），进 HTML 前要转义、
    负号要换成排版用的 −，否则页面上会出现裸标签和两种长的减号。
+6. 描述测点分域情况的那句话曾经是个**写死的常量**（"两个年龄域，中间一段过渡带"）——
+   换测点它不会跟着变，图注就开始撒谎。现在由 `spot_label()` 从 `collect()`
+   的结果推出来。往图注里加任何描述性文字之前，先问一句"它是算出来的吗"。
 """
 from __future__ import annotations
 
@@ -56,10 +60,33 @@ import gen_docs_split_figure as gds                      # noqa: E402
 BATCH = ROOT / "examples" / "EX2022A"
 HTML = ROOT / "docs" / "index.html"
 
-#: 首屏那个测点：示例批次里两个年龄域落差最大的一个（不含 §02 三联图用掉的三个）。
-#: 它同时有一段过渡带，正好把"域"和"过渡带"的区别一次讲清。
-SPOT = "S21"
-SPOT_LABEL = "两个年龄域，中间一段过渡带"
+#: 首屏那个测点。挑的是"一眼就能看懂分域"的那一类：
+#:   ① 全部窗口都归进了年龄域 —— 图上没有一片空心点要解释；
+#:   ② 每个域的 MSWD 都远在限内 —— 拆出来的每一段本身都是常数；
+#:   ③ 整段 MSWD 又明显超限 —— 不分域就是错的。
+#: 示例批次里同时满足这三条的有 S04 / S10 / S20；取其中域内 MSWD 最漂亮、
+#: 三个域窗口数最均衡的 S10。不含 §02 三联图用掉的 S43 / S34 / S18。
+#: 换测点：`python tools/gen_docs_preview.py --spot S20`（图注文字会跟着改）。
+SPOT = "S10"
+
+_NUM_CN = {1: "一", 2: "两", 3: "三", 4: "四", 5: "五"}
+
+
+def spot_label(d: dict) -> str:
+    """按**实际**分域结果生成一句测点描述。
+
+    以前这里是一个写死的常量（"两个年龄域，中间一段过渡带"）—— 换个测点它不会
+    跟着变，图注就会开始撒谎。现在从 `collect()` 的结果推出来。
+    """
+    n = len(d["bands"])
+    s = f'{_NUM_CN.get(n, str(n))}个年龄域'
+    if d["n_mixed"]:
+        s += "，中间一段过渡带"
+    n_bad = d["n_hollow"] - d["n_mixed"]
+    if n_bad:
+        s += f'，另有 {n_bad} 个窗口没通过相容性检验'
+    return s
+
 
 #: 首屏状态条上放哪三条检查项。key 是契约，改它要同步改回归守护。
 MINI_KEYS = ("standards.primary_bias", "standards.secondary_bias", "samples.concordance")
@@ -112,7 +139,7 @@ def panel(d: dict) -> list[str]:
 
     P: list[str] = [f'<g class="case" data-spot="{d["spot"]}">']
     P.append(f'<text class="fig-cap" x="{ML}" y="{pt-11:.0f}">'
-             f'{d["spot"]} · {SPOT_LABEL}'
+             f'{d["spot"]} · {spot_label(d)}'
              f'<tspan class="fig-cap-sub">　{d["n_win"]} 个 4 秒滑窗</tspan></text>')
     P.append(f'<text class="fig-sub" x="{ML+PW}" y="{pt-11:.0f}" text-anchor="end">'
              f'整段 MSWD {d["whole_mswd"]:.2f} / 上限 {d["crit"]:.2f} → 整段非常数</text>')
@@ -254,28 +281,31 @@ def legend_line(d: dict) -> str:
     if d["n_off"] - d["n_mixed"]:
         parts.append(f'{d["n_off"]-d["n_mixed"]} 个窗口没通过域内相容性检验')
     tail = "；".join(parts) + "。" if parts else "没有一个窗口被剥掉。"
-    return (f'<b>{d["spot"]} {SPOT_LABEL}</b>：共 {d["n_win"]} 个滑窗，{len(d["bands"])} 个域 '
-            f'—— {segs}。{tail}整段不分域给 {d["whole"]:.1f} Ma，'
+    return (f'<b>{d["spot"]} {spot_label(d)}</b>：共 {d["n_win"]} 个滑窗，'
+            f'{len(d["bands"])} 个域 —— {segs}。{tail}整段不分域给 {d["whole"]:.1f} Ma，'
             f'离主域 {d["main_age"]:.1f} Ma 差 <b>{esc(f"{d_age:+.1f} Ma"
                                                   f"（{d_pct:+.2f}%）")}</b>'
             f'（Δ = 整段 − 主域）—— 这就是"分域"这一步买到的东西。')
 
 
-def build() -> tuple[str, dict]:
+def build(spot: str) -> tuple[str, dict]:
     cfg = BatchConfig(data_dir=str(BATCH), plot=False)
     res = run_batch(cfg)
-    d = gds.collect(res, SPOT)
+    d = gds.collect(res, spot)
     checks = {c.key: c for c in assess_batch(res, cfg)}
     missing = [k for k in MINI_KEYS if k not in checks]
     if missing:
         raise SystemExit(f"质控层里没有这些检查项：{missing}（key 改过？）")
     if len(d["bands"]) < 2:
-        raise SystemExit(f"{SPOT} 只有 {len(d['bands'])} 个年龄域 —— 首屏这张图需要两个")
+        raise SystemExit(f"{spot} 只有 {len(d['bands'])} 个年龄域 —— 首屏这张图需要两个")
+    n_spot = len(res.overall)
+    n_multi = int((res.overall["域数"] > 1).sum())
 
     P = ['<div class="pv">']
     P.append('  <figure class="pvfig">')
     P.append('    ' + profile_figure(d))
-    P.append('    <figcaption>这就是一个批次的全部定量结论长什么样。'
+    P.append('    <figcaption>这就是<b>一个测点</b>给出的定量结论'
+             f'（整批 {n_spot} 个样品测点各出一张，其中 {n_multi} 个检出多年龄域）。'
              '上面这张图是示例批次 <code>examples/EX2022A</code> 的<b>真实输出</b>，'
              '不是示意图 —— 仓库里的命令跑一遍就能得到同样的数字。'
              f'{legend_line(d)}</figcaption>')
@@ -320,10 +350,12 @@ def inject(frag: str, html_path: pathlib.Path) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--html", default=str(HTML), help="注入目标（草稿时可以指向临时副本）")
+    ap.add_argument("--spot", default=SPOT,
+                    help=f"首屏那个测点（默认 {SPOT}）。换它之前先看本模块顶部那段挑选标准")
     ap.add_argument("--stdout", action="store_true", help="只把片段打到标准输出，不写文件")
     args = ap.parse_args()
 
-    frag, info = build()
+    frag, info = build(args.spot)
     if args.stdout:
         print(frag)
         return 0

@@ -431,15 +431,34 @@ def main() -> int:
                 bad.append(f"首屏图上 {spot} 的域与实跑不符：页面 {got_dom}，实跑 {want_dom}")
                 print(f"  FAIL 首屏 {spot} 域：页面 {got_dom} ≠ 实跑 {want_dom}")
 
-            # 空心点：总数 / 其中落在过渡带的 / 其余没通过相容性检验的
-            g = grabbed(r"(\d+) 个空心点（(\d+) 个在过渡带，(\d+) 个没通过相容性检验）",
-                        "空心点数")
+            # 空心点：总数 / 其中落在过渡带的 / 其余没通过相容性检验的。
+            # 这句话只在**确实有**窗口没进任何年龄域时才画出来，所以分两支：
+            # 有 → 页面上那三个数都要和实跑一致；
+            # 没有 → 反过来查"图上连一个空心点都不许有"。首屏那个测点覆盖率是 100%，
+            #   所以每次真正在跑的是后一支。
+            if n_hollow:
+                g = grabbed(r"(\d+) 个空心点（(\d+) 个在过渡带，(\d+) 个没通过相容性检验）",
+                            "空心点数")
+                if g:
+                    check(f"首屏图上 {spot} 空心点", int(g.group(1)), n_hollow)
+                    check(f"首屏图上 {spot} 过渡带窗口", int(g.group(2)),
+                          int(mrows["n_win"].sum()))
+                    check(f"首屏图上 {spot} 未通过检验", int(g.group(3)),
+                          n_hollow - int(mrows["n_win"].sum()))
+            else:
+                check(f"首屏图上 {spot} 空心点（数据里没有，图上也不许有）",
+                      seg.count('class="fig-dot-off"') + seg.count('class="fig-ebar-off"'), 0)
+
+            # 图注里那句"一个测点 / 整批多少个测点"：不是装饰 —— 首屏最容易出的错
+            # 就是把**单个测点**的结论说成"一个批次的定量结论"。这两个数要现算。
+            g = re.search(r"整批 (\d+) 个样品测点各出一张，其中 (\d+) 个检出多年龄域", seg)
             if g:
-                check(f"首屏图上 {spot} 空心点", int(g.group(1)), n_hollow)
-                check(f"首屏图上 {spot} 过渡带窗口", int(g.group(2)),
-                      int(mrows["n_win"].sum()))
-                check(f"首屏图上 {spot} 未通过检验", int(g.group(3)),
-                      n_hollow - int(mrows["n_win"].sum()))
+                check("首屏图注 整批样品测点数", int(g.group(1)), len(ov))
+                check("首屏图注 检出多年龄域的测点数", int(g.group(2)),
+                      int((ov["域数"] > 1).sum()))
+            else:
+                bad.append("首屏图注里没有『整批 N 个样品测点各出一张』那句")
+                print("  FAIL 首屏图注缺「整批多少个测点」那句")
 
             # 图注里那句"整段离主域差多少"：主域年龄 / Δ年龄 / Δ比例
             g = grabbed(r"离主域 ([\d.]+) Ma 差 <b>([\u2212+\d.]+) Ma"
