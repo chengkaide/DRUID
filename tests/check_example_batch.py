@@ -305,7 +305,10 @@ def main() -> int:
 
             # 均一测点在域表里没有行 —— 那是"没有域可拆"，不是"35 个窗口全被剥掉"，
             # 所以这里必须先判空，否则相减会得到一个很唬人的 35。
-            n_off = 0 if not len(d0) else int(live["n_win"]) - int(d0["n_win"].sum())
+            key_rows = (d0[d0["标记"] == "age domain"]
+                        if "标记" in d0.columns else d0)
+            n_off = (0 if not len(key_rows)
+                     else int(live["n_win"]) - int(key_rows["n_win"].sum()))
             if not len(d0):
                 # 均一测点：域表里没有行，图注里会另给一个"整段积分"的数
                 got["积分"] = from_doc(r"整段积分（另一种算法）给 ([\d.]+) Ma", float,
@@ -330,7 +333,8 @@ def main() -> int:
             got_dom = {n: (float(a), int(w), float(m)) for n, a, w, m in re.findall(
                 r"(D\d) ([\d.]+) Ma（(\d+) 窗，MSWD ([\d.]+)）", row)}
             want_dom = {str(r["域"]): (round(float(r["年龄_Ma"]), 1), int(r["n_win"]),
-                                       round(float(r["MSWD"]), 2)) for _, r in d0.iterrows()}
+                                       round(float(r["MSWD"]), 2))
+                        for _, r in key_rows.iterrows()}
             if got_dom == want_dom:
                 print(f"  ok   图上 {spot} 的 {len(want_dom)} 个域（年龄/窗口数/MSWD）")
             else:
@@ -353,6 +357,140 @@ def main() -> int:
         print("  （三个测点各自代表一种形态；重生成：python tools/gen_docs_split_figure.py）")
     else:
         print("  skip  落地页里没有这张自动生成的图，或不分域表为空")
+
+
+    # ── 首屏「一眼看到什么」区块：剖面图、三条质控判据、标样QC 表，
+    #    全部由 `tools/gen_docs_preview.py` 现算后注入。抓不到就算失败 ——
+    #    这一段一旦被手改，页面上的数字就会和实际输出悄悄分家。 ──
+    print()
+    print("=== 文档首屏的「一眼看到什么」区块 ===")
+    PB = "<!-- ==== 首屏预览：由 tools/gen_docs_preview.py 生成，请勿手改 ==== -->"
+    PE = "<!-- ==== 首屏预览结束 ==== -->"
+    dtext = doc.read_text(encoding="utf-8") if doc.is_file() else ""
+    i0, j0 = dtext.find(PB), dtext.find(PE)
+    if i0 == -1 or j0 == -1:
+        print("  skip  落地页里没有首屏区块（没生成过？）")
+    else:
+        from druid.qc import assess_batch
+
+        seg = dtext[i0:j0]
+
+        def unesc(s: str) -> str:
+            """换回质控层给的原文：页面里是 HTML 转义 + 排版减号，空白还被压过。"""
+            s = (s.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
+                 .replace("\u2212", "-"))
+            return " ".join(s.split())
+
+        def grabbed(pat, label):
+            m = re.search(pat, seg)
+            if not m:
+                bad.append(f"首屏区块里找不到「{label}」—— 没生成，还是被手改了？")
+                print(f"  FAIL 首屏区块里找不到「{label}」")
+                return None
+            return m
+
+        ms = grabbed(r'data-spot="(S\d\d)"', "测点名")
+        spot = ms.group(1) if ms else ""
+        row = ov[ov["样品"] == spot] if spot else ov.iloc[0:0]
+        if not len(row):
+            if spot:
+                bad.append(f"首屏区块里的测点 {spot} 在实跑结果里不存在")
+                print(f"  FAIL 首屏区块的测点 {spot} 不在实跑结果里")
+        else:
+            row = row.iloc[0]
+            d0 = dom[dom["样品"] == spot].sort_values("tau")
+            # 域表里除了 age domain 还有 mixed/过渡带 行 —— 后者不是一个年龄，
+            # 不能算进"域"里（gen_docs_split_figure.collect 用的也是这条判据）。
+            if "标记" in d0.columns:
+                d0 = d0[d0["标记"] == "age domain"]
+            n_hollow = int(row["n_win"]) - int(d0["n_win"].sum())
+            mrows = dom[(dom["样品"] == spot) & (dom["标记"] != "age domain")] \
+                if "标记" in dom.columns else dom.iloc[0:0]
+
+            g = grabbed(r"共 (\d+) 个滑窗", "窗口数")
+            check(f"首屏图上 {spot} 窗口数", int(g.group(1)) if g else -1,
+                  int(row["n_win"]))
+            g = grabbed(r"整段不分域 ([\d.]+)", "整段年龄")
+            check(f"首屏图上 {spot} 整段年龄 (Ma)",
+                  round(float(g.group(1)), 1) if g else -1, round(float(row["年龄_Ma"]), 1))
+            g = grabbed(r"整段 MSWD ([\d.]+) / 上限 ([\d.]+) →", "整段 MSWD")
+            check(f"首屏图上 {spot} 整段 MSWD", round(float(g.group(1)), 2) if g else -1,
+                  round(float(row["MSWD"]), 2))
+            check(f"首屏图上 {spot} 判据上限", round(float(g.group(2)), 2) if g else -1,
+                  round(float(row["相容上限"]), 2))
+
+            # 逐域四项（域号 / 年龄 / 窗口数 / MSWD）—— 少一项都算不符
+            got_dom = {n: (round(float(a), 1), int(w), round(float(mswd), 2))
+                       for n, a, w, mswd in re.findall(
+                           r"(D\d) ([\d.]+) Ma（(\d+) 窗，MSWD ([\d.]+)）", seg)}
+            want_dom = {str(r["域"]): (round(float(r["年龄_Ma"]), 1), int(r["n_win"]),
+                                       round(float(r["MSWD"]), 2)) for _, r in d0.iterrows()}
+            if got_dom and got_dom == want_dom:
+                print(f"  ok   首屏图上 {spot} 的 {len(want_dom)} 个域（年龄/窗口数/MSWD）")
+            else:
+                bad.append(f"首屏图上 {spot} 的域与实跑不符：页面 {got_dom}，实跑 {want_dom}")
+                print(f"  FAIL 首屏 {spot} 域：页面 {got_dom} ≠ 实跑 {want_dom}")
+
+            # 空心点：总数 / 其中落在过渡带的 / 其余没通过相容性检验的
+            g = grabbed(r"(\d+) 个空心点（(\d+) 个在过渡带，(\d+) 个没通过相容性检验）",
+                        "空心点数")
+            if g:
+                check(f"首屏图上 {spot} 空心点", int(g.group(1)), n_hollow)
+                check(f"首屏图上 {spot} 过渡带窗口", int(g.group(2)),
+                      int(mrows["n_win"].sum()))
+                check(f"首屏图上 {spot} 未通过检验", int(g.group(3)),
+                      n_hollow - int(mrows["n_win"].sum()))
+
+            # 图注里那句"整段离主域差多少"：主域年龄 / Δ年龄 / Δ比例
+            g = grabbed(r"离主域 ([\d.]+) Ma 差 <b>([\u2212+\d.]+) Ma"
+                        r"（([\u2212+\d.]+)%）</b>", "Δ 年龄")
+            if g:
+                check(f"首屏图上 {spot} 主域年龄 (Ma)", round(float(g.group(1)), 1),
+                      round(float(row["主域年龄_Ma"]), 1))
+                check(f"首屏图上 {spot} Δ年龄 (Ma)", round(float(unesc(g.group(2))), 1),
+                      round(float(row["Δ年龄_Ma"]), 1))
+                check(f"首屏图上 {spot} Δ比例 (%)", round(float(unesc(g.group(3))), 2),
+                      round(float(row["Δ年龄_pct"]), 2), TOL_PCT)
+
+            # 三条判据：等级 / 实测值 / 判据原文，全部取自质控层本身
+            live_checks = {c.key: c for c in assess_batch(result)}
+            for key in ("standards.primary_bias", "standards.secondary_bias",
+                        "samples.concordance"):
+                m = re.search(r'class="mcard (\w+)" data-key="' + re.escape(key) + r'"'
+                              r'.*?<div class="mval">(.*?)</div>'
+                              r'.*?<code class="mkey">' + re.escape(key) + r"</code> · "
+                              r"(.*?)</div>", seg, re.S)
+                live = live_checks.get(key)
+                if not m or live is None:
+                    bad.append(f"首屏区块里没有「{key}」那张卡（或质控层里没这个 key）")
+                    print(f"  FAIL 首屏区块缺 {key} 的卡")
+                    continue
+                check(f"首屏 {key} 等级", m.group(1), live.level)
+                check(f"首屏 {key} 实测值", unesc(m.group(2)),
+                      " ".join(str(live.observed).split()))
+                check(f"首屏 {key} 判据原文", unesc(m.group(3)),
+                      " ".join(str(live.criterion).split()))
+
+            # 标样QC 表：逐行逐列。行数也要对 —— 少一行是"漏抄"，
+            # 多一行是"标样换了却没重新生成"。
+            rows_doc = re.findall(
+                r"<tr><td>([^<]+)</td><td>(\d+)</td><td>([\d.]+)</td><td><b>([\d.]+)"
+                r"</b></td><td>([\d.]+)</td><td>([\d.]+)</td>"
+                r'<td class="bias-\w+">([\u2212+\d.]+)%</td></tr>', seg)
+            if len(rows_doc) != len(qc):
+                bad.append(f"首屏标样QC 表 {len(rows_doc)} 行，实跑 {len(qc)} 行")
+                print(f"  FAIL 首屏标样QC 表行数 {len(rows_doc)} ≠ {len(qc)}")
+            for got_row, (_, want_row) in zip(rows_doc, qc.iterrows()):
+                nm = unesc(got_row[0])
+                check(f"首屏标样QC {nm} 点数", int(got_row[1]), int(want_row["点数"]))
+                for idx, col in ((2, "参考年龄_Ma"), (3, "加权平均年龄_Ma"),
+                                 (4, "s2_Ma"), (5, "MSWD")):
+                    check(f"首屏标样QC {nm} {col}", float(got_row[idx]),
+                          round(float(want_row[col]), 2), TOL_AGE)
+                check(f"首屏标样QC {nm} 偏差", float(unesc(got_row[6])),
+                      round(float(want_row["偏差_pct"]), 2), TOL_PCT)
+        print("  （整块由 python tools/gen_docs_preview.py 重新生成）")
+
 
     print()
     print("=== 窗口尺度（一个 4 s 窗口有多大）===")

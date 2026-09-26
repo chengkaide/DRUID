@@ -105,32 +105,56 @@ def collect(res, spot: str) -> dict:
     step = float(np.median(np.diff(tau)))
     tol = step * 0.55
 
+    # 域表的行分**两类**，靠 `标记` 列区分：
+    #   `age domain`   —— 真正的年龄域，可以画成一条均值实线；
+    #   `mixed/过渡带` —— 一整整段过渡，它**不是一个年龄**，不能当域画。
+    # 早期版本把两类一起当域画：给过渡带也画了一条均值线，用的还是域号
+    # （`域` 列里是破折号）拼出来的 CSS class —— 页面里没有那个 class，
+    # 于是那些线会退化成默认黑色，而且图注会声称存在一个并不存在的年龄域。
+    # 只有 age domain 参与 belong / bands；过渡带的窗口照旧画成空心点。
+    marks = (np.asarray(dom["标记"], dtype=object) if "标记" in dom.columns
+             else np.array(["age domain"] * len(dom), dtype=object))
+    age_rows, mix_rows = dom[marks == "age domain"], dom[marks != "age domain"]
+
     # 逐窗口归域：域表的 tau 上界是**末个窗口的起点**，所以要带半个步长的容差
     belong = np.full(tau.size, "", dtype=object)
     bands = []
-    for _, r in dom.iterrows():
+    for _, r in age_rows.iterrows():
         a, b = (float(x) for x in str(r["tau"]).split("-"))
         belong[(tau >= a - tol) & (tau <= b + tol)] = str(r["域"])
         bands.append({"name": str(r["域"]), "a": a, "b": min(b + step, 1.0),
                       "age": float(r["年龄_Ma"]), "n": int(r["n_win"]),
                       "mswd": float(r["MSWD"]), "s2": float(r["s2_Ma"])})
+    mixed = []
+    for _, r in mix_rows.iterrows():
+        a, b = (float(x) for x in str(r["tau"]).split("-"))
+        mixed.append({"a": a, "b": min(b + step, 1.0), "age": float(r["年龄_Ma"]),
+                      "n": int(r["n_win"]), "mswd": float(r["MSWD"])})
 
     n_win = int(ov["n_win"])
+    # 空心点的口径：**没进入任何年龄域**的窗口。过渡带的窗口也算在内 ——
+    # 它确实不属于任何一个年龄，所以 `n_mixed` 是 `n_off` 的一个子集，不是另一堆。
     n_off = int((belong == "").sum())
     for bd in bands:
         got = int((belong == bd["name"]).sum())
         assert got == bd["n"], f"{spot}/{bd['name']} 窗口数对不上：算得 {got}，表里 {bd['n']}"
+    n_mixed = sum(m["n"] for m in mixed)
     if not bands:
         # 均一测点：域表里没有行，全部窗口都属于同一个年龄，不存在"被剥掉"这回事
         assert n_off == n_win, f"{spot} 域表里没有行，却有窗口落进了某个域"
         belong[:] = "D1"
         n_off = 0
     else:
+        # 每个窗口必然落在两者之一：某个年龄域 / 空心点（过渡带或没通过检验）
         assert n_off == n_win - sum(bd["n"] for bd in bands), f"{spot} 未归域窗口数对不上"
+        assert n_mixed <= n_off, \
+            f"{spot} 过渡带 {n_mixed} 个窗口 > 空心点 {n_off} 个（归类重叠了？）"
 
     return {
         "spot": spot, "tau": tau, "age": age, "sig": sig, "belong": belong,
-        "bands": bands, "n_win": n_win, "n_off": n_off,
+        "bands": bands, "mixed": mixed, "n_mixed": n_mixed,
+        "n_hollow": n_off,
+        "n_win": n_win, "n_off": n_off,
         "whole": float(ov["年龄_Ma"]), "whole_mswd": float(ov["MSWD"]),
         "crit": float(ov["相容上限"]), "whole_s2": float(ov["s2_Ma"]),
         "bulk": float(ov["整段积分年龄_Ma"]),
@@ -208,11 +232,11 @@ def panel(i: int, case: dict, d: dict) -> list[str]:
                  f'x2="{X(bd["b"]):.1f}" y2="{ym:.1f}"/>')
         P.append(f'<text class="txt-{bd["name"]}" x="{X((bd["a"]+bd["b"])/2):.1f}" y="{ym-9:.1f}" '
                  f'text-anchor="middle">{bd["name"]} {bd["age"]:.1f}</text>')
-    if d["n_off"]:
+    if d["n_hollow"]:
         edges = [bd for bd in d["bands"]]
         mid = X((edges[0]["b"] + edges[-1]["a"]) / 2) if n_dom > 1 else X(0.5)
         P.append(f'<text class="fig-off-note" x="{mid:.1f}" y="{pt+17}" text-anchor="middle">'
-                 f'{d["n_off"]} 个混合/过渡窗口（未进入任何年龄域）</text>')
+                 f'{d["n_hollow"]} 个空心点（未进入任何年龄域）</text>')
     P.append(f'<rect class="fig-frame" x="{ML}" y="{pt}" width="{PW}" height="{PH}"/>')
     if i == len(CASES) - 1:
         P.append(f'<text class="fig-axis" x="{ML+PW/2:.0f}" y="{H-10}" text-anchor="middle">'
@@ -231,7 +255,7 @@ def build() -> tuple[str, list[dict]]:
 
     P: list[str] = ['<div class="figscroll">']
     P.append(f'<svg class="fig" viewBox="0 0 {W} {H}" role="img" '
-             f'aria-labelledby="figSplitT figSplitD">')
+             f'aria-labelledby="figSplitT figSplitD" aria-describedby="figSplitD">')
     P.append('<title id="figSplitT">同一个示例批次里的三种剖面形态：均一 / 核边分明 / 复杂变化</title>')
     P.append('<desc id="figSplitD">三个真实测点，每个点是一个 4 秒滑窗，误差棒是 1σ。'
              '灰虚线是整段不分域的加权平均：在 ① 里它就是答案，在 ②③ 里它不对应任何一个窗口。'
@@ -268,8 +292,8 @@ def build() -> tuple[str, list[dict]]:
         else:
             segs = " · ".join(f'{b["name"]} {b["age"]:.1f} Ma（{b["n"]} 窗，MSWD {b["mswd"]:.2f}）'
                               for b in d["bands"])
-            tail = (f'{d["n_off"]} 个窗口没通过域内相容性检验，被分域步骤剥掉。'
-                    if d["n_off"] else '没有一个窗口被剥掉。')
+            tail = (f'{d["n_hollow"]} 个窗口没通过域内相容性检验，被分域步骤剥掉。'
+                    if d["n_hollow"] else '没有一个窗口被剥掉。')
             em = (f'共 {d["n_win"]} 个滑窗。{len(d["bands"])} 个域：{segs}。{tail}'
                   f'整段 MSWD {d["whole_mswd"]:.2f} &gt; 上限 {d["crit"]:.2f} → 整段非常数，'
                   f'整段 {d["whole"]:.1f} − 主域 {d["main_age"]:.1f} = '
@@ -309,8 +333,8 @@ def figcaption(data: list[dict]) -> str:
                 trend = ('沿坑深年龄<b>不单调</b>（' +
                          " → ".join(f'{b["age"]:.1f}' for b in aa) +
                          ' Ma）—— 不能用一个"核"一个"边"解释')
-            if d["n_off"]:
-                tail = (f'中间 <b>{d["n_off"]} 个空心点</b>没通过域内相容性检验，'
+            if d["n_hollow"]:
+                tail = (f'中间 <b>{d["n_hollow"]} 个空心点</b>没通过域内相容性检验，'
                         f'被分域步骤剥掉了')
             else:
                 tail = '<b>一个窗口都没被剥掉</b>'

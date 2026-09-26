@@ -314,5 +314,35 @@ def test_ensure_utf8_streams_survives_a_cp1252_console():
     ensure_utf8_streams()                     # 默认参数 = 真实的 stdout/stderr
 
 
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 五、文档里写的数字
+# ═════════════════════════════════════════════════════════════════════════════
+def test_landing_page_states_the_real_selfcheck_count():
+    """落地页写着"自检 N 项"，N 必须等于 tests/ 下**真实**的自检项数。
+
+    `_selftest.run()` 收集的是各文件顶层的 `test_*` 函数，所以这里也按 AST 数
+    顶层 `def test_`，不 import —— import 一整套测试既慢又可能有副作用。
+
+    这个数在 2.6.0 从 80 涨到 95（其中一条就是本测试），页面上当时还写着 80，
+    挂了整整一版才被发现。加测试项的时候顺手把页面上的数字改掉 ——
+    否则"自检 95 项"这种话就只是广告词。
+    """
+    import ast
+    n = 0
+    for f in sorted((ROOT / "tests").glob("test_*.py")):
+        for node in ast.parse(f.read_text(encoding="utf-8")).body:
+            if isinstance(node, ast.FunctionDef) and node.name.startswith("test_"):
+                n += 1
+
+    doc = (ROOT / "docs" / "index.html").read_text(encoding="utf-8")
+    hits = re.findall(r"自检\s*(?:<i>)?(\d+)", doc)
+    assert hits, "落地页里找不到「自检 N 项」—— 这条守护失去对象了，请更新它"
+    for h in hits:
+        assert int(h) == n, f"落地页写「自检 {h} 项」，实际是 {n} 项"
+
+    m = re.search(r'<div class="n">(\d+)</div><div class="d">项自检', doc)
+    assert m, "落地页的「基本情况」里没有自检项数，这条守护失去对象了"
+    assert int(m.group(1)) == n, f"落地页的「基本情况」写 {m.group(1)} 项，实际是 {n} 项"
 if __name__ == "__main__":
     raise SystemExit(_selftest.run(globals()))
