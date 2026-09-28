@@ -285,7 +285,7 @@ def legend_line(d: dict) -> str:
             f'{len(d["bands"])} 个域 —— {segs}。{tail}整段不分域给 {d["whole"]:.1f} Ma，'
             f'离主域 {d["main_age"]:.1f} Ma 差 <b>{esc(f"{d_age:+.1f} Ma"
                                                   f"（{d_pct:+.2f}%）")}</b>'
-            f'（Δ = 整段 − 主域）—— 这就是"分域"这一步买到的东西。')
+            f'（Δ = 整段 − 主域）—— 这就是"分域"这一步带来的差别。')
 
 
 def build(spot: str) -> tuple[str, dict]:
@@ -311,7 +311,7 @@ def build(spot: str) -> tuple[str, dict]:
              f'{legend_line(d)}</figcaption>')
     P.append('  </figure>')
     P.append('  <div class="pvside">')
-    P.append('    <p class="pvhead">先看这三个数　<span>判据原文，不是我们另拍的</span></p>')
+    P.append('    <p class="pvhead">先看这三个数　<span>判据原文，不是我们另写的</span></p>')
     P.append('    ' + mini_cards(checks).replace("\n", "\n    "))
     P.append('    <p class="pvmore">三条都过了才往下看年龄。'
              '完整的 26 条检查项在<a href="#gate">第 05 节</a>，'

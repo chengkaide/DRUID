@@ -324,7 +324,7 @@ ADEPT 在<b>同一条随深度变化的年龄</b>上认出哪些区间构成真�
 <rect x="190" y="510" width="300" height="44" rx="8" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/><text x="340.0" y="527" text-anchor="middle" dominant-baseline="central" font-size="13.5" font-weight="500" fill="#26215C">⑦ 坪年龄 + 不确定度 + MSWD</text><text x="340.0" y="543" text-anchor="middle" dominant-baseline="central" font-size="11.5" fill="#5F5E5A">可直接写进补充材料的表</text>
 </svg>
 <figcaption>数据的形态与负责人。注意第 ④ 步——它是 DRUID 的产出，也是 ADEPT 的全部输入，
-两侧的算法复杂度差异很大，但接口上只有一个扁平的表。</figcaption>
+两侧的算法复杂度差异很大，但接口上只有一张平铺的表。</figcaption>
 </figure>
 
 <table>
@@ -365,7 +365,7 @@ ADEPT 在<b>同一条随深度变化的年龄</b>上认出哪些区间构成真�
 <div class="note">
 <p><b>为什么这些诊断列要一起带过去？</b>因为它们让"这个坪为什么被丢掉"这件事可以事后复核。
 只有 <code>Age68</code> 和 <code>Age68_1s</code> 两列也能跑，但一旦某个坪被过滤掉，
-你就只能看到"少了一个",看不到"少了的原因是不是 f206 在那一窗突然升高"。</p>
+你就只能看到"少了一个"，看不到"少了的原因是不是 f206 在那一窗突然升高"。</p>
 </div>
 
 <div class="note">
@@ -377,8 +377,8 @@ ADEPT 在<b>同一条随深度变化的年龄</b>上认出哪些区间构成真�
 
 <h3>ADEPT 这边必须显式给的四个参数</h3>
 
-<p>ADEPT 刻意<b>不去猜</b>数据是否已经预处理过。一个 <code>_1s</code> 列说明不了剥蚀窗口在哪里结束，
-也说明不了 σ 里包含了哪些项，所以这些必须由调用方声明：</p>
+<p>ADEPT 刻意<b>不去猜</b>数据是否已经预处理过。一个 <code>_1s</code> 列无法说明剥蚀窗口在哪里结束，
+也无法说明 σ 里包含了哪些项，所以这些必须由调用方声明：</p>
 
 <pre><code>adept("EX2022A_U-Pb结果.xlsx",
       lower_ablation_time    = 0,       # DRUID 已经切好了自己的剥蚀窗口
@@ -415,7 +415,7 @@ ADEPT 在<b>同一条随深度变化的年龄</b>上认出哪些区间构成真�
 再套一次泊松公式是把错误的模型用在已经处理过的量上。</p>
 
 <div class="note">
-<p>所以正确的分工不是"ADEPT 做得少"，而是"ADEPT 做的事要在正确的层级上做"。
+<p>所以正确的分工不是"让 ADEPT 做得更少"，而是"让 ADEPT 在正确的层级上做事"。
 测量层级归 DRUID，判读层级归 ADEPT。</p>
 </div>
 

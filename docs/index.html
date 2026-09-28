@@ -531,7 +531,7 @@ pre:focus-visible,code:focus-visible{outline:2.5px solid var(--acc);outline-offs
     <span class="badge"><i>无 scipy</i> — 统计内核自实现</span>
     <span class="badge">网页界面 <i>纯标准库</i>，无 npm 无构建</span>
     <span class="badge">CI <i>4 平台 × Python 版本</i></span>
-    <span class="badge">自检 <i>95 项</i> + 端到端数值回归</span>
+    <span class="badge">自检 <i>98 项</i> + 端到端数值回归</span>
     <span class="badge">质控 <i>26 条检查项</i>，含机读交接文件</span>
   </div>
   <div class="cta">
@@ -674,10 +674,10 @@ pre:focus-visible,code:focus-visible{outline:2.5px solid var(--acc);outline-offs
               </svg>
               </div>
               <p class="figscroll-hint">图较宽，可左右滑动查看完整的坐标轴</p>
-          <figcaption>这就是<b>一个测点</b>给出的定量结论（整批 48 个样品测点各出一张，其中 33 个检出多年龄域）。上面这张图是示例批次 <code>examples/EX2022A</code> 的<b>真实输出</b>，不是示意图 —— 仓库里的命令跑一遍就能得到同样的数字。<b>S10 三个年龄域</b>：共 35 个滑窗，3 个域 —— D1 472.8 Ma（8 窗，MSWD 0.90） · D2 445.9 Ma（20 窗，MSWD 0.73） · D3 483.0 Ma（7 窗，MSWD 0.38）。没有一个窗口被剥掉。整段不分域给 457.2 Ma，离主域 445.9 Ma 差 <b>+11.3 Ma（+2.54%）</b>（Δ = 整段 − 主域）—— 这就是"分域"这一步买到的东西。</figcaption>
+          <figcaption>这就是<b>一个测点</b>给出的定量结论（整批 48 个样品测点各出一张，其中 33 个检出多年龄域）。上面这张图是示例批次 <code>examples/EX2022A</code> 的<b>真实输出</b>，不是示意图 —— 仓库里的命令跑一遍就能得到同样的数字。<b>S10 三个年龄域</b>：共 35 个滑窗，3 个域 —— D1 472.8 Ma（8 窗，MSWD 0.90） · D2 445.9 Ma（20 窗，MSWD 0.73） · D3 483.0 Ma（7 窗，MSWD 0.38）。没有一个窗口被剥掉。整段不分域给 457.2 Ma，离主域 445.9 Ma 差 <b>+11.3 Ma（+2.54%）</b>（Δ = 整段 − 主域）—— 这就是"分域"这一步带来的差别。</figcaption>
         </figure>
         <div class="pvside">
-          <p class="pvhead">先看这三个数　<span>判据原文，不是我们另拍的</span></p>
+          <p class="pvhead">先看这三个数　<span>判据原文，不是我们另写的</span></p>
           <div class="mini">
                 <div class="mcard pass" data-key="standards.primary_bias">
                   <div class="mtop"><span class="mn">①</span><span class="mname">主标 91500 偏差</span><span class="pill pass">通过</span></div>
@@ -752,7 +752,7 @@ pre:focus-visible,code:focus-visible{outline:2.5px solid var(--acc);outline-offs
 <!-- ============ 02 它做什么 ============ -->
 <section id="why" style="background:var(--bg2)"><div class="wrap">
   <h2><span class="num">02</span>名字取 Depth-Resolved，不是修辞</h2>
-  <p class="sub">与只做整段积分的常规流程最大的区别：每个测点被当成一条<b>随时间（即随坑深）变化的信号</b>来处理——
+  <p class="sub">与只做整段积分的常规流程相比，最大的区别在于：每个测点被当成一条<b>随时间（即随坑深）变化的信号</b>来处理——
     分馏按深度校正、年龄域按深度划分。</p>
 
   <div class="flowline">
@@ -816,7 +816,7 @@ pre:focus-visible,code:focus-visible{outline:2.5px solid var(--acc);outline-offs
     <p class="figscroll-hint">图较宽，可左右滑动查看完整流程</p>
   </div>
 
-  <h3 style="margin:52px 0 6px">"分域"这一步到底买到了什么？三种剖面形态</h3>
+  <h3 style="margin:52px 0 6px">"分域"这一步到底改变了什么？三种剖面形态</h3>
   <p class="sub" style="margin-bottom:20px">下面三个都是示例批次里的<b>真实测点</b>，每个点是一个 4 秒滑窗，误差棒是该窗口的 1σ。
     同样叫"分域"，三种形态下的结论完全不同。</p>
 
@@ -1249,7 +1249,7 @@ pre:focus-visible,code:focus-visible{outline:2.5px solid var(--acc);outline-offs
 <section id="gate"><div class="wrap">
   <h2><span class="num">05</span>先看这三个数</h2>
   <p class="sub">跑完一个批次，别急着解释年龄——先用这三个数判断<b>这一批数据能不能用</b>。
-    它们是 DRUID 质控层里三条检查项的<b>判据原文</b>，不是我们另拍的。</p>
+    它们是 DRUID 质控层里三条检查项的<b>判据原文</b>，不是我们另写的。</p>
 
   <div class="gate rv">
     <div class="gcard pass">
@@ -1300,7 +1300,7 @@ pre:focus-visible,code:focus-visible{outline:2.5px solid var(--acc);outline-offs
   </div>
   <p class="sub" style="margin:20px 0 0">
     这三个数全过，只说明<b>仪器与标样这一侧</b>没出问题。它们不能告诉你
-    这份数据该不该拿来定年 —— 那件事见 <a href="#limits">什么情况下 DRUID 不适用</a>。</p>
+    这份数据该不该拿来定年 —— 那件事见 <a href="#limits">「什么情况下 DRUID 不适用」</a>。</p>
 </div></section>
 
 <!-- ============ 06 ADEPT ============ -->
@@ -1341,7 +1341,7 @@ python tests/check_example_batch.py</pre>
     也可以双击「启动数据处理工具.bat」用网页界面，全程不需要命令行。</div>
   <div class="facts rv">
     <div class="fact"><div class="n">85</div><div class="d">示例测点随仓库发布，可复现文档中的每个数字</div></div>
-    <div class="fact"><div class="n">95</div><div class="d">项自检 + 真实批次的端到端数值回归</div></div>
+    <div class="fact"><div class="n">98</div><div class="d">项自检 + 真实批次的端到端数值回归</div></div>
     <div class="fact"><div class="n">4</div><div class="d">个平台 × Python 版本的 CI（含 Windows）</div></div>
   </div>
 </div></section>
@@ -1351,10 +1351,10 @@ python tests/check_example_batch.py</pre>
   <p class="eyebrow">边界</p>
   <h2><span class="num">08</span>什么情况下 DRUID 不适用</h2>
   <p class="sub">结果是要写进文章的，边界越清楚越好用。下面四条不是"以后会修"的
-    待办，而是<b>用这个工具的人必须自己判断</b>的事。</p>
+    待办，而是<b>使用者必须自己判断</b>的事。</p>
   <div class="limits2 rv">
     <div class="limit"><div class="ic">[!]</div><div>
-      <h4>标样与样品计数率相差一个数量级时，二次校正是治标</h4>
+      <h4>标样与样品计数率相差一个数量级时，二次校正只治标、不治本</h4>
       <p>主标约 1×10⁵ cps、样品约 1×10⁶ cps 时，单一线性因子消不掉高计数率下的非线性残差。
         正式发表前应缩小信号强度差距（小束斑/低能量）或做死时间校正。</p></div></div>
     <div class="limit"><div class="ic">[!]</div><div>
