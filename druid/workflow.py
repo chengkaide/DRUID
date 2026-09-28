@@ -421,6 +421,13 @@ def calibrate_primary(spots, b68, b76, ref68, ref76, cfg: BatchConfig):
     pidx = np.flatnonzero(pmask)[ok].astype(float)
     F68, F76 = F68_all[ok], F76_all[ok]
 
+    # 参与拟合那一组的相对散布。这是本批次里**唯一**能反映"标样自己稳不稳"的量：
+    # 校准状态、偏差、MSWD 在主标参与 F 拟合时全是恒等值（F68 ≡ 参考比值），
+    # 只有它带着信息。在这里算好随结果带出去 —— qc 层拿不到 b68[pmask]，
+    # 而且门禁、报告与工作流日志必须共用同一个口径（都用"参与拟合的那一组"）。
+    rsd68 = float(F68.std(ddof=1) / F68.mean()) if F68.size > 1 else None
+    rsd76 = float(F76.std(ddof=1) / F76.mean()) if F76.size > 1 else None
+
     _log(cfg, f"\n[2] 主标 {cfg.primary}   R68_ref={ref68:.6f}   R76_ref={ref76:.6f}")
     _log(cfg, f"    F68 = {F68.mean():.5f} ± {F68.std(ddof=1):.5f}"
               f"  (RSD {F68.std(ddof=1) / F68.mean():.2%}, n={len(F68)})")
@@ -431,7 +438,8 @@ def calibrate_primary(spots, b68, b76, ref68, ref76, cfg: BatchConfig):
     if rejected:
         _log(cfg, f"    ⚠ 稳健统计剔除离群主标 序号 {rejected}"
                   f"（f206 异常或 Hg 瞬时波动，不参与归一化曲线拟合）")
-    return pidx, F68, F76, dict(rejected=rejected, pmask=pmask)
+    return pidx, F68, F76, dict(rejected=rejected, pmask=pmask,
+                                rsd68=rsd68, rsd76=rsd76)
 
 
 def interp_F(k: int, pidx, F68, F76):
@@ -1002,6 +1010,11 @@ def run_batch(cfg: BatchConfig) -> BatchResult:
         deadtime_ns=cfg.deadtime_ns,
         sd68=sd68, sd76=sd76,
         rejected_primary=cal["rejected"],
+        # 参与拟合那一组 F 的相对散布（未校准时为 None）。
+        # 这与日志里打印的 `RSD x%, n=k` 是同一个数，qc 的
+        # calibration.primary_rsd 直接用它，绝不重算第二遍。
+        primary_rsd68=cal.get("rsd68"),
+        primary_rsd76=cal.get("rsd76"),
         skipped=skipped,
         secondary_correction=corr,
         warning=uncal_note,

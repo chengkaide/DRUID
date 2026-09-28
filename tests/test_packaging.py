@@ -326,7 +326,8 @@ def test_landing_page_states_the_real_selfcheck_count():
 
     这个数在 2.6.0 从 80 涨到 95（其中一条就是本测试），页面上当时还写着 80，
     挂了整整一版才被发现。加测试项的时候顺手把页面上的数字改掉 ——
-    否则"自检 95 项"这种话就只是广告词。
+    否则"自检 N 项"这种话就只是广告词。（后来又涨到 98：补
+    `calibration.primary_rsd` 时带了三条测试。）
     """
     import ast
     n = 0

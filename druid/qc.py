@@ -117,6 +117,14 @@ class QCThresholds:
     # ── 主标稳健剔除 ──
     rejected_primary_frac_warn: float = 0.25
 
+    # ── 主标重复性（参与拟合那一组 F(206Pb/238U) 的相对散布）──
+    # 1.5%：项目口径（AGENTS.md / README）写的就是这个数，但**此前没有任何机读
+    # 检查在守它** —— 实测有一个批次 RSD 到 4.60% 仍然静默通过（2026-09-27 发现）。
+    # 为什么只判 206/238 侧：R76 的相对散度天然比 R68 大一个量级
+    # （示例批次实测 1.06% vs 2.81%），同一套相对门槛不能两边通用；
+    # F76 的 RSD 仍随结果带出（`primary_rsd76`），只报不判。
+    primary_rsd_fail_pct: float = 1.5
+
     # ── 样品侧 ──
     concordance_lo: float = 90.0
     concordance_hi: float = 110.0
@@ -581,6 +589,32 @@ def _check_calibration(result, cfg, th, out: List[Check]) -> None:
         detail="剔除的是 204Pb 异常或 Hg 瞬时波动导致的离群点，属正常操作；"
                "比例过高则说明序列本身不稳，F 因子可能被少数点主导。",
         rejected=list(rejected), frac=float(frac)))
+
+    # 主标自身的重复性 —— "自己校自己"的批次里**唯一**带信息的量。
+    # 校准状态恒为"已校准"、主标偏差恒为 0、MSWD 恒为 0（F68 ≡ 参考比值），
+    # 唯独这一条会暴露"整批标样散开、F 曲线的形状不可信"。
+    # 数值由 workflow 在算 F 的同一处带出，这里只做判断，不重算。
+    rsd68 = result.info.get("primary_rsd68")
+    if n_primary < 2 or rsd68 is None or not np.isfinite(rsd68):
+        lv, obs, why = INFO, "—", ("主标不足 2 个点，算不出相对散布；"
+                                   "见 calibration.primary_spots。")
+    elif rsd68 > th.primary_rsd_fail_pct / 100.0:
+        lv, obs, why = FAIL, f"{rsd68 * 100:.2f}%", (
+            "参与拟合的主标点散度超过门槛。问题不在『有没有坏点』，"
+            "而在整批标样本身不稳：稳健判据的门槛由本批散度自己算出，"
+            "整批散开时它会被撑宽到一个点都剔不掉。"
+            "此时归一化因子 F 的形状不可信，绝对年龄只能作横向对比；"
+            "应缩小标样与样品的信号强度差距后重测。")
+    else:
+        lv, obs, why = PASS, f"{rsd68 * 100:.2f}%", ""
+    out.append(_mk(
+        "calibration.primary_rsd", lv,
+        "主标 F(206Pb/238U) 重复性",
+        observed=obs,
+        criterion=f"参与拟合那组的 RSD ≤ {th.primary_rsd_fail_pct:.1f}%",
+        detail=why,
+        rsd68=None if rsd68 is None else float(rsd68),
+        rsd68_pct=None if rsd68 is None else float(rsd68) * 100))
 
     out.append(_mk(
         "samples.present", PASS if n_unknown else FAIL,

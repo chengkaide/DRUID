@@ -109,6 +109,41 @@ def test_calibrated_batch_with_primary_passes():
     assert k["calibration.primary_spots"].level == PASS
 
 
+def test_primary_rsd_fails_when_the_standards_themselves_are_scattered():
+    """
+    主标散度超标 → FAIL。
+
+    这条是"自己校自己"的批次里**唯一**带信息的量：主标一旦参与 F 拟合，
+    校准状态恒为"已校准"、主标偏差恒为 0、MSWD 恒为 0，全都看不出问题，
+    只有参与拟合那组的 RSD 会暴露"整批标样散开"。
+    项目口径（1.5%）此前没有任何机读检查在守 —— 2026-09-27 补上。
+    """
+    k = keyed(assess_batch(make_result(info_extra={"primary_rsd68": 0.0460})))
+    chk = k["calibration.primary_rsd"]
+    assert chk.level == FAIL
+    assert abs(chk.data["rsd68_pct"] - 4.60) < 1e-9
+    assert "1.5%" in chk.criterion
+
+
+def test_primary_rsd_passes_at_the_level_the_example_batch_measures():
+    """示例批次实测 1.06%，必须判 pass —— 否则整套基线会被这条新检查推翻。"""
+    k = keyed(assess_batch(make_result(info_extra={"primary_rsd68": 0.0106})))
+    assert k["calibration.primary_rsd"].level == PASS
+
+
+def test_primary_rsd_is_info_when_it_cannot_be_computed():
+    """
+    算不出散度时报 INFO 而不是 FAIL：那种情形（没有主标 / 只剩 1 个点）
+    已由 `calibration.mode` 与 `calibration.primary_spots` 负责，
+    这里再判一次 fail 只会让 counts[fail] 虚高、headline 说两遍。
+    """
+    k = keyed(assess_batch(make_result(info_extra={"primary_rsd68": None})))
+    chk = k["calibration.primary_rsd"]
+    assert chk.level == INFO
+    assert chk.data["rsd68"] is None
+    assert chk.observed == "—"
+
+
 def test_assumed_sigma_ext_is_warned():
     """
     没有监控标样 → σext 退回写死的经验值。这时样品年龄的误差棒里有一块是假设，
@@ -414,7 +449,8 @@ def test_check_keys_are_ascii_unique_and_stable():
 
     expected = {
         "calibration.mode", "calibration.primary_spots", "calibration.secondary_spots",
-        "calibration.primary_rejected", "samples.present",
+        "calibration.primary_rejected", "calibration.primary_rsd",
+        "samples.present",
         "standards.primary_bias", "standards.primary_mswd",
         "standards.secondary_bias", "standards.secondary_mswd",
         "reference.self_consistency",
