@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>DRUID — LA-ICP-MS 锆石 U-Pb 定年：从 cps 时间序列到逐深度年龄剖面</title>
 <meta name="description" content="DRUID（Depth-Resolved U–Pb Isotope Data reduction）把 Qtegra/iCAP 导出的 LA-ICP-MS 原始计数率时间序列，还原成带不确定度的锆石 U-Pb 年龄、标样质控表与逐深度年龄剖面；「剖面窗口」表可直接交给 R 包 ADEPT 判定坪年龄与 MSWD。含完整质控层与机读交接文件。">
-<meta name="keywords" content="DRUID, LA-ICP-MS, 锆石 U-Pb 定年, 激光剥蚀, 深度剖面, 分馏校正, 坪年龄, MSWD, ADEPT, 同位素年代学, geochronology, depth profile">
+<meta name="keywords" content="DRUID, LA-ICP-MS, 锆石 U-Pb 定年, 激光剥蚀, 深度剖面, 分馏校正, 坪年龄, MSWD, ADEPT, 同位素年代学, geochronology, depth profile, 跨平台, macOS, 苹果电脑, Linux">
 <meta name="author" content="chengkaide">
 <meta name="robots" content="index, follow">
 <link rel="canonical" href="https://chengkaide.github.io/DRUID/">
@@ -506,7 +506,7 @@ pre:focus-visible,code:focus-visible{outline:2.5px solid var(--acc);outline-offs
   <div class="links" id="navlinks">
     <a href="#preview">看输出</a><a href="#gate">三个数</a><a href="#docs">文档</a>
     <a href="#why">它做什么</a><a href="#principles">设计原则</a><a href="#output">输出</a>
-    <a href="#adept">ADEPT 接口</a><a href="#start">快速开始</a>
+    <a href="#adept">ADEPT 接口</a><a href="#start">快速开始</a><a href="#mac">Mac 用户</a>
   </div>
   <button id="navbtn" type="button" aria-expanded="false" aria-controls="navlinks"
           aria-label="展开导航菜单">☰</button>
@@ -530,7 +530,7 @@ pre:focus-visible,code:focus-visible{outline:2.5px solid var(--acc);outline-offs
     <span class="badge">依赖 <i>numpy / pandas / matplotlib / openpyxl / xlrd</i></span>
     <span class="badge"><i>无 scipy</i> — 统计内核自实现</span>
     <span class="badge">网页界面 <i>纯标准库</i>，无 npm 无构建</span>
-    <span class="badge">CI <i>4 平台 × Python 版本</i></span>
+    <span class="badge">CI <i>3 系统</i> × Python 版本</span>
     <span class="badge">自检 <i>174 项</i> + 端到端数值回归</span>
     <span class="badge">质控 <i>26 条检查项</i>，含机读交接文件</span>
   </div>
@@ -1347,18 +1347,88 @@ python tests/run_all.py
 <span class="c"># 端到端数值回归（约 1 分钟，核对标样 QC 与年龄分布）</span>
 python tests/check_example_batch.py</pre>
   <div class="notebox">依赖：numpy · pandas · matplotlib · openpyxl · xlrd，刻意不依赖 scipy。
-    也可以双击「启动数据处理工具」脚本（Windows <code>.bat</code> / macOS <code>.command</code>）用网页界面，全程不需要命令行。</div>
+    也可以双击「启动数据处理工具」脚本（Windows <code>.bat</code> / macOS <code>.command</code>）用网页界面，全程不需要命令行。
+    <b>苹果电脑上怎么走，见 <a href="#mac">第 08 节</a>。</b></div>
   <div class="facts rv">
     <div class="fact"><div class="n">85</div><div class="d">示例测点随仓库发布，可复现文档中的每个数字</div></div>
     <div class="fact"><div class="n">174</div><div class="d">项自检 + 真实批次的端到端数值回归</div></div>
-    <div class="fact"><div class="n">4</div><div class="d">个平台 × Python 版本的 CI（含 Windows）</div></div>
+    <div class="fact"><div class="n">3</div><div class="d">个系统的持续集成：Ubuntu / Windows / macOS</div></div>
   </div>
 </div></section>
 
-<!-- ============ 08 已知限制 ============ -->
-<section id="limits" style="background:var(--bg2)"><div class="wrap">
+<!-- ============ 08 苹果电脑 ============ -->
+<section id="mac" style="background:var(--bg2)"><div class="wrap">
+  <p class="eyebrow">跨平台</p>
+  <h2><span class="num">08</span>苹果电脑上怎么用</h2>
+  <p class="sub">同位素数据处理的软件，大多最后只能在一台 Windows 机器上跑 —— 要么绑着仪器厂商的采集软件，
+    要么依赖某个只在 Windows 上编译得出来的库。DRUID 不属于这一类：它<b>只读导出的 CSV / Excel 文本</b>，
+    从不连仪器；算法层是纯 Python（numpy / pandas / matplotlib / openpyxl / xlrd），
+    <b>没有一处编译扩展</b>，也没有任何"如果是 Windows 就……"的分支 —— 三个系统算出来的是<b>同一套数字</b>。
+    真正会绊住人的不是算法，是<b>三样容易混淆的东西</b>：先分清你手上拿到的是哪一个。</p>
+
+  <table class="gtable">
+    <thead><tr><th>你手上是</th><th>Windows</th><th>macOS</th><th>为什么</th></tr></thead>
+    <tbody>
+      <tr>
+        <td data-th="你手上是">源码文件夹</td>
+        <td data-th="Windows">双击 <code>启动数据处理工具.bat</code></td>
+        <td data-th="macOS">双击 <code>启动数据处理工具.command</code></td>
+        <td data-th="为什么">两个脚本做同一件事，只是外壳不同。<b>Mac 上走这条</b>，需要先装 Python 与依赖</td></tr>
+      <tr>
+        <td data-th="你手上是">单文件程序 <code>DRUID.exe</code></td>
+        <td data-th="Windows">双击即用，不必装 Python</td>
+        <td data-th="macOS">✗ 用不了</td>
+        <td data-th="为什么">它是把 Python 与全部依赖一起<b>冻结</b>出来的 Windows 可执行文件，不是"跨系统的安装包"</td></tr>
+      <tr>
+        <td data-th="你手上是">Mac 上的单文件程序</td>
+        <td data-th="Windows">—</td>
+        <td data-th="macOS">得在 Mac 本机重新冻结一次</td>
+        <td data-th="为什么">冻结工具（PyInstaller）只能为"它当时所在的那个系统"出货，不能跨系统生成</td></tr>
+    </tbody>
+  </table>
+
+  <h3 style="margin:34px 0 12px">Mac 上最短的一条路：源码 + <code>.command</code></h3>
+  <pre><span class="c"># 1) 装环境。在含 druid/ 的那一层（包根目录）执行 —— 包与五个依赖一次装好</span>
+python3 -m pip install -e .
+<span class="c">#    怎么算成功：末行出现  Successfully installed ...</span>
+
+<span class="c"># 2) 双击「启动数据处理工具.command」。它会自己找解释器、检查依赖，</span>
+<span class="c">#    再启动本地网页界面。首次被系统拦下 → 见下面第 1 条。</span>
+
+<span class="c"># 3) 窗口里会打印一个 http://127.0.0.1:端口 的地址 —— 用浏览器打开它。</span>
+<span class="c">#    之后全程在网页上点：选文件夹 → 看检查报告 → 开始处理 → 下载结果。</span>
+<span class="c">#    要退出，直接关掉那个终端窗口。</span></pre>
+
+  <div class="limits2 rv" style="margin-top:26px">
+    <div class="limit"><div class="ic">[1]</div><div>
+      <h4>「来自身份不明的开发者」不是脚本坏了</h4>
+      <p>那是 Gatekeeper 在拦没有付费签名的脚本。二选一：<b>右键点它 → 打开 → 再点一次「打开」</b>；
+        或者在终端里执行 <code>xattr -d com.apple.quarantine 启动数据处理工具.command</code>。
+        只需做一次，之后照常双击。</p></div></div>
+    <div class="limit"><div class="ic">[2]</div><div>
+      <h4>中文字体不用你配 —— 但这件事本来会静默出错</h4>
+      <p>画图库找不到中文字体时<b>不报错、不警告</b>，只是把汉字全画成方块，进程照样返回成功。
+        所以字体候选里已经列上 Mac 自带的<b>苹方（PingFang SC）</b>，Mac 上开箱就是中文图；
+        Linux 上则可能要自己补一次 <code>fonts-noto-cjk</code>。</p></div></div>
+    <div class="limit"><div class="ic">[3]</div><div>
+      <h4>跨平台的是计算，不是"一台机器服务全组"</h4>
+      <p>网页界面只监听本机回环地址，Mac 与 Windows 一致：<b>它是给你自己用的界面</b>，
+        不是局域网里的服务。要多人共用就各自装一份 —— 装好之后运行不需要联网，也不需要任何授权。</p></div></div>
+  </div>
+
+  <div class="notebox" style="margin-top:26px">
+    <b>"能在 Mac 上跑"不是推断出来的。</b>持续集成里挂着一条 <code>macos-latest</code> 的作业，
+    在 Apple Silicon 真机上装依赖、跑全部自检，每次改动都会跑一遍 ——
+    它盯的正是这一节里最容易静默失败的两件事：中文字体真的画出汉字、启动器真的能被执行
+    （行尾必须是 LF，可执行位不能丢）。逐步说明与常见问题在仓库根目录的
+    <code>使用说明.txt</code>，三个系统都覆盖到了。
+  </div>
+</div></section>
+
+<!-- ============ 09 已知限制 ============ -->
+<section id="limits"><div class="wrap">
   <p class="eyebrow">边界</p>
-  <h2><span class="num">08</span>什么情况下 DRUID 不适用</h2>
+  <h2><span class="num">09</span>什么情况下 DRUID 不适用</h2>
   <p class="sub">结果是要写进文章的，边界越清楚越好用。下面四条不是"以后会修"的
     待办，而是<b>使用者必须自己判断</b>的事。</p>
   <div class="limits2 rv">

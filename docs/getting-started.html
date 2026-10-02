@@ -204,7 +204,7 @@
   <ol>
     <li><a href="#c1">三分钟最短路径</a></li>
     <li><a href="#c2">它做什么、你要做什么</a></li>
-    <li><a href="#c3">装环境（Windows，从零开始）</a></li>
+    <li><a href="#c3">装环境（Windows 从零开始；macOS 差异见节首）</a></li>
     <li><a href="#c4">准备你自己的数据</a></li>
     <li><a href="#c5">跑自己的批次</a></li>
     <li><a href="#c6">看懂结果：先看这三个数</a></li>
@@ -295,6 +295,16 @@
 </table>
 
 <h2 id="c3">装环境（Windows，从零开始）</h2>
+
+<div class="note">
+<b>这一节走的是 Windows 的路径。macOS 上只有三处不同</b>，其余照做即可：
+① 命令里的 <code>python</code> 换成 <code>python3</code>，<code>.venv\Scripts\pip</code> 换成 <code>.venv/bin/pip</code>；
+② 最后不是双击 <code>.bat</code>，而是双击 <code>启动数据处理工具.command</code>（首次被系统拦下时：右键 → 打开 → 再点一次「打开」）；
+③ <b>不需要另配中文字体</b>，会自动用 Mac 自带的苹方。
+另外 <code>DRUID.exe</code> 是 Windows 专用的，拷到 Mac 上跑不了 —— 要在 Mac 上也要单文件程序，
+只能在 Mac 本机重新冻结一次（冻结工具不支持跨系统打包）。
+完整的对照见落地页 <a href="index.html#mac">「苹果电脑上怎么用」</a>，仓库根目录的 <code>使用说明.txt</code> 里也有。
+</div>
 
 <p>目标：把 Python 和五个依赖装好，并用仓库自带的示例批次确认一切正常。全程只需要复制粘贴四条命令。</p>
 
