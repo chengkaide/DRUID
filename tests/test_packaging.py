@@ -238,6 +238,123 @@ def test_bat_files_stay_ascii():
             " —— 中文注释在 cmd.exe 里会变成乱码")
 
 
+def test_a_real_cjk_font_is_available():
+    """
+    至少有一个候选中文字体**真的能被 matplotlib 找到**，而且真的有汉字字形。
+
+    ⚠ 这条守的是本仓最安静的一个故障：`CJK_FONTS` 里的字体一个都找不到时，
+    matplotlib **不报错、不警告**，只是悄悄退回 DejaVu Sans —— 而 DejaVu 没有
+    汉字，于是剖面图里的「年龄」「剥蚀时间」全变成「□□□」，批处理照样 exit 0、
+    Excel 照样产出。在 Windows 上开发永远看不到（雅黑一定在），换到 macOS 才
+    发现，那时已经出了几十张图。CI 的 macos job 就靠这条兜底。
+
+    两个易错点：
+      * `DejaVu Sans` **垫在 `CJK_FONTS` 末尾**（只为让 matplotlib 别抛警告），
+        必须排除在断言之外 —— 否则这条测试恒真。
+      * 只查名字不够：名字在、字形不在，照样画不出字。所以再拿 `ft2font`
+        查一个汉字有没有 glyph index（0 = 没有）。
+    """
+    import platform as _platform
+
+    from matplotlib import font_manager as fm
+
+    from druid.core.constants import CJK_FONTS
+
+    candidates = [f for f in CJK_FONTS if not f.startswith("DejaVu")]
+    known = {f.name for f in fm.fontManager.ttflist}
+    hit = [f for f in candidates if f in known]
+
+    if _platform.system() == "Linux":
+        # 中文字体在 Linux 上是**可选包**（fonts-noto-cjk / fonts-wqy-microhei），
+        # 装不装取决于发行版与 CI 镜像 ⇒ 缺了是环境问题、不是代码写错，不在这里
+        # 断言。Windows / macOS 的候选字体是**系统自带**，两边都强断言。
+        if not hit:
+            print("[提示] 本机没有任何候选中文字体；Linux 上可装 fonts-noto-cjk")
+        return
+
+    assert hit, (
+        f"matplotlib 一个候选中文字体都找不到（候选 {candidates}，"
+        f"本机共有 {len(known)} 个字体名）"
+        " —— 图里的中文会静默变成「□□□」，而进程照样 exit 0")
+
+    from matplotlib import ft2font
+    name = hit[0]
+    face = ft2font.FT2Font(fm.findfont(fm.FontProperties(family=name)))
+    idx = face.get_char_index(ord("年"))
+    assert idx, f"{name} 里没有汉字「年」的字形（glyph index = 0）—— 换一个候选字体"
+
+
+def test_reveal_picks_the_command_for_each_platform():
+    """
+    `reveal()` / `list_drives()` 的 Windows / Darwin / Linux 三个分支各走对路。
+
+    ⚠ 动机：开发机只有 Windows，**macOS 的代码路径平时一行都执行不到** ——
+    而 `reveal()` 正是 mac 用户在界面上会真点的那个"打开所在文件夹"。
+    跑 macos 的 CI job 也盖不住它（没有别的测试调用这个函数），所以只能
+    在这里用假 `platform.system()` 把三个分支都走一遍。
+
+    这也是本文件里**唯一**手写还原（而不用 pytest 的 monkeypatch）的地方 ——
+    `_selftest.run()` 直接 `fn()` 调，不支持 fixture，见 `tests/_selftest.py`。
+    别把它当惯例：能真跑的路径就不要用假平台。
+
+    各平台预期（`reveal` 的语义是"打开**所在文件夹**"）：
+      * Windows：目录 → `os.startfile(目录)`；文件 → `explorer /select, 文件`
+      * Darwin ：一律 `open <目录>`
+      * 其他   ：一律 `xdg-open <目录>`
+    """
+    import tempfile
+    import types
+
+    from druid.webui import handlers
+
+    calls = []
+    keep = (handlers.subprocess.Popen, handlers.platform,
+            getattr(handlers.os, "startfile", None))
+    handlers.subprocess.Popen = lambda cmd, *a, **k: calls.append(list(cmd))
+    # os.startfile 只有 Windows 有；补个假的，好让另外两个平台也能走到这条分支
+    handlers.os.startfile = lambda p: calls.append(["<startfile>", p])
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            d = base / "子目录"
+            d.mkdir()
+            f = base / "a.txt"
+            f.write_text("x", encoding="utf-8")
+
+            cases = (
+                # 平台, 对目录的期望, 对文件的期望, list_drives 的期望
+                ("Darwin", ["open", str(d)], ["open", str(base)], ["/"]),
+                ("Linux", ["xdg-open", str(d)], ["xdg-open", str(base)], ["/"]),
+                ("Windows", ["<startfile>", str(d)],
+                 ["explorer", "/select,", str(f)], None),
+            )
+            for sysname, want_dir, want_file, want_drives in cases:
+                # 默认参数把当前循环值捕获进来，避免闭包晚绑定
+                handlers.platform = types.SimpleNamespace(
+                    system=lambda s=sysname: s)
+
+                assert handlers.reveal(str(d))["ok"], sysname
+                assert calls[-1] == want_dir, (sysname, calls[-1], want_dir)
+
+                assert handlers.reveal(str(f))["ok"], sysname
+                assert calls[-1] == want_file, (sysname, calls[-1], want_file)
+
+                got = handlers.list_drives()
+                if want_drives is None:
+                    # Windows 上返回本机真实存在的盘符；在别的系统上跑这条
+                    # 分支时（Path("C:\\") 不存在）会是空表 —— 只查形状。
+                    assert isinstance(got, list)
+                    assert all(x.endswith(":\\") for x in got), got
+                else:
+                    assert got == want_drives, (sysname, got)
+    finally:
+        handlers.subprocess.Popen, handlers.platform = keep[0], keep[1]
+        if keep[2] is None:
+            del handlers.os.startfile
+        else:
+            handlers.os.startfile = keep[2]
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # 三、每个子模块都导得进来
 # ═════════════════════════════════════════════════════════════════════════════
@@ -426,7 +543,9 @@ def test_landing_page_states_the_real_selfcheck_count():
     同轮再涨到 171：`segment` 补一条"下标口径"的**契约回归**（D-1），
     `sample_role` 补一条"作废标记整名相等"的用例。再涨到 172：加 macOS 启动器
     `启动数据处理工具.command` 时补一条「LF 行尾 + 100755 可执行位」的守护，
-    与上面 `test_bat_files_are_crlf_on_disk` 互为镜像。）
+    与上面 `test_bat_files_are_crlf_on_disk` 互为镜像。现为 174：CI 加 macOS
+    job 时补「中文字体真的可用」与「reveal/list_drives 三平台分支」两条 ——
+    macOS 的代码路径在这台 Windows 开发机上一行都执行不到，只能这么测。）
     """
     import ast
     n = 0

@@ -1,12 +1,19 @@
 name: CI
 
 # 这个工具的部署平台是 Windows —— 实验室里双击「启动数据处理工具.bat」跑数据。
-# 但开发和 PR 检查用 Linux 更便宜、更快，所以两边都测：
+# 但开发和 PR 检查用 Linux 更便宜、更快，所以三个平台都测：
 #
 #   ubuntu   覆盖 requires-python 的版本区间（3.9 是下界）
 #   windows  确保真正的使用环境没坏（控制台编码、路径分隔符、CRLF 都只在这里暴露）
+#   macos    macOS 同事走的是**另一条入口**：`启动数据处理工具.command`
+#            （LF 行尾 + 100755 可执行位），以及**中文字体** ——
+#            matplotlib 找不到字体会静默退回 DejaVu Sans，图里中文全变「□□□」
+#            而进程照样 exit 0，这在 Windows 上开发时永远看不到。
 #
-# 刻意不测 macOS：没有人在这台工具上用 macOS，加一个平台只是多一份维护成本。
+# 这条 macos 项 2026-10-02 加的（此前写着"没有人用 macOS"—— 那条理由不再成立）。
+# 只挂一个 python 版本：`macos-latest` 是 arm64，而 3.9 没有官方 arm64 构建；
+# 下界已经由 ubuntu 的 3.9 覆盖。macos runner 计费约为 Linux 的 10 倍，
+# 所以**只**在这个矩阵里加它，下面两个独立 job 仍固定在 ubuntu。
 on:
   push:
     branches: [main]
@@ -49,6 +56,8 @@ jobs:
             python: "3.13"
           - os: windows-latest
             python: "3.13"         # 实际使用平台
+          - os: macos-latest
+            python: "3.13"         # macOS 同事：.command 入口 + 中文字体（见文件头注释）
     steps:
       - uses: actions/checkout@v4
 

@@ -203,7 +203,14 @@ pip install -e ".[dev]" && python -m pytest -q
 
 `.github/workflows/ci.yml`（推上 GitHub 后自动跑，约 2 分钟）：
 
-- ubuntu × py3.9 / 3.12 / 3.13，windows × py3.13；
+- ubuntu × py3.9 / 3.12 / 3.13，windows × py3.13，macos × py3.13。
+  macos 是 **2026-10-02** 加的（此前写着"没有人用 macOS"，那条理由不再成立）。
+  它盯的是别的平台盯不到的两件事：`启动数据处理工具.command` 的 LF 行尾 /
+  100755 可执行位，以及**中文字体真的可用** —— matplotlib 找不到字体会静默
+  退回 DejaVu Sans，图里中文全变「□□□」而进程照样 exit 0，这在 Windows 上
+  开发永远看不到。只挂一个 py 版本：`macos-latest` 是 arm64，而 3.9 没有官方
+  arm64 构建（下界已由 ubuntu 的 3.9 覆盖）；macos runner 计费约为 Linux 的
+  10 倍，所以只在矩阵里加它，下面两个独立 job 仍固定在 ubuntu；
 - 每个平台都跑 pyflakes、`pytest`、`tests/run_all.py`（不含 pytest 的那条路）、
   以及两个命令行入口的 `--help`；
 - 另一个 job 构建 wheel，核对静态资源与两个入口点真的在包里；
