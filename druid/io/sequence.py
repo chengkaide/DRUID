@@ -57,6 +57,19 @@ def sample_role(name: str, primary: str = "91500", secondary: str = "Ple") -> st
     这些测点就会被正确识别，而不是被误判成"未知样品"导致整批失去主标、
     归一化因子曲线为空、最后 np.interp 在空数组上崩溃。
     默认仍是 91500 / Ple，向后兼容。
+
+    ⚠ 判定顺序（**别名表是无条件的**，容易记反）
+    ------------------------------------------
+        ① 先比用户传进来的 primary / secondary（大小写与首尾空格不敏感）
+        ② **再**比内置别名表（91500 系列 / Ple 系列）—— 这一步不看参数传没传
+        ③ 玻璃关键词（srm / nist / 612 / 610）
+        ④ 都落空 → unknown
+
+    所以 `sample_role("91500", primary="GJ1")` **仍然返回主标**：
+    自定义名字是"追加识别"，不是"替换默认"。对"一批只用一种主标"的批次
+    没有影响（本仓 25 批全用 91500/Ple），但"一批里同时量了自定义主标和
+    91500"时会出现两个主标，需要人工确认取哪个。已记为待拍板项
+    （`改进清单.md` D-2），`tests/test_io_sequence.py` 把现状钉住了。
     """
     s = str(name).strip().lower()
     p = str(primary).strip().lower()
@@ -67,7 +80,7 @@ def sample_role(name: str, primary: str = "91500", secondary: str = "Ple") -> st
         return ROLE_PRIMARY
     if sec and s == sec:
         return ROLE_SECONDARY
-    # ② 默认别名（不指定参数时的兜底）
+    # ② 默认别名（**无条件生效**，不是"只在没传参数时生效"，见 sample_role 的说明）
     if s in ("91500", "91500 zircon", "91500z"):
         return ROLE_PRIMARY
     if s in ("ple", "plesovice", "pl", "plešovice"):
@@ -157,7 +170,11 @@ def read_sequence(path, primary=None, secondary=None) -> pd.DataFrame:
     参数
     ----
     primary / secondary : 可选，用户实际使用的主标 / 监控标样名。
-        传入后会覆盖 sample_role 里的默认 91500 / Ple 判定（见 sample_role）。
+        **是追加，不是替换**：这两个名字会被**额外**认出来（见 sample_role 的
+        第 ① 步），而 91500 / Ple 这两组默认别名**照样生效** ——
+        也就是说自定义主标的批次里，`91500` 仍会被判成主标。
+        若某批真的同时量了自定义主标与 91500，需要人工确认取哪一个
+        （这条待拍板，见 `改进清单.md` D-2）。
 
     返回列
     ------

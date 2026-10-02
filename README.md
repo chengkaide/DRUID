@@ -110,10 +110,20 @@ python tests\run_all.py
 不需要装 pytest。装了开发依赖（`pip install -e ".[dev]"`）的话，
 `python -m pytest -q` 是等价且报告更清楚的一条路——CI 用的是这条。
 
-自检覆盖三层：统计内核（卡方上尾概率、加权平均、MAD 判离群，参考值取自 R）、
-输入边界（Qtegra CSV 解析、剥蚀区间、气体空白、窗口切分，用合成数据）、
-打包（版本号一致、入口点可调用、网页资源齐全，外加"仓库里不许出现真实地名 /
-样品号 / 用户名"的护栏）。
+自检按**层**铺开（现在 169 项），覆盖的是"改一处不会悄悄改坏另一处"：
+
+| 层 | 文件 | 钉的是什么 |
+|---|---|---|
+| 度量衡 | `test_geochronology.py` | 年龄 ⇄ 比值往返、`r75_from` 的交叉恒等式、`207Pb/206Pb` 的**比值下限不是 0** |
+| 物理模型 | `test_core_models.py` | Stacey–Kramers 单调性与钳位、死时间公式与 2 倍钳位、"τ≤0 时不返回引用" |
+| **心脏** | `test_reduction.py` | `reduce_interval` 的每一条契约：缺通道报错、n<5 返回 None、**204Pb 不显著就不扣普通铅**、ρ 值域、fix 模式、jackknife σ ∝ 1/√n |
+| 深度剖面 | `test_depth.py` | BIC 分割的四道闸门、边界精修、`merge_close` 的**两条**判据、真域/过渡带判定、`F(τ)` 与 σ 的两路正交合成 |
+| 入口分流 | `test_io_sequence.py` | 样品名规范化先于角色判定、玻璃标样拦截、别名表与自定义标样名的关系 |
+| 统计内核 | `test_statistics.py` | 卡方上尾概率（参考值取自 R）、加权平均、MAD 判离群 |
+| 输入边界 | `test_input_boundary.py` | Qtegra CSV 解析、剥蚀区间、气体空白、窗口切分（合成数据） |
+| 质控/交接 | `test_qc.py` · `test_handoff.py` | 检查项等级与用途清单、`.handoff.json` 契约 |
+| 参考值口径 | `test_reference_presets.py` | 五档预设与默认档唯一出处 |
+| 打包 | `test_packaging.py` | 版本号一致、入口点可调用、网页资源齐全，外加"仓库里不许出现真实地名 / 样品号 / 用户名"的护栏 |
 
 **还有一项端到端检查，它跑得慢，所以单独调用：**
 

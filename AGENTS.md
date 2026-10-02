@@ -12,7 +12,7 @@ LA-ICP-MS 锆石 U-Pb 数据还原工具。把 Qtegra/iCAP 导出的 cps 时间�
 
 一句话分工：**DRUID 测出来，ADEPT 读出来。**
 
-**文档站（`docs/`，四份自包含单文件，push 即上线）在动手前值得翻一下**：
+**文档站（`docs/`，五份正式页面 + 一份 404，都是自包含单文件，push 即上线）在动手前值得翻一下**：
 
 | 页面 | 什么时候看 |
 |---|---|
@@ -20,6 +20,9 @@ LA-ICP-MS 锆石 U-Pb 数据还原工具。把 Qtegra/iCAP 导出的 cps 时间�
 | `docs/getting-started.html` | 第一次跑数据：装环境四条命令（每条都写"怎么算成功"）、数据怎么摆、结果先看哪三个数、九类报错各自对应哪一步 |
 | `docs/from-first-principles.html` | 不确定某个算法**为什么**要这么做、或者要判断"这个参数能不能改"时。10 张图，从衰变讲到 MSWD；第 8.4 节列了**已知局限**，改代码前先确认不是在自己重新发明它 |
 | `docs/druid-adept-dataflow.html` | 要动两边接口（`剖面窗口` 表的列名、`BatchResult` 字段）时 |
+| `docs/extreme-domain-spans.html` | 想知道"跨域跨度很大的测点到底是真继承核还是普通铅污染"时。由 `tools/gen_docs_extreme_spans.py` 从全库现算生成（本地实名版 + 线上脱敏版两张图），**内容不许手改** |
+
+> `docs/404.html` 是错误页，**不进 `sitemap.xml`**（搜索引擎自己会排除）。数"几份页面"时以 `sitemap.xml` 里的正式页为准（现为五份）。
 
 - 包名 `druid`（历史上叫 `upb`，见到旧叫法都是改名前的引用）
 - 版本在 `druid/__init__.py:__version__`（**必须与 `pyproject.toml` 一致**，

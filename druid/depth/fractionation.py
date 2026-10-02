@@ -131,16 +131,29 @@ def profile_ages_76(prof: pd.DataFrame, F76: np.ndarray, sigma_ext76: float):
 
     所以调用此函数时，通常传的 F76 是全 1 的数组（即不校正），
     或者由上一层显式决定。这里保留参数位是为了保持接口对称。
+
+    ⚠ 关于调用方（2026-10-02 核对）
+    ------------------------------
+    本函数**当前没有任何调用方** —— `workflow.py` 只 import 了 `bracket_F` 与
+    `profile_ages`，`depth/__init__.py` 把它当作公开 API 导出，但全仓搜不到使用者
+    （对应的原因见 `进度与交接.md`：`剖面窗口` 表刻意不补 `Age76/Age76_1s` 两列）。
+    所以"改了它会不会动到结果"的答案是**动不到** —— 这也意味着**端到端基线
+    （`check_example_batch.py`）对它无效**，它唯一的守护是
+    `tests/test_depth.py::test_profile_ages_76_matches_the_scalar_definition`。
+    要动这个函数，先看那条测试，别指望基线会替你发现。
+
+    实现
+    ----
+    原先这里是逐点循环调三次**标量** `age76`，而 `age76` 本身已经向量化
+    （内部是 80 次数组二分，逐点调用等于把同一段循环跑 137 遍）。
+    2026-10-02 改为整体向量化，并在 137 个随机点上与旧写法逐位比对：
+    `age` 与 `sigma` 的**最大差都是 0.0**（逐位相等，不是"接近"）。
     """
     R = prof["R76"].to_numpy() * F76
     s = np.hypot(prof["s76"].to_numpy() * F76, sigma_ext76 * R)
-    ag = np.empty_like(R)
-    sa = np.empty_like(R)
-    for i in range(R.size):
-        # 逐点二分求逆，因为 207Pb/206Pb 的年龄方程无法解析反解
-        ag[i] = age76(R[i])
-        sa[i] = abs(age76(R[i] + s[i]) - age76(R[i] - s[i])) / 2.0
-    return ag, sa
+    # σ 用"上下各偏 s 再取半差"而不是解析式：207/206 的年龄方程是隐式的
+    # （age76 内部是二分法），没有解析导数，差分是最稳的近似。
+    return age76(R), np.abs(age76(R + s) - age76(R - s)) / 2.0
 
 
 # ─────────────────────────────────────────────────────────────────────────────

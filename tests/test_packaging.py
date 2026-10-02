@@ -371,7 +371,11 @@ def test_landing_page_states_the_real_selfcheck_count():
     否则"自检 N 项"这种话就只是广告词。（后来又涨到 98：补
     `calibration.primary_rsd` 时带了三条测试；同一天涨到 99：
     补「网页界面参数入口 vs 后端白名单」那条时 +1；同日再涨到 101：
-    补「207/206 也要对自己的下限判触界」与「两个下限只能有一个出处」。）
+    补「207/206 也要对自己的下限判触界」与「两个下限只能有一个出处」。
+    再后来涨到 169：补四个核心链路测试文件 —— 之前 `reduce_interval`
+    与整条深度剖面链路是**零测试覆盖**，见 `tests/test_reduction.py`、
+    `tests/test_geochronology.py`、`tests/test_depth.py`、
+    `tests/test_io_sequence.py`、`tests/test_core_models.py`。）
     """
     import ast
     n = 0
