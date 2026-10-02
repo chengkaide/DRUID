@@ -307,6 +307,11 @@ def svg_figure(rows, bands, labels, inline_style: bool) -> tuple[str, int, int]:
              % (ML + PA_W + GAP, TOP + 14))
     P.append('<text class="fig-sub" x="%d" y="%d" text-anchor="end">'
              '灰底 = 全库同 τ 位置的分位包络</text>' % (ML + PA_W + GAP + PB_W, TOP + 27))
+    # 右面板的纵轴名：它是 τ（0 = 积分段起点 → 1 = 终点），光有 0.0~1.0 的刻度
+    # 读者不知道那是什么。放不下旋转的轴标题（两面板之间只有 52 px），
+    # 就把 "τ" 摆在刻度列的正上方。
+    P.append('<text class="fig-sub" x="%d" y="%d" text-anchor="end">τ</text>'
+             % (ML + PA_W + GAP - 8, TOP + 27))
 
     # ── 左面板 ──
     for t in AGE_TICKS:
@@ -540,9 +545,9 @@ def concordia_legend(n_lib: int) -> str:
 <span class="k"><i class="sw c2"></i>105–125%%</span>
 <span class="k"><i class="sw c3"></i>125–150%%</span>
 <span class="k"><i class="sw c4"></i>≥ 150%%</span>
-<span class="k">虚线 = 等协和度射线（50/70/80/90/110/120/150/200%%）</span>
+<span class="k">虚线 = 等协和度线 50/70/80/90/110/120/150/200%%（左图因取对数而互相平行）</span>
 <span class="k">灰带 = 常用判据 90–110%%</span>
-<span class="k">灰点 = 全库 %d 个正式年龄域</span>
+<span class="k">灰点 = 全库 %d 个正式年龄域（两图各按自己的轴范围裁剪）</span>
 <span class="k">彩点 = 本文这 12 个测点解出的域</span></li>
 </ul>""" % n_lib
 
@@ -579,7 +584,11 @@ def inject(fragment: str, page: pathlib.Path,
 CONC_RAYS = (50.0, 70.0, 80.0, 90.0, 110.0, 120.0, 150.0, 200.0)
 CONC_BAND = (90.0, 110.0)          # 常用判据带
 AGE_AX_LO, AGE_AX_HI = 100.0, 3500.0
-R68_AX_HI, R75_AX_HI = 0.62, 18.5
+R68_AX_HI, R75_AX_HI = 0.66, 18.5   # 0.66 ≈ 3140 Ma：把 3000 Ma 那根刻度留在轴内
+# 两条衰变链的常数（与 druid.core.geochronology 同值）。**只在这里写一次**：
+# 四个调用点各写一遍的话，改了一处忘了另一处，图上的协和线与数据点就不再自洽。
+LAM68 = 1.55125e-10                 # 238U，yr⁻¹
+LAM35 = 9.8485e-10                  # 235U，yr⁻¹
 
 
 def library_points(csv_path: pathlib.Path):
@@ -605,15 +614,16 @@ def _to_panel(panel, a68, a75, xa, ya, xb, yb):
     把一个 (206/238 年龄, 207/235 年龄) 投到指定面板；越界返回 None。
 
     `panel="age"` 直接画年龄；`panel="ratio"` 先按两条衰变链换算成比值 ——
-    λ₂₃₈ = 1.55125e-10、λ₂₃₅ = 9.8485e-10（与 druid.core.geochronology 同值，
-    这里写字面量是为了让本函数不依赖 druid 的任何运行时状态）。
+    λ₂₃₈ = 1.55125e-10、λ₂₃₅ = 9.8485e-10（与 druid.core.geochronology 同值）。
+    用的是本模块顶部的 `LAM68` / `LAM35` —— **不 import druid**，这个脚本
+    只读数据库和一张 csv，不该牵扯包的运行时状态。
     """
     if panel == "age":
         if not (AGE_AX_LO <= a68 <= AGE_AX_HI and AGE_AX_LO <= a75 <= AGE_AX_HI):
             return None
         return xa(a68), ya(a75)
-    r68 = math.expm1(1.55125e-10 * a68 * 1e6)
-    r75 = math.expm1(9.8485e-10 * a75 * 1e6)
+    r68 = math.expm1(LAM68 * a68 * 1e6)
+    r75 = math.expm1(LAM35 * a75 * 1e6)
     if not (0 < r68 <= R68_AX_HI and 0 < r75 <= R75_AX_HI):
         return None
     return xb(r68), yb(r75)
@@ -635,17 +645,30 @@ def _cascade(items, sep, key, lower_is_first):
 
 
 def svg_concordia(rows, lib, inline_style: bool) -> tuple[str, int, int]:
-    """两面板：左 = 年龄–年龄（等协和度是射线），右 = 比值空间（Wetherill）。"""
+    """
+    两面板，回答同一个问题："协和度这个数，落到图上是什么样子。"
+
+    · 左 = **年龄–年龄**（两轴都取对数）：协和度 = 纵值 ÷ 横值。两轴都取对数后，
+      等协和度线是**一族斜率同为 1 的平行线** —— 100% 那条就是 45° 协和线，
+      离它越远 = 偏离 100% 越多。
+    · 右 = **比值空间**（教科书上的 Wetherill 谐和线，两轴都线性）：协和线是
+      曲线；等协和度线从原点发散，但**既不是直线、也不平行**。
+
+    ⚠ 左图**不要**写成"从原点发散的射线" —— 那句话是在**线性**坐标下成立的，
+    本图是对数轴，画出来是平行线。写的话要跟着画走。
+    """
     MLA, PW = 60, 370
-    GAPX = 62
+    GAPX = 74                  # 两面板之间要放下右图的 y 轴标题 + 刻度数字
     MLB = MLA + PW + GAPX
-    MR = 22
+    MR = 84                  # 右侧留一列「对应年龄」小字
     W = MLB + PW + MR
-    TOP, TT = 8, 34          # TT：面板标题行
+    TOP, TT = 8, 46          # TT：面板标题行（标题 + 两行小字）
     PT = TOP + TT
     PH = PW                  # 与 PW 相等 ⇒ 对数坐标下 45° 线真的是 45°
     PB_ = PT + PH
     H = PB_ + 48
+    n_lib = len(lib)
+    n_obs = sum(len(r["domains"]) for r in rows)
 
     lo, hi = math.log10(AGE_AX_LO), math.log10(AGE_AX_HI)
 
@@ -661,26 +684,44 @@ def svg_concordia(rows, lib, inline_style: bool) -> tuple[str, int, int]:
     def yb(r):
         return PB_ - min(R75_AX_HI, max(0.0, r)) / R75_AX_HI * PH
 
+    # 两个面板各自真正画得出的灰点数。**不要写死** —— 轴范围一改，
+    # 手写的"两图都是 1480 个"立刻变成假话（这一版就踩到：左图只画得出 1401）。
+    n_draw = {"age": 0, "ratio": 0}
+    for a68, a75 in lib:
+        for panel in ("age", "ratio"):
+            if _to_panel(panel, a68, a75, xa, ya, xb, yb) is not None:
+                n_draw[panel] += 1
+
     P = ['<svg class="fig" %sviewBox="0 0 %d %d" role="img" '
          'aria-labelledby="figConcT figConcD" aria-describedby="figConcD">'
          % ('width="%d" height="%d" ' % (W, H) if inline_style else '', W, H)]
-    P.append('<title id="figConcT">协和度代表什么：等协和度射线族与实测点</title>')
+    P.append('<title id="figConcT">协和度代表什么：等协和度线族与实测点</title>')
     P.append('<desc id="figConcD">左图横轴为 206Pb/238U 年龄、纵轴为 207Pb/235U 年龄，'
-             '两者都取对数，于是协和度等于该点相对原点的斜率，等协和度呈射线族、'
-             '协和线是 45 度线。右图是同一批点在 207Pb/235U 对 206Pb/238U 的比值空间'
-             '（教科书上的 Wetherill 谐和线）。两图的灰点都是全库 1501 个正式年龄域，'
-             '彩点是本文讨论的 27 个域。</desc>')
+             '两者都取对数，于是协和度等于纵值除以横值；100%% 的协和线是 45 度线，'
+             '虚线是 50 到 200%% 的等协和度线，因两轴同取对数而互相平行。'
+             '右图是同一批点在 207Pb/235U 对 206Pb/238U 的比值空间'
+             '（教科书上的 Wetherill 谐和线），协和线是一条曲线，'
+             '等协和度线从原点发散。两图的灰点都取自全库 %d 个正式年龄域，'
+             '各自按轴范围裁剪（左图 %d 个、右图 %d 个）；'
+             '彩点是本文讨论的 %d 个域。</desc>'
+             % (n_lib, n_draw["age"], n_draw["ratio"], n_obs))
     if inline_style:
         P.append(INLINE_STYLE)
     P.append('<rect class="fig-bg" x="0" y="0" width="%d" height="%d" rx="12"/>' % (W, H))
 
-    P.append('<text class="fig-title" x="%d" y="%d">年龄–年龄：等协和度 = 从原点的射线（斜率）</text>'
+    P.append('<text class="fig-title" x="%d" y="%d">'
+             '左：年龄–年龄（两轴都取对数）—— 协和度 = 纵轴 ÷ 横轴</text>'
              % (MLA, TOP + 14))
     P.append('<text class="fig-sub" x="%d" y="%d">粗红线 = 协和线 100%%；'
-             '虚线 = 等协和度射线</text>' % (MLA, TOP + 27))
-    P.append('<text class="fig-title" x="%d" y="%d">比值空间（Wetherill 谐和线）</text>' % (MLB, TOP + 14))
-    P.append('<text class="fig-sub" x="%d" y="%d">粗红线 = 协和线 100%%；'
-             '虚线 = 等协和度曲线（不是直线）</text>' % (MLB, TOP + 27))
+             '虚线 = 等协和度线</text>' % (MLA, TOP + 27))
+    P.append('<text class="fig-sub" x="%d" y="%d">两轴同取对数 ⇒ 这些虚线斜率同为 1、'
+             '互相平行；离红线越远 = 偏离 100%% 越多</text>' % (MLA, TOP + 39))
+    P.append('<text class="fig-title" x="%d" y="%d">'
+             '右：比值空间（Wetherill 谐和线，两轴都线性）</text>' % (MLB, TOP + 14))
+    P.append('<text class="fig-sub" x="%d" y="%d">粗红线 = 协和线；'
+             '虚线 = 等协和度线</text>' % (MLB, TOP + 27))
+    P.append('<text class="fig-sub" x="%d" y="%d">等协和度线从原点发散，'
+             '但不是直线、也不平行</text>' % (MLB, TOP + 39))
 
     # ── 左：年龄–年龄 ──
     for t in (100, 200, 300, 500, 700, 1000, 1500, 2000, 3000):
@@ -693,9 +734,9 @@ def svg_concordia(rows, lib, inline_style: bool) -> tuple[str, int, int]:
         P.append('<text class="fig-tick" x="%d" y="%.1f" text-anchor="end">%d</text>'
                  % (MLA - 7, ya(t) + 4, t))
     P.append('<text class="fig-axis" x="%.1f" y="%d" text-anchor="middle">'
-             '206Pb/238U 年龄（Ma，对数）</text>' % (MLA + PW / 2, PB_ + 36))
+             '206Pb/238U 年龄（Ma，对数轴）</text>' % (MLA + PW / 2, PB_ + 40))
     P.append('<text class="fig-axis" transform="translate(14,%.1f) rotate(-90)" '
-             'text-anchor="middle">207Pb/235U 年龄（Ma，对数）</text>' % (PT + PH / 2))
+             'text-anchor="middle">207Pb/235U 年龄（Ma，对数轴）</text>' % (PT + PH / 2))
 
     # 90–110% 带：夹在两条射线之间，画成一个多边形
     poly = [(xa(AGE_AX_LO), ya(AGE_AX_LO * CONC_BAND[0] / 100)),
@@ -715,6 +756,13 @@ def svg_concordia(rows, lib, inline_style: bool) -> tuple[str, int, int]:
         elif f < 1.0:                          # 从右边出去
             rights.append([ya(AGE_AX_HI * f) - 4, MLA + PW - 4, "%g%%" % c])
     _cascade(tops, 30.0, lambda r: r[0], lower_is_first=False)
+    # 右边这组竖着排，会和顶边那排（横着排）在右上角撞在一起（90% 压住 110%，踩过）。
+    # 所以先**按出框位置排好**（y 越小 = 协和度越高），再给第 i 条一个下界：
+    # 既不高于顶行之下，也不比上一条近。⚠ 别把顺序交给"键相等时的稳定排序"——
+    # 那样排出来的先后看不出来，实测就把 70/80/90 的顺序搞反了。
+    rights.sort(key=lambda r: r[0])
+    for i, r in enumerate(rights):
+        r[0] = max(r[0], PT + 28.0 + i * 16.0)
     _cascade(rights, 16.0, lambda r: r[0], lower_is_first=True)
     for x, y, s in tops:
         P.append('<text class="cc-lab" x="%.1f" y="%.1f" text-anchor="middle">%s</text>'
@@ -726,47 +774,83 @@ def svg_concordia(rows, lib, inline_style: bool) -> tuple[str, int, int]:
              % (xa(AGE_AX_LO), ya(AGE_AX_LO), MLA + PW, ya(AGE_AX_HI)))
 
     # ── 右：比值空间 ──
-    for t in (200, 500, 1000, 2000, 3000):
-        r68 = math.expm1(1.55125e-10 * t * 1e6)
-        r75 = math.expm1(9.8485e-10 * t * 1e6)
-        P.append('<text class="fig-tick" x="%.1f" y="%d" text-anchor="middle">%.2f</text>'
-                 % (xb(r68), PB_ + 15, r68))
-        P.append('<text class="fig-tick" x="%d" y="%.1f" text-anchor="end">%g</text>'
-                 % (MLB - 7, yb(r75) + 4, round(r75, 1)))
-        P.append('<text class="fig-sub" x="%.1f" y="%d" text-anchor="middle">%d Ma</text>'
-                 % (xb(r68), PB_ + 28, t))
+    # 右侧再加一列「对应年龄」：比值轴上的数字单看没有直觉，标上年龄才知道
+    # 它意味着什么（比值与年龄一一对应）。
+    P.append('<text class="fig-sub" x="%d" y="%d">对应年龄</text>'
+             % (MLB + PW + 8, PT - 6))
+    # 刻度选点：比值轴是**线性**的，等年龄间隔在图上并不等距（小年龄全挤在左下角，
+    # 200/500 Ma 的刻度和数字会叠在一起）。所以这里既挑间隔得开的一串年龄，
+    # 又按**像素间距**再筛一遍：谁跟上一个挨得比 MINSEP 还近就丢掉。
+    ticks, last_x, last_y = [], -1e9, 1e9
+    for t in (500, 1000, 1500, 2000, 2500, 3000):
+        r68 = math.expm1(LAM68 * t * 1e6)
+        r75 = math.expm1(LAM35 * t * 1e6)
+        if r68 > R68_AX_HI or r75 > R75_AX_HI:
+            continue                  # 刻度落在轴外就不画，别贴在边上骗人
+        px, py = xb(r68), yb(r75)
+        if px - last_x < 46.0 or last_y - py < 15.0:
+            continue
+        ticks.append((t, r68, r75, px, py))
+        last_x, last_y = px, py
+    for t, r68, r75, px, py in ticks:
         P.append('<line class="fig-grid" x1="%.1f" y1="%d" x2="%.1f" y2="%d"/>'
-                 % (xb(r68), PT, xb(r68), PB_))
+                 % (px, PT, px, PB_))
+        P.append('<line class="fig-grid" x1="%d" y1="%.1f" x2="%d" y2="%.1f"/>'
+                 % (MLB, py, MLB + PW, py))
+        P.append('<text class="fig-tick" x="%.1f" y="%d" text-anchor="middle">%.2f</text>'
+                 % (px, PB_ + 15, r68))
+        P.append('<text class="fig-tick" x="%d" y="%.1f" text-anchor="end">%.2f</text>'
+                 % (MLB - 7, py + 4, r75))
+        P.append('<text class="fig-sub" x="%.1f" y="%d" text-anchor="middle">%d Ma</text>'
+                 % (px, PB_ + 28, t))
+        P.append('<text class="fig-sub" x="%d" y="%.1f">%d Ma</text>'
+                 % (MLB + PW + 8, py + 4, t))
     P.append('<text class="fig-axis" x="%.1f" y="%d" text-anchor="middle">'
-             '206Pb/238U 比值</text>' % (MLB + PW / 2, PB_ + 41))
+             '206Pb/238U 比值（线性轴；小字 = 对应年龄）</text>'
+             % (MLB + PW / 2, PB_ + 40))
     P.append('<text class="fig-axis" transform="translate(%d,%.1f) rotate(-90)" '
-             'text-anchor="middle">207Pb/235U 比值</text>' % (MLB - 34, PT + PH / 2))
+             'text-anchor="middle">207Pb/235U 比值（线性轴）</text>'
+             % (MLB - 46, PT + PH / 2))
 
     # 协和曲线 + 等协和度曲线
     tt = [AGE_AX_LO * (AGE_AX_HI / AGE_AX_LO) ** (i / 240.0) for i in range(241)]
-    pts = [(xb(math.expm1(1.55125e-10 * t * 1e6)), yb(math.expm1(9.8485e-10 * t * 1e6)))
+    pts = [(xb(math.expm1(LAM68 * t * 1e6)), yb(math.expm1(LAM35 * t * 1e6)))
            for t in tt]
     P.append('<polyline class="cc-curve" points="%s"/>'
              % " ".join("%.1f,%.1f" % p for p in pts))
     r_tops, r_rights = [], []
     for c in CONC_RAYS:
-        raw = []
+        f = c / 100.0
+        raw, stop = [], None
         for t in tt:
-            r68 = math.expm1(1.55125e-10 * t * 1e6)
-            r75 = math.expm1(9.8485e-10 * c / 100.0 * t * 1e6)
-            if r68 > R68_AX_HI or r75 > R75_AX_HI:
-                break                       # 先撞到哪条边就停在哪条边
-            raw.append((xb(r68), yb(r75), r68, r75))
+            r68 = math.expm1(LAM68 * t * 1e6)
+            r75 = math.expm1(LAM35 * f * t * 1e6)
+            if r68 > R68_AX_HI:
+                stop = "right"
+                break
+            if r75 > R75_AX_HI:
+                stop = "top"
+                break
+            raw.append((xb(r68), yb(r75)))
         if len(raw) < 2:
             continue
         P.append('<polyline class="cc-ray2" points="%s"/>'
-                 % " ".join("%.1f,%.1f" % (p[0], p[1]) for p in raw))
-        px, py, r68e, r75e = raw[-1]
-        if r75e >= R75_AX_HI * 0.999:        # 从顶边出去
-            r_tops.append([px, PT + 12, "%g%%" % c])
-        else:                                # 从右边出去
-            r_rights.append([py - 4, MLB + PW - 4, "%g%%" % c])
+                 % " ".join("%.1f,%.1f" % p for p in raw))
+        # 标签放在**射线真正出框的那个点**上。⚠ 不要用"最后一点的比值是否
+        # 接近轴上限"来猜出框边：采样是有步长的（这 241 个点每步约 1.5%），
+        # 最后一点可能离轴上限还差一整步，于是**所有**射线都被判成"从右边
+        # 出去"，标签全堆在右上角压成一团（踩过）。这里直接解析求交点。
+        if stop == "top":
+            te = math.log1p(R75_AX_HI) / (LAM35 * f) / 1e6      # 使 r75 = 轴上限
+            r_tops.append([xb(math.expm1(LAM68 * te * 1e6)), PT + 12, "%g%%" % c])
+        else:                                                    # 撞的是 r68 上限
+            te = math.log1p(R68_AX_HI) / LAM68 / 1e6
+            r_rights.append([yb(math.expm1(LAM35 * f * te * 1e6)) - 4,
+                             MLB + PW - 4, "%g%%" % c])
     _cascade(r_tops, 30.0, lambda r: r[0], lower_is_first=False)
+    r_rights.sort(key=lambda r: r[0])            # 同上：顺序要自己排，不靠稳定排序
+    for i, r in enumerate(r_rights):
+        r[0] = max(r[0], PT + 28.0 + i * 16.0)
     _cascade(r_rights, 16.0, lambda r: r[0], lower_is_first=True)
     for x, y, s in r_tops:
         P.append('<text class="cc-lab" x="%.1f" y="%.1f" text-anchor="middle">%s</text>'
@@ -799,24 +883,34 @@ def svg_concordia(rows, lib, inline_style: bool) -> tuple[str, int, int]:
 def concordia_caption(rows, lib) -> str:
     """图注 + 一句"到底代表什么"的算例，数字全部现算。"""
     n_band = sum(1 for a68, a75 in lib if CONC_BAND[0] <= a75 / a68 * 100 <= CONC_BAND[1])
+    # 左图轴内画得出的灰点数（越界的点在 svg_concordia 里被跳过）
+    n_in_age = sum(1 for a68, a75 in lib
+                   if AGE_AX_LO <= a68 <= AGE_AX_HI and AGE_AX_LO <= a75 <= AGE_AX_HI)
     obs = [d for r in rows for d in r["domains"]]
     n_hi = sum(1 for d in obs if d["concordance"] >= 150.0)
     lo1, hi1 = CONC_BAND
-    return ('<figcaption>左图把"协和度"还原成几何量：横轴取 206Pb/238U 年龄、'
-            '纵轴取 207Pb/235U 年龄（都取对数，所以两端等距），'
-            '那么<b>协和度就是这个点相对原点的斜率</b> —— 100%% 是 45° 的协和线，'
-            '90–110%% 是它两侧的灰带。落在 45° 线<b>上方</b>（斜率 &gt; 1）说明 '
-            '207Pb 侧偏老：普通铅未扣净、或 <sup>206</sup>PbH<sup>+</sup> 干扰；'
+    return ('<figcaption><b>协和度就是一个比值</b>：'
+            '<code>age(207Pb/235U) ÷ age(206Pb/238U)</code>。'
+            '左图横轴取 206Pb/238U 年龄、纵轴取 207Pb/235U 年龄，'
+            '于是这个比值就是"纵值 ÷ 横值"这一个数。'
+            '100%% 是那条 45° 的<b>协和线</b>（两个衰变体系给出同一个年龄）；'
+            '90–110%% 是它两侧的灰带。落在红线<b>上方</b>说明 207Pb 侧偏老'
+            '（普通铅未扣净、或 <sup>206</sup>PbH<sup>+</sup> 干扰）；'
             '<b>下方</b>说明铅丢失或 206Pb 过量。'
-            '右图是同一批点在比值空间里的样子（教科书上的谐和线）：'
-            '曲线是协和线，等协和度在这里<b>不再是直线</b>（两条衰变链的 λ 不同），'
-            '但照样从原点发散 —— 两张图对照，"协和度 = 相对原点的斜率"就没法误解了。'
-            '<b>全库 %d 个正式年龄域里有 %.0f%% 落在 90–110%% 的带内</b>，'
-            '彩标的 %d 个域里有 %d 个超过 150%%，全部在带外上方。'
+            '⚠ 左图两轴都取了对数（否则 100 Ma 与 3000 Ma 没法画进同一张图），'
+            '所以等协和度线在图上是一族<b>斜率同为 1 的平行线</b>、而不是扇形 ——'
+            '那是坐标轴的功劳，不是协和度的性质变了；'
+            '离红线越远，就代表偏离 100%% 越多。'
+            '右图是同一批点在比值空间里的样子（教科书上的 Wetherill 谐和线）：'
+            '协和线是一条曲线，等协和度线在这里<b>从原点发散</b>，'
+            '但既不是直线、也不互相平行（两条衰变链的 λ 不同）。'
+            '<b>全库 %d 个正式年龄域里有 %.0f%% 落在 90–110%% 的带内</b>'
+            '（左图只画得出其中落在 100–3500 Ma 框内的 %d 个）。'
+            '彩标的 %d 个域里有 %d 个 ≥ 150%%，全部在带外上方。'
             '算例：206/238 给 460 Ma 时，207/235 给 %.0f Ma 就正好是 %g%%，'
             '给 %.0f Ma 就是 %g%%。</figcaption>'
             % (len(lib), 100.0 * n_band / len(lib) if lib else float("nan"),
-               len(obs), n_hi, 460 * lo1 / 100, lo1, 460 * hi1 / 100, hi1))
+               n_in_age, len(obs), n_hi, 460 * lo1 / 100, lo1, 460 * hi1 / 100, hi1))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -852,29 +946,37 @@ def _render_png(svg: str, out: pathlib.Path, w: int, h: int) -> bool:
     """
     用无头 Edge 把 SVG 截成 PNG（2 倍尺寸）。Edge 不在就跳过 —— 这不是失败。
 
-    两处细节都是实测踩出来的：
+    三处细节都是实测踩出来的：
       · `--user-data-dir` 指到临时目录：不指就用默认 profile，
         本机正开着 Edge 时无头实例直接退 21；
       · **不要用 `--force-device-scale-factor`** —— 它与 `--window-size` 的
         换算关系在 headless=new 下不是 1:1，实测截出来四周一片空白。
         改用"把 SVG 的 CSS 尺寸设成 2 倍 + 窗口也开 2 倍"：图是矢量，
-        放大不损失清晰度，而图像尺寸完全可预期。
+        放大不损失清晰度。
+      · ★ **`--window-size` ≠ 视口尺寸**：headless=new 会扣掉窗口边框与
+        工具栏（本机实测宽少 16 px、高少 88 px）。照窗口尺寸设，图的**底边
+        和右边会被整条裁掉** —— 第一版就是这么丢掉 x 轴刻度与轴标题的
+        （症状：轴标题明明写在 SVG 里，图上就是没有）。
+        所以这里改成：**窗口开得比图大一圈，再用 Pillow 按 SVG 的
+        精确像素尺寸从左上角裁齐**。这样输出尺寸不再依赖浏览器版本。
     """
     if not EDGE.exists():
         print("[提示] 找不到 Edge，跳过 PNG：%s" % EDGE, file=sys.stderr)
         return False
     sc = 2
+    want_w, want_h = w * sc, h * sc
+    pad = 240                      # 留够窗口 chrome 的余量（实测 16 / 88）
     html_path = OUT_DIR / "_local_preview.html"
     html_path.write_text(
         "<!DOCTYPE html><html><head><meta charset='utf-8'><style>"
         "html,body{margin:0;padding:0;background:#fff}"
         "svg{display:block;width:%dpx;height:%dpx}"
-        "</style></head><body>%s</body></html>" % (w * sc, h * sc, svg),
+        "</style></head><body>%s</body></html>" % (want_w, want_h, svg),
         encoding="utf-8")
     cmd = [str(EDGE), "--headless=new", "--disable-gpu", "--hide-scrollbars",
            "--user-data-dir=%s" % (OUT_DIR / "_edge_tmp"),
            "--screenshot=%s" % out,
-           "--window-size=%d,%d" % (w * sc, h * sc),
+           "--window-size=%d,%d" % (want_w + pad, want_h + pad),
            html_path.as_uri()]
     try:
         r = subprocess.run(cmd, capture_output=True, timeout=120)
@@ -885,6 +987,17 @@ def _render_png(svg: str, out: pathlib.Path, w: int, h: int) -> bool:
         print("[提示] PNG 截图返回 %s（SVG 已生成，不影响使用）" % r.returncode,
               file=sys.stderr)
         return False
+    try:
+        from PIL import Image
+        with Image.open(out) as im:
+            got = im.size
+            if got[0] < want_w or got[1] < want_h:
+                print("[提示] 截图只有 %dx%d，比图小的 %dx%d 还小，不做裁切"
+                      % (got[0], got[1], want_w, want_h), file=sys.stderr)
+                return True
+            im.crop((0, 0, want_w, want_h)).save(out)
+    except Exception as exc:                                           # noqa: BLE001
+        print("[提示] PNG 裁切失败：%s" % exc, file=sys.stderr)
     return True
 
 
