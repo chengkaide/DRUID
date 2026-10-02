@@ -126,6 +126,35 @@ def test_webui_static_assets_exist_and_are_declared():
             f"package-data 没声明 webui/static/*{Path(name).suffix}")
 
 
+def test_webui_ui_params_match_backend_whitelist():
+    """
+    网页界面的参数入口与后端白名单必须对齐，两个方向各钉一条：
+
+      ① 前端传的键，后端得认。传了白名单外的键会被**静默丢弃**（白名单正是
+         为防脏参数而设），症状是"界面上改了、结果一点没变"。
+      ② 后端放行的关键参数，界面上得真的有入口。`ref_preset` 就漏过一次：
+         `handlers._TUNABLE` 里一直有它、CLI 也有 `--ref-preset`，但
+         `static/` 里从来没有控件能把它传出去 —— 网页用户以为只有一套参考值，
+         而它其实是五个档。
+
+    只查"有没有这个入口"，不查控件长什么样 —— 后者是排版，会变。
+    """
+    app_js = (ROOT / "druid" / "webui" / "static" / "app.js").read_text(encoding="utf-8")
+    m = re.search(r"const payload = \{(.*?)\n  \};", app_js, re.S)
+    assert m, "app.js 里找不到 payload 字面量 —— 抓取正则要跟着改"
+    keys = set(re.findall(r"(\w+)\s*:", m.group(1)))
+
+    from druid.webui.handlers import _TUNABLE
+    # 这两个键由路由单独处理，不进 BatchConfig，所以本来就不在白名单里
+    route_own = {"data_dir", "out_excel"}
+    unknown = keys - set(_TUNABLE) - route_own
+    assert not unknown, f"前端传了后端不认的参数：{sorted(unknown)}"
+
+    must_have_ui = {"bulk", "primary", "secondary", "ref_preset"}
+    missing = must_have_ui - keys
+    assert not missing, f"这些参数后端放行了、界面上却没有入口：{sorted(missing)}"
+
+
 def test_bat_files_are_crlf_on_disk():
     """
     批处理必须是 CRLF。cmd.exe 按行读，LF 结尾的 .bat 会出现"命令明明写在
@@ -327,7 +356,8 @@ def test_landing_page_states_the_real_selfcheck_count():
     这个数在 2.6.0 从 80 涨到 95（其中一条就是本测试），页面上当时还写着 80，
     挂了整整一版才被发现。加测试项的时候顺手把页面上的数字改掉 ——
     否则"自检 N 项"这种话就只是广告词。（后来又涨到 98：补
-    `calibration.primary_rsd` 时带了三条测试。）
+    `calibration.primary_rsd` 时带了三条测试；2026-10-02 涨到 99：
+    补「网页界面参数入口 vs 后端白名单」那条时 +1。）
     """
     import ast
     n = 0

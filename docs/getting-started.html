@@ -427,6 +427,12 @@ python tests\check_example_batch.py</code></pre>
 <div class="note">
 <b>主标和监控标样可以换成别的。</b>用 <code>--primary</code> / <code>--secondary</code> 指定（网页界面上是输入框），
 比如本实验室若用 Temora 做主标，就填 <code>--primary Temora</code>。可用标样清单见 <code>druid/core/constants.py</code> 里的标准物质库。
+<br><br>
+<b>参考值口径也是可选项。</b>同一支标样的推荐值有好几套来源（Horstwood et al. (2016) 表 S2 的 CA-ID-TIMS 值、
+Wiedenbeck et al. (1995)、由标样年龄反算的自洽值、Isoclock2.0 等），用 <code>--ref-preset</code> 指定
+（网页界面上是<b>参考值口径</b>下拉），默认 <code>horstwood2016</code>。
+档与档之间是<b>整体平移</b>而不是重算：示例批次上未校正列最大差 0.83 Ma、带监控标样的最终列只差 0.031 Ma，
+<b>行数、深度结构与 MSWD 一律不变</b>。
 </div>
 
 <h3>4.2　从仪器导出时的三个注意</h3>

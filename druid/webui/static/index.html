@@ -83,6 +83,18 @@
         <input type="text" id="pSecondary" value="Ple">
         <div class="hint">不参与归一化，只做质量检查与二次校正</div>
       </div>
+
+      <div class="field">
+        <label>参考值口径（标准样品位）</label>
+        <select id="pRef">
+          <option value="horstwood2016">horstwood2016 —— Horstwood et al. (2016) 表 S2 · CA-ID-TIMS（默认）</option>
+          <option value="repo">repo —— 本仓库第一版取值（复现 2026-09-25 之前的结果）</option>
+          <option value="wiedenbeck1995">wiedenbeck1995 —— Wiedenbeck et al. (1995)</option>
+          <option value="self-consistent">self-consistent —— 由 91500 年龄 1062.4 Ma 反算</option>
+          <option value="isoclock">isoclock —— Isoclock2.0 Cal_age(1062)</option>
+        </select>
+        <div class="hint">只换标样的参考比值这一个输入，不换算法；档与档之间是整体平移</div>
+      </div>
     </div>
 
     <div class="row-checks">

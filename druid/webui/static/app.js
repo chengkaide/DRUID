@@ -218,6 +218,7 @@ async function startRun() {
     bulk: $('pBulk').value,
     primary: $('pPrimary').value.trim() || '91500',
     secondary: $('pSecondary').value.trim() || 'Ple',
+    ref_preset: $('pRef').value,
     plot: $('pPlot').checked,
     do_depth: $('pDepth').checked,
     n_sigma_common_pb: num('pNSigma', 2.0),
