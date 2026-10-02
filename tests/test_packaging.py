@@ -375,7 +375,9 @@ def test_landing_page_states_the_real_selfcheck_count():
     再后来涨到 169：补四个核心链路测试文件 —— 之前 `reduce_interval`
     与整条深度剖面链路是**零测试覆盖**，见 `tests/test_reduction.py`、
     `tests/test_geochronology.py`、`tests/test_depth.py`、
-    `tests/test_io_sequence.py`、`tests/test_core_models.py`。）
+    `tests/test_io_sequence.py`、`tests/test_core_models.py`。
+    同轮再涨到 171：`segment` 补一条"下标口径"的**契约回归**（D-1），
+    `sample_role` 补一条"作废标记整名相等"的用例。）
     """
     import ast
     n = 0

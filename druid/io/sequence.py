@@ -28,6 +28,8 @@ from ..core.constants import (
     ROLE_PRIMARY,
     ROLE_SECONDARY,
     ROLE_UNKNOWN,
+    ROLE_VOID,
+    VOID_NAMES,
 )
 
 
@@ -38,10 +40,11 @@ def sample_role(name: str, primary: str = "91500", secondary: str = "Ple") -> st
     """
     按样品名判定这个测点在流程里扮演什么角色。
 
-    返回值为 core.constants 里的四种之一：
+    返回值为 core.constants 里的五种之一：
         primary_std   主标     —— 用来算归一化因子 F（本项目 = 91500）
         secondary_std 监控标样  —— 不参与归一化，只做 QC（本项目 = Plešovice）
         glass         玻璃标样  —— 只测微量元素，U-Pb 完全不参与
+        void          作废点   —— 实验者显式写了作废标记（`VOID_NAMES`）
         unknown       未知样品  —— 真正要定年的对象
 
     为什么玻璃标样要单独挑出来
@@ -49,6 +52,17 @@ def sample_role(name: str, primary: str = "91500", secondary: str = "Ple") -> st
     NIST SRM 612/610 是硅酸盐玻璃，U 含量人为加标到 ~40 ppm、
     且 Pb 同位素组成是现代普通铅。给它"定年"会得到一个荒谬的结果，
     如果混进 normalization 会直接污染整批数据。必须在入口就拦截。
+
+    为什么"作废点"要单独挑出来
+    --------------------------
+    序列表里偶尔会出现**实验者自己写的作废标记** —— 实测某批 4 个测点的
+    样品名就叫 `wrong`（年龄 998 / 990 / 836 Ma，而该批群体约 155 Ma，
+    明显是打偏或打到了 91500 标样上）。这类点若被当成普通样品，会静默
+    污染整批的中位年龄与多域率统计。
+    处理原则是**标注而不删除**：年龄照算、行照留，只把 `类型` 列写成
+    "作废"；下游凡按 `类型` 汇总的地方（本包内所有"样品"统计都走
+    `ROLE_LABEL_CN[ROLE_UNKNOWN]`）就自动把它排除在外。
+    判定用**整名相等**、不做子串，免得误伤 `wrong-1` 这类真样品名。
 
     primary / secondary 参数
     -------------------------
@@ -63,7 +77,8 @@ def sample_role(name: str, primary: str = "91500", secondary: str = "Ple") -> st
         ① 先比用户传进来的 primary / secondary（大小写与首尾空格不敏感）
         ② **再**比内置别名表（91500 系列 / Ple 系列）—— 这一步不看参数传没传
         ③ 玻璃关键词（srm / nist / 612 / 610）
-        ④ 都落空 → unknown
+        ④ 作废标记（整名等于 `VOID_NAMES` 之一）
+        ⑤ 都落空 → unknown
 
     所以 `sample_role("91500", primary="GJ1")` **仍然返回主标**：
     自定义名字是"追加识别"，不是"替换默认"。对"一批只用一种主标"的批次
@@ -88,6 +103,9 @@ def sample_role(name: str, primary: str = "91500", secondary: str = "Ple") -> st
     # 玻璃：命中任意一个关键词就算
     if ("srm" in s) or ("nist" in s) or ("612" in s) or ("610" in s):
         return ROLE_GLASS
+    # ④ 实验者显式写的作废标记（**整名相等**，不做子串 —— 免得误伤 wrong-1）
+    if s in VOID_NAMES:
+        return ROLE_VOID
     return ROLE_UNKNOWN
 
 

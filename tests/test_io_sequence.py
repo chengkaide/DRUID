@@ -28,22 +28,51 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from druid.core.constants import (ROLE_GLASS, ROLE_LABEL_CN, ROLE_PRIMARY,   # noqa: E402
-                                  ROLE_SECONDARY, ROLE_UNKNOWN)
+                                  ROLE_SECONDARY, ROLE_UNKNOWN, ROLE_VOID,
+                                  VOID_NAMES)
 from druid.io.sequence import normalize_name, read_sequence, sample_role      # noqa: E402
 
 
 # ═════════════════════════════════════════════════════════════════════════════
 # 一、角色常量
 # ═════════════════════════════════════════════════════════════════════════════
-def test_four_roles_and_their_labels():
+def test_five_roles_and_their_labels():
     """
-    角色只有四种，且每个都要有中文标签（`ROLE_LABEL_CN` 用于写进结果表与网页）。
+    角色共五种，且每个都要有中文标签（`ROLE_LABEL_CN` 用于写进结果表与网页）。
     标签表缺一项的症状是 **KeyError 在写报表时才炸**，离出错点多很远。
+
+    第五种（`void`）是 2026-10-02 加的**实验者显式作废标记**：它不参与任何
+    「样品」统计，但必须有标签，否则结果表的 `类型` 列会写英文原值。
     """
-    roles = {ROLE_PRIMARY, ROLE_SECONDARY, ROLE_GLASS, ROLE_UNKNOWN}
-    assert len(roles) == 4
-    assert roles == {"primary_std", "secondary_std", "glass", "unknown"}
-    assert set(ROLE_LABEL_CN) == roles, "标签表必须覆盖全部四种角色"
+    roles = {ROLE_PRIMARY, ROLE_SECONDARY, ROLE_GLASS, ROLE_VOID, ROLE_UNKNOWN}
+    assert len(roles) == 5
+    assert roles == {"primary_std", "secondary_std", "glass", "void", "unknown"}
+    assert set(ROLE_LABEL_CN) == roles, "标签表必须覆盖全部五种角色"
+    assert ROLE_LABEL_CN[ROLE_VOID] == "作废"
+
+
+def test_void_markers_are_matched_by_whole_name_only():
+    """
+    ★ 作废标记（2026-10-02）：序列表里**实验者自己写的作废标记**。
+
+    实测某批 4 个测点的样品名**就叫 `wrong`**（年龄 998 / 990 / 836 Ma，
+    而该批群体约 155 Ma —— 明显是打偏或打到了 91500 标样上）。这类点若被
+    当成普通样品，会静默污染整批的中位年龄与多域率统计。
+
+    判据是**整名相等**、不做子串匹配 —— 否则 `wrong-1`、`skip-2`
+    这类真样品名会被误伤；`x`、`bad` 这种太宽泛的词也刻意不收。
+    """
+    for n in ("wrong", "WRONG", " wrong ", "void", "skip", "废弃", "作废", "无效"):
+        assert sample_role(n) == ROLE_VOID, n
+    # 整名相等，因此这些**不是**作废点
+    for n in ("wrong-1", "wrong1", "skip-2", "voided", "废品", "x", "bad"):
+        assert sample_role(n) == ROLE_UNKNOWN, n
+    # 不能抢标样 / 玻璃的名分
+    assert sample_role("91500") == ROLE_PRIMARY
+    assert sample_role("SRM 612") == ROLE_GLASS
+    # 词表要能被外部读出来（下游据此决定"哪些名字算作废"）
+    assert "wrong" in VOID_NAMES
+    assert all(v == v.strip().lower() for v in VOID_NAMES), "词表必须已规范化"
 
 
 # ═════════════════════════════════════════════════════════════════════════════

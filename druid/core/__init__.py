@@ -21,6 +21,8 @@ from .constants import (
     ROLE_PRIMARY,
     ROLE_SECONDARY,
     ROLE_UNKNOWN,
+    ROLE_VOID,
+    VOID_NAMES,
 )
 from .geochronology import age68, age75, age76, r68_of_age, r75_from, r76_of_age
 from .common_lead import stacey_kramers
@@ -33,7 +35,8 @@ __all__ = [
     "L238", "L235", "L232", "U238_U235", "HG202_204",
     "MASSES_NEEDED", "SUM_MASSES", "STANDARDS", "REFERENCE_PRESETS",
     "DOMAIN_SPAN_COLORS", "CJK_FONTS",
-    "ROLE_PRIMARY", "ROLE_SECONDARY", "ROLE_UNKNOWN", "ROLE_GLASS", "ROLE_LABEL_CN",
+    "ROLE_PRIMARY", "ROLE_SECONDARY", "ROLE_UNKNOWN", "ROLE_GLASS", "ROLE_VOID",
+    "ROLE_LABEL_CN", "VOID_NAMES",
     # 年代学
     "r68_of_age", "r76_of_age", "age68", "age75", "age76", "r75_from",
     # 普通铅

@@ -53,7 +53,7 @@ from typing import Dict, List, Optional, Sequence
 import numpy as np
 import pandas as pd
 
-from .core.constants import ROLE_LABEL_CN, ROLE_PRIMARY, ROLE_SECONDARY, ROLE_UNKNOWN
+from .core.constants import ROLE_LABEL_CN, ROLE_PRIMARY, ROLE_SECONDARY, ROLE_UNKNOWN, ROLE_VOID
 from .core.geochronology import age68
 from .core.constants import DEFAULT_REF_PRESET
 from .core.references import std_age, std_ref
@@ -937,6 +937,35 @@ def _check_samples(result, cfg, th, out: List[Check]) -> None:
         n_group_split=int(n_split),
         blank=blank, spaced=spaced, variant=variant,
         collide={k: v for k, v in collide.items()}))
+
+    # ── 作废点：实验者显式写的作废标记（`constants.ROLE_VOID`，2026-10-02）──
+    # 实测某批 4 个测点的样品名**就叫 `wrong`**（年龄 998 / 990 / 836 Ma，而该批
+    # 群体约 155 Ma —— 明显是打偏或打到了 91500 标样上）。这类点**不计入**
+    # 任何按「样品」的统计（本文件所有样品侧检查都走 `类型 == "样品"`），
+    # 但必须在 QC 里露一次面：否则"这批到底算几个样品"会与序列表对不上。
+    # ⚠ 这条**只在真有作废点时才产出**，所以常规批次的检查项清单不受影响。
+    void = _sub(res, roles == ROLE_LABEL_CN[ROLE_VOID])
+    if not getattr(void, "empty", True):
+        vnames = sorted({str(x) for x in _col(void, "样品").tolist()})
+        vage = _col(void, "年龄206_238")
+        va = _finite(vage.median()) if vage is not None and len(vage.dropna()) else None
+        unk_age = _col(unk, "年龄206_238")
+        sref = _finite(unk_age.median()) if unk_age is not None else None
+        out.append(_mk(
+            "data.void_spots", WARN,
+            "序列表里有被实验者标记为作废的测点",
+            observed=(f"{len(void)} 个（样品名 {'、'.join(vnames)}）"
+                      + (f"，中位年龄 {va:.1f} Ma" if va is not None else "")
+                      + (f"；同批样品中位 {sref:.1f} Ma" if sref is not None else "")),
+            criterion="这类点以「作废」计入类型列，不计入任何按「样品」的统计",
+            detail="样品名**整名等于** `wrong` / `void` / `skip` / `废弃` / `作废` / `无效` "
+                   "的测点会被判为作废（**不做子串匹配**，免得误伤 `wrong-1` 这类真样品名）。"
+                   "它们的年龄照算、行照留，只把 `类型` 列写成「作废」；本包内所有按"
+                   "「样品」汇总的地方（协和度、普通铅、多域率、中位年龄、QC 摘要）"
+                   "都已自动排除它们。若这些点本来**不是**要作废的，"
+                   "把序列表里那个名字改掉重跑即可。",
+            n_void=int(len(void)), void_names=vnames,
+            void_median_age_Ma=va, sample_median_age_Ma=sref))
 
 
 def _check_whole_spot(result, cfg, th, out: List[Check]) -> None:

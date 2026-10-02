@@ -118,27 +118,51 @@ def test_segment_recursion_depth_is_what_limits_the_count():
     assert three == [(0, 10), (10, 20), (20, 30)], three
 
 
-def test_segment_indices_are_into_the_finite_only_array():
+def test_segment_indices_are_into_the_original_array():
     """
-    ⚠ **记住这条口径（它目前是个隐患）**：`segment` 内部先把
-    非有限年龄 / 非正 σ 的点滤掉，返回的下标是**滤后数组**的下标。
+    ★ **D-1 修掉的那条口径（2026-10-02）：`segment` 返回的是原数组下标。**
 
-    而调用方 `workflow.run_depth_analysis` 拿到它之后直接交给
-    `refine_domains(prof, segs)`，那里用的是**未过滤**的 `prof`。所以只要
-    `ages` 里出现过一个 NaN、而它后面还有窗口，全部下标就整体左移 ——
-    **不报错，只是剖面被分析错位**。
+    它内部会把非有限年龄 / 非正 σ 的窗口滤掉，但**返回前映射回原下标**。
+    这条契约必须钉住，因为调用方 `refine_domains(prof, segs)` 用的是
+    **未过滤**的 prof —— 两处口径一错位，只要剖面里有 NaN，此后所有下标
+    就会**整体左移且不报错**（旧实现正是如此：8 个点、第 2 个 NaN → `[(0, 7)]`）。
 
-    实测：8 个点、第 2 个是 NaN → 返回 [(0, 7)]，7 是滤后长度。
-    （示例批次走不到这条路：`bracket_F` 只在标样比值 ≤ 0 处给 NaN，
-    而 fix 模式下 R68 = i206·(1−f206) 恒正。但这是**碰巧**，不是保证。）
+    实测全库 26314 个窗口**零 NaN** ⇒ 修它在本库上是**恒等映射、基线不变**；
+    但"碰巧没有 NaN"不是保证（`bracket_F` 在标样比值 ≤ 0 处会给 NaN）。
     """
     ages = np.array([400.0, np.nan, 400.0, 400.0, 400.0, 400.0, 400.0, 400.0])
     segs = segment(ages, np.full(8, 5.0))
-    assert segs == [(0, 7)], segs
-    assert segs[0][1] == 7 < ages.size, "下标是滤后的长度，不是原数组的"
+    # 滤后有 7 个点（原下标 0, 2…7）⇒ 覆盖范围是原数组的 [0, 8)
+    assert segs == [(0, 8)], segs
+    assert segs[0][1] == ages.size, "下标必须是原数组的，不是滤后长度"
+
+    # 被滤掉的点夹在两段之间：它不属于任何一段，但**不会**让后一段的下标左移
+    ages2 = np.array([600.0] * 4 + [np.nan] + [200.0] * 4)
+    segs2 = segment(ages2, np.full(9, 5.0), n_min=3)
+    assert segs2 == [(0, 4), (5, 9)], segs2
+    assert segs2[-1][1] == ages2.size, "末段必须覆盖到原数组末尾"
+
     # 全 NaN / 全零 σ 也不能炸，只是返回 []
     assert segment(np.full(8, np.nan), np.full(8, 5.0)) == []
     assert segment(np.full(8, 400.0), np.zeros(8)) == []
+
+
+def test_segment_and_refine_domains_share_one_index_convention():
+    """
+    D-1 的**端到端回归**：`segment` 的输出要能直接喂给 `refine_domains`，
+    即使剖面里有 NaN。改坏任何一侧的下标口径，这条都会红。
+    """
+    n = 12
+    prof = _prof([500.0] * 6 + [np.nan] + [300.0] * 5)
+    segs = segment(prof["age68"].to_numpy(), prof["s_age68"].to_numpy(), n_min=3)
+    assert segs, "两个明显的台阶应当被切出来"
+    assert all(0 <= lo < hi <= n for lo, hi in segs), ("segment 越界", segs, n)
+    assert segs[-1][1] == n, "末段必须覆盖到 prof 的最后一行"
+    # 两者同一套下标 ⇒ refine_domains 不会越界、也不会静默错位
+    refined = refine_domains(prof, segs)
+    assert refined, refined
+    assert all(0 <= lo < hi <= n for lo, hi in refined), ("refine 越界", refined, n)
+    assert refined[-1][1] <= n
 
 
 # ═════════════════════════════════════════════════════════════════════════════

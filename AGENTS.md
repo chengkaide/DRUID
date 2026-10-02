@@ -123,7 +123,7 @@ Get Pages site failed. Error: Not Found
 源码包**不要手挑文件、也不要压缩整个工作目录**，让 git 自己吐：
 
 ```bash
-git archive --format=zip -o "../DRUID_v2.6.0_源码包.zip" HEAD   # 版本号取当前 __version__
+git archive --format=zip -o "../DRUID_v2.7.0_源码包.zip" HEAD   # 版本号取当前 __version__
 ```
 
 它只装**被 git 跟踪**的东西，于是天然排掉：`改进清单.md`、`进度与交接.md`、

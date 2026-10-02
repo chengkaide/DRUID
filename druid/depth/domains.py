@@ -111,11 +111,25 @@ def segment(age, sig, n_min: int = 3, max_segs: int = 3) -> List[Tuple[int, int]
     返回
     ----
     [(lo, hi), ...] 元素为 (起始窗口下标, 结束下标+1)，按下标排序。
+
+    ⚠ **下标是原数组（调用方的 prof）的下标**，不是内部滤后数组的下标 ——
+    内部会把非有限 / σ≤0 的窗口滤掉，返回前再映射回去。被滤掉的窗口
+    **不会**成为段的边界，但可能落在某一段的区间内（区间按"覆盖范围"给），
+    下游的 `weighted_mean` 会自己把它们剔除。
     若样本太少则返回 []（调用方视为"整个剖面是一个域"）。
+
+    ⚠ 这条口径曾经是错的
+    -------------------
+    早期实现直接返回**滤后**下标，而调用方 `refine_domains(prof, segs)`
+    拿它索引**未过滤**的 prof ⇒ 只要剖面里有 NaN，此后所有下标**整体左移
+    且不报错**（实测 8 个点、第 2 个 NaN ⇒ `[(0, 7)]`）。
+    实测全库 26314 个窗口零 NaN，所以修它在本库上是**恒等映射、基线不变**；
+    但契约必须钉死，`tests/test_depth.py` 有一条专门守它。
     """
     a = np.asarray(age, float)
     s = np.asarray(sig, float)
     ok = np.isfinite(a) & np.isfinite(s) & (s > 0)
+    keep = np.flatnonzero(ok)              # 滤后下标 → 原数组下标
     a, s = a[ok], s[ok]
     if a.size < 2 * n_min:
         return []
@@ -123,7 +137,8 @@ def segment(age, sig, n_min: int = 3, max_segs: int = 3) -> List[Tuple[int, int]
     out: List[Tuple[int, int]] = []
     _recurse(a, w, 0, a.size, max_segs - 1, n_min, out)
     out.sort(key=lambda x: x[0])           # 按窗口顺序排列
-    return out
+    # ★ 映射回原数组下标（见上面「返回」一节的契约）
+    return [(int(keep[lo]), int(keep[hi - 1]) + 1) for lo, hi in out]
 
 
 def _recurse(a, w, lo, hi, depth, n_min, out):
@@ -186,6 +201,13 @@ def refine_domains(prof: pd.DataFrame,
     --------------------
     · n_min：剥到只剩 n_min 个窗口就停止（剥光了就没意义了）
     · max_iter：防止极端情况下来回震荡永不收敛
+
+    ⚠ 入参 `segs` 的下标口径
+    ----------------------
+    `segs` 是 `segment` 的返回值，两者用的是**同一套下标**：都指 `prof`
+    的**原始行号**。`segment` 内部虽然会滤掉非有限窗口，但返回前已映射回
+    原下标 —— 两处口径不一致时会**整体错位且不报错**（这正是 D-1 修掉的
+    那个 bug，见 `segment` 的「返回」一节）。
     """
     a = prof["age68"].to_numpy()
     s = prof["s_age68"].to_numpy()
