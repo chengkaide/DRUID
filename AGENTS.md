@@ -29,8 +29,8 @@ LA-ICP-MS 锆石 U-Pb 数据还原工具。把 Qtegra/iCAP 导出的 cps 时间�
   有测试钉着）
 - 仓库布局：`druid/` 代码 · `examples/EX2022A/` 示例批次（85 个测点，样品名
   匿名成 `S01`…`S48`，标样保留）· `tests/` 自检 · `docs/` 文档站（五份页面）·
-  `tools/` 十个脚本（只有 `synth_batch.py` 会写临时批次目录，其余只读）——
-  入口都是 `python tools/<脚本>.py --help`：
+  `tools/` 十一个脚本（只有 `synth_batch.py` / `synth_profile.py` 会写临时批次目录，
+  其余只读）—— 入口都是 `python tools/<脚本>.py --help`：
   `gen_docs_split_figure.py`（画落地页三联图并注入）·
   `gen_docs_preview.py`（画落地页首屏「一眼看到什么」那一块并注入）·
   `window_scale_facts.py`（量窗口尺度）·
@@ -48,7 +48,14 @@ LA-ICP-MS 锆石 U-Pb 数据还原工具。把 Qtegra/iCAP 导出的 cps 时间�
   `docs/extreme-domain-spans.html` —— 子命令 `scan`（全库逐域协和度）/ `build`（出图））·
   `synth_batch.py`（**造**一个「标样 + 样品」合成批次并走完整 `run_batch`，
   用"喂进去的年龄"对"报回来的年龄" —— **真数据没有真值**，闭合与 σ 诚实性只能这样验；
-  默认写 G 盘临时目录、用完自删（`--keep` 保留），可选 `--flicker` / `--nsigma-204` 等旋钮）
+  默认写 G 盘临时目录、用完自删（`--keep` 保留），可选 `--flicker` / `--nsigma-204` 等旋钮）·
+  `synth_profile.py`（把上面那个**均一**剖面推成**一个测点内部两个年龄域**，
+  逐项加 1% 随机噪声 / 2% 校准漂移 / 5% 深度分馏 / 普通铅，扫描两域年龄差 Δt，
+  画 **P(正确检出两个域)** —— 它回答的是"要多大年龄差才看得见"，
+  并把"软件政策（`merge_close` 的 5% 地质门槛）"与"数据信息量"分成两条曲线；
+  同样写 G 盘临时目录、用完自删。⚠ 它自带 `fast_rmtree`：本机删除被
+  `sitecustomize.py` 改道回收站（0.4 s/文件）⇒ 上万个临时文件必须走原生
+  `DeleteFileW`，否则实验时间全花在挪回收站上）
 - Python 层：**只有 numpy / pandas / matplotlib / openpyxl / xlrd**。
   **没有 scipy** —— 年龄方程的不动点迭代、二分法、卡方上尾概率都是自己实现的，
   这不是疏漏而是设计：不依赖会变的第三方行为。
