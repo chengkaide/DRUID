@@ -248,6 +248,7 @@ def test_no_identifying_strings_in_tracked_files():
     本地跑这条测试会通过、CI 上才失败 —— 这个盲区真的发生过一次：一份新文档
     的说明文字里混进了真实样品号，本地全绿，推送后 CI 立刻拦下。
     """
+    import re
     import subprocess
 
     def _git(*args) -> set:
@@ -265,7 +266,16 @@ def test_no_identifying_strings_in_tracked_files():
     tracked = _git("ls-files", "--cached")
 
     me = Path(__file__).name
-    patterns = ["云龙", "锡矿", "YL-46", "20220301", "凯凯"]
+    # 固定子串：本机用户名、项目地名、出现过的样品号与批次号前缀。
+    patterns = ["云龙", "锡矿", "YL-17", "YL-46", "YL-48",
+                "20220301", "20230501", "20181027", "20181028", "20181030",
+                "凯凯"]
+    # 光列固定前缀会一直漏 —— 换个批次就换个号。2026-10-02 真的漏过一次：
+    # `tools/domain_span_check.py` 的 docstring 里写进了 `20230501ZDD`，
+    # 而固定子串表里没有 `20230501`，本地与 CI 全绿。于是再补一条**样式**：
+    # 批次号 = 8 位日期 + 2~3 个大写字母。
+    # 示例批次 `EX2022A` 不匹配（`20` 后面必须是 6 位数字）。
+    batch_like = re.compile(r"20[0-9]{6}[A-Z]{2,3}")
     hits = []
     for rel in sorted(files):
         if not rel.strip() or Path(rel).name == me:
@@ -281,6 +291,9 @@ def test_no_identifying_strings_in_tracked_files():
             if k in text:
                 where = "已入库" if rel in tracked else "未跟踪"
                 hits.append(f"[{where}] {rel}: 含 {k}")
+        for tok in sorted({m.group(0) for m in batch_like.finditer(text)}):
+            where = "已入库" if rel in tracked else "未跟踪"
+            hits.append(f"[{where}] {rel}: 含批次号样式 {tok}")
     if not hits:
         return
 

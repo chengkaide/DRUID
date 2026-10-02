@@ -433,6 +433,19 @@ druid/
 
 ## 八、变更记录
 
+### 2.6.0 之后（文档与只读工具，不改任何数值输出）
+
+- 新增页面 [`docs/extreme-domain-spans.html`](docs/extreme-domain-spans.html)：
+  先讲清「**协和度到底是什么**」——它在年龄–年龄图上是**斜率**、等协和度是从
+  原点发散的射线族，在比值空间里则是一族曲线；再逐个复核 12 个跨域跨度
+  >500 Ma 的测点，五条判据按硬度排序。图与表由
+  [`tools/gen_docs_extreme_spans.py`](tools/gen_docs_extreme_spans.py) 现算后注入。
+- 新增只读工具 [`tools/domain_span_check.py`](tools/domain_span_check.py)：
+  计算**域级 207Pb/235U 年龄**与**域级协和度**，用来分辨"真继承核"与
+  "普通铅污染"。
+- 线上版不含任何真实样品号 / 批次号 / 地名（`tests/test_packaging.py` 照旧扫
+  **未跟踪文件**）；本地实名版只落在 `汇总库/_分析/`（不入 git）。
+
 ### 2.6.0
 
 **参考值口径做成可选档（默认改为 Horstwood et al. (2016) 表 S2），并给
