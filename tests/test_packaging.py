@@ -177,6 +177,53 @@ def test_bat_files_are_crlf_on_disk():
         assert lone_lf == 0, f"{p.name} 里有 {lone_lf} 行只有 LF —— cmd.exe 可能读不到"
 
 
+def test_shell_launchers_are_lf_and_executable():
+    """
+    类 Unix 的启动脚本必须是 **LF**，并且在 git 里记着 **100755**。
+
+    `.command` 的第 1 行是 `#!/bin/bash`。若该行以 `\\r` 结尾（按 CRLF 存的），
+    内核会去找一个叫 `/bin/bash\\r` 的解释器，报
+    `bad interpreter: No such file or directory` —— 报错里看不出是行尾问题，
+    双击的人只会说"没反应"。所以只能直接看磁盘字节。
+
+    可执行位同理：Windows 上没有这个概念，新建/拷贝文件时最容易丢。
+    丢了之后 Finder 双击报"无法执行"，而 `bash 文件名` 仍然正常 ——
+    又是那种"在我机器上没问题"的坑。工作区上（Windows）看不出 mode，
+    只能问 git 索引。
+
+    ⚠ 这条与上面 `test_bat_files_are_crlf_on_disk` 互为镜像：那边要 CRLF、
+    这边要 LF。两边的 `.gitattributes` 规则**只在 checkout 时生效**，
+    谁用编辑器存一次反的，`git status` 依然报"干净"（入库时会规范化），
+    错误就一直潜伏到有人真的去双击它。
+    """
+    import subprocess
+
+    scripts = sorted(ROOT.glob("*.command")) + sorted(ROOT.glob("*.sh"))
+    assert scripts, "一个 .command/.sh 都没有 —— macOS/Linux 的启动脚本不该消失"
+
+    for p in scripts:
+        data = p.read_bytes()
+        crlf = data.count(b"\r\n")
+        assert crlf == 0, f"{p.name} 里有 {crlf} 行是 CRLF —— shebang 会变成 bad interpreter"
+        assert b"\r" not in data, f"{p.name} 里出现了裸 CR（0x0D）"
+        assert data.startswith(b"#!"), f"{p.name} 第 1 行不是 shebang"
+
+    # 可执行位。不是 git 仓库（例如从源码包解开的）就跳过 —— 同
+    # test_no_identifying_strings_in_tracked_files 的处理。
+    out = subprocess.run(["git", "ls-files", "-s", "--"]
+                         + [p.name for p in scripts],
+                         cwd=str(ROOT), capture_output=True, text=True,
+                         encoding="utf-8").stdout
+    if not out.strip():
+        return
+    for line in out.splitlines():
+        mode, _, rest = line.partition(" ")
+        name = rest.split("\t", 1)[-1]
+        assert mode == "100755", (
+            f"{name} 在 git 索引里是 {mode}，不是 100755 —— 丢了可执行位，"
+            "Finder 双击会说'无法执行'")
+
+
 def test_bat_files_stay_ascii():
     """
     cmd.exe 按当前代码页解析批处理，中文注释会变乱码。而解释器路径里
@@ -377,7 +424,9 @@ def test_landing_page_states_the_real_selfcheck_count():
     `tests/test_geochronology.py`、`tests/test_depth.py`、
     `tests/test_io_sequence.py`、`tests/test_core_models.py`。
     同轮再涨到 171：`segment` 补一条"下标口径"的**契约回归**（D-1），
-    `sample_role` 补一条"作废标记整名相等"的用例。）
+    `sample_role` 补一条"作废标记整名相等"的用例。再涨到 172：加 macOS 启动器
+    `启动数据处理工具.command` 时补一条「LF 行尾 + 100755 可执行位」的守护，
+    与上面 `test_bat_files_are_crlf_on_disk` 互为镜像。）
     """
     import ast
     n = 0
