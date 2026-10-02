@@ -438,54 +438,100 @@ def base_conditions():
     ]
 
 
+# 合并判据的默认值（与 BatchConfig 一致）。条件里不带这两个键时用它们。
+MERGE_N_SIGMA_DEFAULT = 3.0
+
+
+def roc_conditions(min_fracs=(0.0, 0.01, 0.03, 0.05),
+                   n_sigmas=(2.0, 3.0, 4.0)):
+    """
+    取舍曲线用的条件集：把 `merge_close` 的两条腿（统计门槛 `n_sigma` ×
+    地质门槛 `min_frac`）逐一组合，其余效应固定为"全套"。
+
+    这样曲线上每一点对应**同一批数据**，差别只在合并判据 —— 才是一条干净的
+    ROC：横轴是**假阳性率**（Δt=0，即完全均一的剖面被判成两域的比例），
+    纵轴是**灵敏度**（真两域被正确检出的比例）。`min_frac=0` 意味着只留统计腿。
+    """
+    full = dict(flicker=0.01, drift=0.02, dhf=0.05, dhf_std=None, f206=0.05)
+    return [dict(name=f"mf={mf:g}|ns={ns:g}", min_frac=float(mf),
+                 merge_n_sigma=float(ns), **full)
+            for mf in min_fracs for ns in n_sigmas]
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # 五、主循环
 # ═════════════════════════════════════════════════════════════════════════════
-def run_all(dts, conds, seeds, repeat, top, beta, u_cps, th_u, ref_preset,
-            win, step, out_root, keep, verbose):
-    """跑全部 (条件 × 种子)，逐测点判读，返回长表（一行一个测点）。"""
+def run_all(dts, conds, seeds, repeat, tops, betas, u_cps, th_u, ref_preset,
+            win, step, out_root, keep, verbose, dt_rel=None):
+    """
+    在 (核年龄 top × 域界 beta × 条件 × 种子) 上循环，逐测点判读，返回长表。
+
+    每个批次里放齐该 (top, beta) 的全部 Δt —— 一趟流水线出一条完整曲线，
+    且各 Δt 共用**同一套**夹逼标样与**同一条**漂移实现，彼此可比。
+
+    `dt_rel` 给的是**相对**网格（占核年龄的百分比）；给了它就忽略 `dts`，
+    每个 top 各按自己的比例换算成绝对 Δt —— 只有这样才能回答"相对跨度相同的
+    两个年龄，检出难度是否相同"（绝对 Δt 网格天然把老年份的 Δt/age 压得很小）。
+    """
     rows = []
-    for ci, c in enumerate(conds):
-        for s in range(seeds):
-            seed = 20261002 + 1000 * ci + s
-            sub = out_root / f".c{ci}_s{s}"
-            d, plan = make_profile_batch(
-                sub, "SYNPROF", dts, top, beta, repeat, u_cps, th_u, seed,
-                ref_preset, c["flicker"], c["drift"], c["dhf"], c["dhf_std"],
-                c["f206"])
-            cfg = BatchConfig(data_dir=str(d), ref_preset=ref_preset,
-                              do_depth=True, verbose=bool(verbose), plot=False,
-                              win=win, step=step,
-                              merge_min_frac=c["min_frac"])
-            br = run_batch(cfg)
-            struct_by = {str(r["样品"]): str(r["深度结构"])
-                         for _, r in br.results.iterrows()}
-            dom = br.domains
-            for item in plan:
-                if item["kind"] != "sample":
-                    continue
-                name = item["sample"]
-                one = dom[dom["样品"] == name] if (dom is not None and len(dom)) \
-                    else pd.DataFrame()
-                v = verdict(struct_by.get(name, ""), one,
-                            (item["top"], item["bot"]), beta)
-                v.update(条件=c["name"], dt=item["dt"], 种子=seed,
-                         样品=name, min_frac=c["min_frac"])
-                rows.append(v)
-            if not keep:
-                fast_rmtree(sub, root=out_root)
+    for ti, top in enumerate(tops):
+        top = float(top)
+        dts_i = [float(r) / 100.0 * top for r in dt_rel] if dt_rel else list(dts)
+        for bi, beta in enumerate(betas):
+            beta = float(beta)
+            for ci, c in enumerate(conds):
+                for s in range(seeds):
+                    seed = 20261002 + 1000 * ci + s + 7919 * bi
+                    sub = out_root / f".t{ti}_b{bi}_c{ci}_s{s}"
+                    d, plan = make_profile_batch(
+                        sub, "SYNPROF", dts_i, top, beta, repeat, u_cps, th_u,
+                        seed, ref_preset, c["flicker"], c["drift"], c["dhf"],
+                        c["dhf_std"], c["f206"])
+                    cfg = BatchConfig(data_dir=str(d), ref_preset=ref_preset,
+                                      do_depth=True, verbose=bool(verbose),
+                                      plot=False, win=win, step=step,
+                                      merge_min_frac=c["min_frac"],
+                                      merge_n_sigma=c.get("merge_n_sigma", 3.0))
+                    br = run_batch(cfg)
+                    struct_by = {str(r["样品"]): str(r["深度结构"])
+                                 for _, r in br.results.iterrows()}
+                    dom = br.domains
+                    for item in plan:
+                        if item["kind"] != "sample":
+                            continue
+                        name = item["sample"]
+                        one = dom[dom["样品"] == name] \
+                            if (dom is not None and len(dom)) else pd.DataFrame()
+                        v = verdict(struct_by.get(name, ""), one,
+                                    (item["top"], item["bot"]), beta)
+                        v.update(条件=c["name"], dt=item["dt"], 种子=seed,
+                                 样品=name, min_frac=c["min_frac"],
+                                 merge_n_sigma=float(c.get("merge_n_sigma", 3.0)),
+                                 top=top, beta=beta,
+                                 dt_rel=(item["dt"] / top * 100.0) if top else
+                                 float("nan"))
+                        rows.append(v)
+                    if not keep:
+                        fast_rmtree(sub, root=out_root)
     return pd.DataFrame(rows)
 
 
 def summarize(det: pd.DataFrame) -> pd.DataFrame:
-    """逐（条件 × Δt）算四个概率，外加两个与检出无关的退化量。"""
+    """逐（核年龄 × 域界 × 条件 × Δt）算概率，外加两个与检出无关的退化量。"""
+    det = det.copy()
+    for col, val in (("top", float("nan")), ("beta", float("nan"))):
+        if col not in det.columns:
+            det[col] = val
     out = []
-    for (cond, dt), g in det.groupby(["条件", "dt"], sort=False):
+    for (top, beta, cond, dt), g in det.groupby(["top", "beta", "条件", "dt"],
+                                                sort=False):
         n = len(g)
         two = g[g["ndet"] == 2]
         ratio = (two["dt_det"] / float(dt)).replace([np.inf, -np.inf], np.nan).dropna()
         be = g["bnd_err"].dropna().abs()
-        out.append(dict(条件=cond, dt=float(dt), n=n,
+        out.append(dict(top=float(top), beta=float(beta), 条件=cond, dt=float(dt),
+                        dt_rel=(float(dt) / float(top) * 100.0) if top else
+                        float("nan"), n=n,
                         P_2域=float((g["ndet"] == 2).mean()),
                         P_年龄=float(g["okage"].mean()),
                         P_边界=float(g["okbnd"].mean()),
@@ -554,6 +600,43 @@ def make_figure(sum_df, out_png, top, beta, win, step, min_frac, ycol="P_严格"
     return out_png
 
 
+def make_age_figure(sum_df, out_png, cond, win, step, ycol="P_严格"):
+    """
+    年龄扫描图：**同一个条件**、不同的核年龄，横轴分别是绝对 Δt 与相对 Δt/年龄。
+
+    左边按 Ma 看"绝对差要多大才检得出"，右边按 % 看"标度是否唯一"——
+    若年龄绝对值只有**标度**上的影响，右图应当塌缩成一条线；塌缩不了，
+    说明还有与年龄有关的非标度效应（207Pb 计数、门槛的相对大小、灵敏度曲线）。
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    plt.rcParams["font.sans-serif"] = CJK_FONTS
+    plt.rcParams["axes.unicode_minus"] = False
+
+    sub = sum_df[sum_df["条件"] == cond] if cond else sum_df
+    tops = sorted(float(t) for t in sub["top"].dropna().unique())
+    fig, axes = plt.subplots(1, 2, figsize=(13.2, 5.4), dpi=150)
+    for ax, xcol, xlabel in ((axes[0], "dt", "两个年龄域的年龄差 Δt (Ma)"),
+                             (axes[1], "dt_rel", "相对年龄差 Δt / 核年龄 (%)")):
+        for t in tops:
+            g = sub[sub["top"] == t].sort_values(xcol)
+            ax.plot(g[xcol], g[ycol], marker="o", ms=4.5, lw=1.6,
+                    label=f"{t:g} Ma（n={int(g['n'].sum())}）")
+        ax.set_xlabel(xlabel, fontsize=10.5)
+        ax.set_ylim(-0.04, 1.05)
+        ax.grid(alpha=0.30)
+        ax.legend(fontsize=8.5, loc="upper left", framealpha=0.92)
+    axes[0].set_ylabel("P（正确检出两个域）", fontsize=11)
+    fig.suptitle(f"检出概率的年龄依赖：条件「{cond}」　｜　窗口 {win:g} s / 步长 {step:g} s\n"
+                 f"判据＝数对＋两域年龄各在 max(3σ, 2 Ma) 内＋边界 |Δτ| ≤ 0.25"
+                 f"（左＝绝对刻度，右＝相对刻度）", fontsize=10)
+    fig.tight_layout(rect=(0, 0, 1, 0.90))
+    fig.savefig(out_png)
+    plt.close(fig)
+    return out_png
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # 七、命令行
 # ═════════════════════════════════════════════════════════════════════════════
@@ -574,13 +657,20 @@ def _parse_floats(text):
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(
-        description="两域深度剖面正演：扫描年龄差 Δt，画 P(正确检出)。")
+        description="两域深度剖面正演：扫描年龄差 Δt（可同时扫核年龄与域界位置），"
+                    "画 P(正确检出)。--roc 可改跑合并判据的取舍网格。")
     ap.add_argument("--dt", default="5,10,15,20,25,30,40,60,100",
                     help="两域年龄差网格 (Ma)，逗号分隔")
-    ap.add_argument("--top", type=float, default=TOP_DEFAULT,
-                    help=f"浅处（坑口）那一域的年龄 (Ma，默认 {TOP_DEFAULT:g})")
-    ap.add_argument("--beta", type=float, default=BETA_DEFAULT,
-                    help=f"域界所在的归一化深度 (默认 {BETA_DEFAULT:g})")
+    ap.add_argument("--dt-rel", default=None,
+                    help="相对 Δt 网格（占核年龄的百分比，逗号分隔）。给了它就"
+                         "忽略 --dt：每个核年龄各按自己的比例换算 —— 跨年龄比较"
+                         "相对跨度时必须用它")
+    ap.add_argument("--top", default=f"{TOP_DEFAULT:g}",
+                    help="浅处（坑口）那一域的年龄 (Ma)，可给多个（逗号分隔）"
+                         f"做年龄扫描（默认 {TOP_DEFAULT:g}）")
+    ap.add_argument("--beta", default=f"{BETA_DEFAULT:g}",
+                    help="域界所在的归一化深度，可给多个（逗号分隔）做厚薄扫描"
+                         f"（默认 {BETA_DEFAULT:g}）")
     ap.add_argument("--seeds", type=int, default=12, help="每个条件跑几个批次 (默认 12)")
     ap.add_argument("--repeat", type=int, default=4,
                     help="每个 Δt 在一个批次里造几个测点 (默认 4)")
@@ -591,11 +681,20 @@ def main(argv=None) -> int:
     ap.add_argument("--ref-preset", default=DEFAULT_REF_PRESET, help="参考值档")
     ap.add_argument("--out", default=None, help="临时批次写哪儿（跑完即删）")
     ap.add_argument("--fig", default=None, help="图写到哪儿 (PNG)")
+    ap.add_argument("--fig-age", default=None,
+                    help="年龄扫描图写到哪儿 (PNG)：左＝绝对 Δt，右＝相对 Δt/年龄")
+    ap.add_argument("--fig-age-cond", default=None,
+                    help="年龄扫描图用哪条条件：名字子串或**序号**（从 1 起；"
+                         "默认取测点最多的那条）")
     ap.add_argument("--csv", default=None, help="逐测点判读长表写到哪儿 (CSV)")
     ap.add_argument("--plot-only", default=None, metavar="CSV",
                     help="只读已有的逐测点 CSV 重画，不重算")
+    ap.add_argument("--roc", action="store_true",
+                    help="改跑合并判据的取舍网格（min_frac × merge_n_sigma），"
+                         "其余效应固定为全套；Δt=0 那一列就是假阳性率")
     ap.add_argument("--conditions", default=None,
-                    help="只跑名字含这些子串的条件（逗号分隔），便于单跑某一条")
+                    help="只跑这些条件：给名字子串（逗号分隔），或给**序号**"
+                         "（从 1 起，如 1,5,7 —— 条件名是中文，序号更稳）")
     ap.add_argument("--pilot", action="store_true",
                     help="快速试跑：1 个种子 + 少量 Δt（用来先量时间）")
     ap.add_argument("--keep", action="store_true", help="保留写下的批次目录")
@@ -603,12 +702,22 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
 
     ensure_utf8_streams()
-    conds = base_conditions()
+    conds = roc_conditions() if args.roc else base_conditions()
     if args.conditions:
         keys = [k.strip() for k in args.conditions.split(",") if k.strip()]
-        conds = [c for c in conds if any(k in c["name"] for k in keys)]
+        if keys and all(k.isdigit() for k in keys):
+            # 纯数字 ⇒ 按条件表的**序号**（从 1 起）取。条件名是中文，从命令行
+            # 传中文在 Windows 上有编码风险，序号是稳的。
+            idx = [int(k) - 1 for k in keys]
+            conds = [conds[i] for i in idx if 0 <= i < len(conds)]
+        else:
+            conds = [c for c in conds if any(k in c["name"] for k in keys)]
         if not conds:
             raise SystemExit("--conditions 没匹配到任何条件")
+
+    tops = _parse_floats(args.top)
+    betas = _parse_floats(args.beta)
+    dt_rel = _parse_floats(args.dt_rel) if args.dt_rel else None
 
     if args.plot_only:
         det = pd.read_csv(args.plot_only)
@@ -617,24 +726,34 @@ def main(argv=None) -> int:
         dts = _parse_floats(args.dt)
         seeds, repeat = args.seeds, args.repeat
         if args.pilot:
-            dts, seeds, repeat = [20.0, 40.0], 1, 2
+            dts, dt_rel, seeds, repeat = [20.0, 40.0], None, 1, 2
+            tops, betas = tops[:1], betas[:1]
+        n_dt = len(dt_rel) if dt_rel else len(dts)
         out_root = Path(args.out) if args.out else _default_out()
         out_root.mkdir(parents=True, exist_ok=True)
-        print(f"两域深度剖面正演：核 {args.top:g} Ma，边 {args.top:g}−Δt，"
-              f"域界 τ={args.beta:g}")
-        print(f"Δt 网格：{', '.join(f'{d:g}' for d in dts)} Ma")
-        print(f"条件 {len(conds)} 个 × 种子 {seeds} 个 × 每格 {repeat} 个测点")
+        print(f"两域深度剖面正演：核 {', '.join(f'{t:g}' for t in tops)} Ma，"
+              f"边 = 核 − Δt，域界 τ = {', '.join(f'{b:g}' for b in betas)}")
+        if dt_rel:
+            print(f"Δt 网格（相对）：{', '.join(f'{r:g}%' for r in dt_rel)} × 核年龄")
+        else:
+            print(f"Δt 网格（绝对）：{', '.join(f'{d:g}' for d in dts)} Ma")
+        print(f"条件 {len(conds)} × 种子 {seeds} × 每格 {repeat} 测点 × "
+              f"核年龄 {len(tops)} × 域界 {len(betas)} × Δt {n_dt} "
+              f"⇒ 约 {len(conds) * seeds * repeat * len(tops) * len(betas) * n_dt} "
+              f"个样品测点")
         print(f"窗口 {args.win:g} s / 步长 {args.step:g} s；"
               f"临时目录 {out_root}（{'保留' if args.keep else '跑完即删'}）")
         print()
         for c in conds:
             print(f"  · {c['name']}  (min_frac={c['min_frac']:g}, "
+                  f"ns={c.get('merge_n_sigma', MERGE_N_SIGMA_DEFAULT):g}, "
                   f"noise={c['flicker']:.0%}, drift={c['drift']:.0%}, "
                   f"dhf={c['dhf']:.0%}, f206={c['f206']:.0%})")
         print()
-        det = run_all(dts, conds, seeds, repeat, args.top, args.beta,
+        det = run_all(dts, conds, seeds, repeat, tops, betas,
                       args.u_cps, args.th_u, args.ref_preset, args.win,
-                      args.step, out_root, args.keep, args.verbose)
+                      args.step, out_root, args.keep, args.verbose,
+                      dt_rel=dt_rel)
         if not args.keep:
             # 各批次的子目录已在 run_all 里删掉，这里只用**非递归**的空目录删除
             # 收掉临时根 —— 绝不递归，免得把用户 `--out` 指向的目录连内容一起清掉。
@@ -649,35 +768,71 @@ def main(argv=None) -> int:
         return 1
 
     sum_df = summarize(det)
+    multi = (sum_df["top"].nunique(dropna=True) > 1
+             or sum_df["beta"].nunique(dropna=True) > 1)
     print()
     print("— 汇总（P = 正确检出两个域的比例；跨度保留 = 检出两域的年龄差 / 真值 Δt）—")
-    print(f"{'条件':<26s} {'Δt(Ma)':>7} {'n':>4} {'P(2域)':>7} "
-          f"{'P(年龄)':>8} {'P(严格)':>8} {'漏检':>6} {'过分割':>7} "
-          f"{'跨度保留':>8} {'边界|Δτ|':>9}")
+    pre_h = f"{'核(Ma)':>7} {'β':>5} " if multi else ""
+    print(f"{pre_h}{'条件':<24s} {'Δt(Ma)':>7} {'Δt/核%':>7} {'n':>4} "
+          f"{'P(2域)':>7} {'P(年龄)':>8} {'P(严格)':>8} {'漏检':>6} "
+          f"{'过分割':>7} {'跨度保留':>8} {'边界|Δτ|':>9}")
     for _, r in sum_df.iterrows():
-        print(f"{r['条件']:<26s} {r['dt']:>7.0f} {int(r['n']):>4} "
+        pre = f"{r['top']:>7.0f} {r['beta']:>5.2f} " if multi else ""
+        print(f"{pre}{r['条件']:<24s} {r['dt']:>7.1f} {r['dt_rel']:>7.2f} "
+              f"{int(r['n']):>4} "
               f"{r['P_2域']:>7.2f} {r['P_年龄']:>8.2f} {r['P_严格']:>8.2f} "
               f"{r['P_漏检']:>6.2f} {r['P_过分割']:>7.2f} "
               f"{r['跨度保留']:>8.2f} {r['边界误差中位']:>9.3f}")
 
-    # 逐 Δt 的"边缘"：P 从 <0.1 跳到 >0.9 的位置
+    # 逐 (核 × 域界 × 条件) 的"边缘"：P 首次 ≥ 0.5 的位置
     print()
-    print("— P(严格) 的检出边缘（首次 ≥ 0.5 的 Δt）—")
-    for cond, g in sum_df.groupby("条件", sort=False):
+    print("— P(严格) 的检出边缘（首次 ≥ 0.5）—")
+    keys = ["top", "beta", "条件"] if multi else ["条件"]
+    for k, g in sum_df.groupby(keys, sort=False):
         g = g.sort_values("dt")
         hit = g[g["P_严格"] >= 0.5]
-        edge = f"{hit['dt'].iloc[0]:.0f} Ma" if len(hit) else "在网格内未达到 0.5"
-        print(f"  {cond:<26s} 边缘 ≈ {edge}")
+        if len(hit):
+            r0 = hit.iloc[0]
+            tail = (f"Δt ≈ {r0['dt']:.1f} Ma"
+                    f"（Δt/核 = {r0['dt_rel']:.1f}%）")
+        else:
+            tail = "在网格内未达到 0.5"
+        tag = (f"核 {k[0]:g} / β={k[1]:g} / {k[2]}" if multi
+               else str(k[0] if isinstance(k, tuple) else k))
+        print(f"  {tag:<44s} {tail}")
 
+    single = (len(tops) == 1 and len(betas) == 1)
     fig = args.fig
     if fig is None and args.csv:
         fig = str(Path(args.csv).with_suffix(".png"))
     if fig:
-        Path(fig).parent.mkdir(parents=True, exist_ok=True)
-        make_figure(sum_df, fig, args.top, args.beta, args.win, args.step,
-                    min_frac=0.05)
+        if not single:
+            print()
+            print("（--fig 只画单核单域界；多值请用 --fig-age）")
+        else:
+            Path(fig).parent.mkdir(parents=True, exist_ok=True)
+            make_figure(sum_df, fig, tops[0], betas[0], args.win, args.step,
+                        min_frac=0.05)
+            print()
+            print(f"图：{fig}")
+
+    if args.fig_age:
+        conds_seen = list(dict.fromkeys(map(str, sum_df["条件"])))
+        if args.fig_age_cond:
+            key = args.fig_age_cond.strip()
+            if key.isdigit():
+                i = int(key) - 1
+                cond0 = conds_seen[i] if 0 <= i < len(conds_seen) else conds_seen[0]
+            else:
+                cand = [c for c in conds_seen if key in c]
+                cond0 = cand[0] if cand else conds_seen[0]
+        else:
+            tot = sum_df.groupby("条件")["n"].sum()
+            cond0 = str(tot.idxmax())
+        Path(args.fig_age).parent.mkdir(parents=True, exist_ok=True)
+        make_age_figure(sum_df, args.fig_age, cond0, args.win, args.step)
         print()
-        print(f"图：{fig}")
+        print(f"年龄扫描图：{args.fig_age}（条件「{cond0}」）")
     return 0
 
 
