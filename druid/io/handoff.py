@@ -242,9 +242,11 @@ def _block_calibration(cfg, result, checks) -> Dict[str, object]:
             "n_secondary_spots": int(
                 (roles == ROLE_LABEL_CN[ROLE_SECONDARY]).sum()) if len(roles) else 0,
         },
-        "note": ("`source=measured` 表示由本批监控标样的实测散度估出；"
-                 "`assumed` 表示没有监控标样、退回写死的经验值（206/238 0.70%、"
-                 "207/206 0.25%）—— 后者不能用误差棒论证年龄一致性。"),
+        "note": ("`source` 有三个取值：`measured` = 由本批监控标样的实测散度"
+                 "估出；`forced` = 调用方用 --sigma-ext68 / --sigma-ext76 直接"
+                 "指定（换一批数据它不会跟着变）；`assumed` = 没有监控标样、"
+                 "退回写死的经验值（206/238 0.70%、207/206 0.25%）。"
+                 "后两者不能用误差棒论证年龄一致性。"),
     }
 
 
@@ -283,10 +285,16 @@ def _block_samples(result, th: QCThresholds) -> List[Dict[str, object]]:
             if (col in g.columns and "s68_1sig" in g.columns) else {})
         if "协和度_pct" in g.columns:
             c = pd.to_numeric(g["协和度_pct"], errors="coerce").dropna()
+            # 门槛跟 QCThresholds 走 —— 这里曾经把 90/110 写死，于是调用方一旦
+            # 改了 th.concordance_lo/hi，交接 JSON 与 qc 的 samples.concordance
+            # 会静默给出两个不同的数。
             d["concordance"] = {
                 "n": int(len(c)),
                 "median_pct": _f(c.median()) if len(c) else None,
-                "frac_in_90_110": (float(c.between(90, 110).mean()) if len(c) else None),
+                "frac_in_band": (float(c.between(th.concordance_lo,
+                                                 th.concordance_hi).mean())
+                                 if len(c) else None),
+                "band_pct": [float(th.concordance_lo), float(th.concordance_hi)],
             }
         if "f206_pct" in g.columns:
             d["f206_pct_median"] = _f(pd.to_numeric(g["f206_pct"], errors="coerce").median())

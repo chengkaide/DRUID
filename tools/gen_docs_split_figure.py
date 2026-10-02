@@ -240,7 +240,7 @@ def panel(i: int, case: dict, d: dict) -> list[str]:
     P.append(f'<rect class="fig-frame" x="{ML}" y="{pt}" width="{PW}" height="{PH}"/>')
     if i == len(CASES) - 1:
         P.append(f'<text class="fig-axis" x="{ML+PW/2:.0f}" y="{H-10}" text-anchor="middle">'
-                 f'剥蚀时间 τ（0 = 激光开，1 = 激光关）　→ 坑深方向</text>')
+                 f'剥蚀时间 τ（0 = 积分段起点，1 = 积分段终点）　→ 坑深方向</text>')
     P.append('</g>')
     return P
 

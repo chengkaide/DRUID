@@ -48,11 +48,14 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
 
-# 匹配形如 "[3] 外部重现性..." 的阶段标记，用于推断进度
-_STAGE_RE = re.compile(r"^\s*\[([1-6])\]")
+# 匹配形如 "[3] 外部重现性..." 的阶段标记，用于推断进度。
+# 范围要覆盖到最后一步：[1]–[6] 由 workflow.run_batch 打印，
+# [7] 结果写出 / [8] 质控交接由 CLI 与 webui 的 handlers 打印。
+_STAGE_RE = re.compile(r"^\s*\[([1-9])\]")
 
-# 工作流总共有六个阶段（见 workflow.run_batch）
-_TOTAL_STAGES = 6
+# 工作流总共八个阶段（前六个见 workflow.run_batch，后两个是写出与交接）。
+# 这个数只用来算百分比，写小了进度条会提前满格。
+_TOTAL_STAGES = 8
 
 
 class TaskState(str, Enum):
@@ -223,9 +226,6 @@ class TaskManager:
                 m = _STAGE_RE.match(line)
                 if m:
                     t.stage = max(t.stage, int(m.group(1)))
-                elif line.startswith("    ") and t.stage == 0:
-                    # "[1]" 之前还有跳过信息等细节行，也给一点进度感
-                    pass
                 t.logs.append(line)
 
             tee_out = _Tee(on_line, sys.stdout)

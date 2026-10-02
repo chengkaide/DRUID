@@ -26,14 +26,17 @@ LA-ICP-MS 锆石 U-Pb 数据还原工具。把 Qtegra/iCAP 导出的 cps 时间�
   有测试钉着）
 - 仓库布局：`druid/` 代码 · `examples/EX2022A/` 示例批次（85 个测点，样品名
   匿名成 `S01`…`S48`，标样保留）· `tests/` 自检 · `docs/` 文档站（四份页面）·
-  `tools/` 六个只读脚本 —— 入口都是 `python tools/<脚本>.py --help`：
+  `tools/` 七个只读脚本 —— 入口都是 `python tools/<脚本>.py --help`：
   `gen_docs_split_figure.py`（画落地页三联图并注入）·
   `gen_docs_preview.py`（画落地页首屏「一眼看到什么」那一块并注入）·
   `window_scale_facts.py`（量窗口尺度）·
   `ref_value_impact.py`（91500 各口径档差多大，见 §10）·
   `age_hist_by_sample.py`（按样品名分画幅画年龄分布柱状图，读现成的结果表即可）·
   `trace_channels.py`（批次里有哪些通道、哪些在解析阶段就被丢掉 ——
-  见 `改进清单.md`（仓库外文档）A-14：**28 个通道里 21 个进不了包**，要拿回先看它）
+  见 `改进清单.md`（仓库外文档）A-14：**28 个通道里 21 个进不了包**，要拿回先看它）·
+  `cl_section_compare.py`（把 **CL 图像**与深度剖面对上：τ × 剥蚀速率 = μm 深度；
+  并统计「工具解出的域数 vs CL 上数出的结构数」的一致 / 漏检 / 过拟合 ——
+  三个子命令、口径与三个坑见根目录 `CL对照说明.md`）
 - Python 层：**只有 numpy / pandas / matplotlib / openpyxl / xlrd**。
   **没有 scipy** —— 年龄方程的不动点迭代、二分法、卡方上尾概率都是自己实现的，
   这不是疏漏而是设计：不依赖会变的第三方行为。

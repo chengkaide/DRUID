@@ -52,7 +52,8 @@ from .core.constants import (
 )
 from .core.geochronology import age68, age75, age76
 from .core.references import std_age, std_alias, std_ref
-from .core.statistics import external_scatter, robust_mask, weighted_mean
+from .core.statistics import (EXTERNAL_SCATTER_LO_76, external_scatter,
+                              robust_mask, weighted_mean)
 from .depth.domains import (merge_close, refine_domains, segment,
                             summarize_segments, whole_spot_stats)
 from .depth.fractionation import bracket_F, profile_ages
@@ -474,7 +475,13 @@ def estimate_external(spots, pidx, F68, F76, b68, b76, cfg: BatchConfig):
     """
     qc_values = {"R68": [], "s68": [], "R76": [], "s76": []}
     for k, (tr, r) in enumerate(spots):
-        if tr.sample != cfg.secondary:
+        # 按**角色**挑监控标样，不要按样品名字符串精确等值。
+        # `sample_role()` 认别名（Ple / PLE / Plesovice / plešovice）且大小写
+        # 不敏感，名字等值却不认。两边口径不一致时，序列里写 "Plesovice" 会让
+        # 这里一个点都取不到、σext 退回写死的假设值，而 qc 那边按角色数出
+        # n_secondary>0、仍然报 source="measured" —— 结论看着比实际可靠。
+        # 2026-10-02 统一成按角色（qc 的 n_secondary 本来就是按角色数的）。
+        if tr.role != ROLE_SECONDARY:
             continue
         f68, f76 = interp_F(k, pidx, F68, F76)
         qc_values["R68"].append(b68[k] * f68)
@@ -488,7 +495,8 @@ def estimate_external(spots, pidx, F68, F76, b68, b76, cfg: BatchConfig):
         sd68 = sd68 if sd68 is not None else external_scatter(
             qc_values["R68"], qc_values["s68"])
         sd76 = sd76 if sd76 is not None else external_scatter(
-            qc_values["R76"], qc_values["s76"], lo=0.001, hi=0.05)
+            qc_values["R76"], qc_values["s76"],
+            lo=EXTERNAL_SCATTER_LO_76, hi=0.05)
     # 兜底：万一序列里一个监控标样都没有
     sd68 = 0.007 if sd68 is None else float(sd68)
     sd76 = 0.0025 if sd76 is None else float(sd76)
@@ -574,7 +582,8 @@ def analyse_depth_spot(tr: Tra, r: dict, brack, ref68: float, sd68: float,
 
     返回
     ----
-    (prof, segs, summ, tag)
+    (prof, segs, summ, tag)，**或者是 None** —— 窗口为空、或找不到可用的
+    夹逼标样时返回 None。调用方必须先判 None 再解包（见 run_batch）。
         prof : 逐窗口还原结果（含 age68 / s_age68）
         segs : 年龄域下标范围
         summ : 域汇总表
@@ -638,14 +647,20 @@ def run_depth_analysis(spots, brack_for, ref68, sd68, cfg: BatchConfig):
         pdf = PdfPages(plot_dir / f"{cfg.data_dir.name}_深度剖面_全部.pdf")
 
     for k, (tr, r) in enumerate(spots):
-        # 只有未知样品需要做多域判别；标样理论上应该是均一的
+        # 两类测点在这里跳过分域：
+        #   ① 标样（role != unknown）—— 逻辑上应该均一，分域没有意义；
+        #   ② 全局关掉了深度分析（--no-depth）—— 这时**所有**测点一律
+        #      跳过，`剖面窗口` 表整个为空、无法交接 ADEPT
+        #      （qc 的 handoff.windows 检查正是靠"表为空"反推 --no-depth）。
         if tr.role != ROLE_UNKNOWN or not cfg.do_depth:
             struct.append("")
             continue
         try:
             out = analyse_depth_spot(tr, r, brack_for(k), ref68, sd68, cfg)
         except Exception as e:
-            print(f"    !! {Path(tr.path).stem} 深度剖面失败: {e}")
+            # 走 _log 而不是裸 print：全流水线的进度输出都受 cfg.verbose
+            # 控制，这里漏一个裸 print，--quiet 就形同虚设。
+            _log(cfg, f"    !! {Path(tr.path).stem} 深度剖面失败: {e}")
             struct.append("")
             continue
         if out is None:
@@ -801,15 +816,21 @@ def apply_secondary_correction(res: pd.DataFrame, cfg: BatchConfig):
 
     做法
     ----
-    系数 kfac = 参考年龄 / 监控标样实测加权平均年龄，
-    把全部年龄乘以 kfac。所有 result 列的 σ 同步缩放。
+    系数 kfac = 参考年龄 / 监控标样实测加权平均年龄。
+
+    ⚠ **只对 206Pb/238U 这一个钟做平移**：新增 4 列
+      （`QC校正系数` / `年龄206_238_QC校正` / `s68_1sig_QC校正` /
+      `s68_2sig_QC校正`），原表一列都不改。`年龄207_235`、`年龄207_206`
+      以及对照列 `年龄206_238_ftau` 都**不参与** —— 它们是各自独立的
+      钟/口径，没有理由跟着一起平移。
     """
     alias = std_alias(cfg.secondary)
     ref_age = std_age(alias, cfg.ref_preset) if alias else float("nan")
     if not np.isfinite(ref_age) or cfg.secondary == cfg.primary:
         return res, None
 
-    g = res[res["样品"] == cfg.secondary]
+    # 同样按**类型**（角色）挑，不按样品名等值 —— 理由见 estimate_external。
+    g = res[res["类型"] == ROLE_LABEL_CN[ROLE_SECONDARY]]
     if len(g) == 0:
         return res, None
     mu_qc, se_qc, mswd_qc, n_qc = weighted_mean(g["年龄206_238"], g["s68_1sig"])
@@ -849,7 +870,7 @@ def _alternative_method_column(spots, variants, alt: str, ref68: float,
     说明 down-hole 分馏严重，或存在别的结构性问题。所以默认那套之外再算一列，
     不必让用户重跑一遍去对照。
 
-    三种算不出来的情形（整批无主标、主标在该方法下被稳健统计全部剔除）
+    两种算不出来的情形（整批无主标、主标在该方法下被稳健统计全部剔除）
     统一返回全 nan：宁可少一列，也不要让空数组进 robust_mask / np.interp
     触发无意义的警告或崩溃。
 
@@ -883,7 +904,9 @@ def run_batch(cfg: BatchConfig) -> BatchResult:
     返回
     ----
     BatchResult，其中 results 是主结果表，qc 是标样质控表，
-    domains 是多域剖面明细，info 记录了本次运行的全部关键量。
+    domains 是多域剖面明细，info 记录了本次运行的关键参数与中间量。
+    ⚠ info 里**没有** `ref_preset`（参考值口径）—— 它只进交接 JSON 的
+      config 块，所以单看结果 Excel 的「运行参数」sheet 看不出用的哪一档。
     """
     # 流水线全程用中文打印进度。Windows 上把输出重定向到文件时，
     # Python 会用 locale 编码（cp1252 之类）编码 stdout，第一句 print 就抛

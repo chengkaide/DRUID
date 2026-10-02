@@ -121,7 +121,8 @@ def _probe(d) -> Dict[str, Any]:
     """
     探测一个目录"像不像一个 U-Pb 批次目录"。
 
-    判据很朴素：里面有 *_LIST.xls(x) 且有一定数量的 *_N.csv。
+    判据很朴素：里面有名字带 `_LIST` 的文件，且目录里有若干 `.csv`。
+    ⚠ 返回的 `n_csv` 数的是**所有** `.csv`，不区分是不是测点文件。
     这个探测要快 —— 浏览时会对每个子目录调用，所以只做文件名匹配，不读文件内容。
     """
     # 入参可能是 str（盘符），统一成 Path，避免后续属性访问炸掉
@@ -301,6 +302,7 @@ def run_job(cfg: BatchConfig, task) -> None:
 
     result = run_batch(cfg)
     out_path = export_batch(cfg, result, version=__version__)
+    print("[7] 结果已写出：%s" % out_path)
 
     # 质控：与命令行共用同一套检查项与同一套排版（druid.qc），
     # 免得"网页说能用、命令行说不能用"这种最难查的不一致。
@@ -379,7 +381,7 @@ def run_job(cfg: BatchConfig, task) -> None:
         print(f"（结果摘要生成失败，可忽略）{type(e).__name__}: {e}")
 
     print("\n" + "=" * 68)
-    print(f"[7] 完成。结果文件：{out_path}")
+    print(f"完成。结果文件：{out_path}")
     print("=" * 68)
 
 
@@ -428,8 +430,13 @@ def reveal(path: str) -> Dict[str, Any]:
 
     try:
         if platform.system() == "Windows":
-            # /select, 的形式可以在打开资源管理器的同时选中该文件，体验最好
-            os.startfile(str(p if p.is_file() else target))  # noqa: S606
+            # 目录 → 直接打开；文件 → 用 explorer /select, 打开它**所在的**
+            # 目录并选中它。不能对文件用 os.startfile：那会用关联程序打开
+            # 文件本身，与"打开所在文件夹"的语义不符。
+            if p.is_file():
+                subprocess.Popen(["explorer", "/select,", str(p)])  # noqa: S603,S607
+            else:
+                os.startfile(str(target))  # noqa: S606
         elif platform.system() == "Darwin":
             subprocess.Popen(["open", str(target)])
         else:

@@ -57,7 +57,8 @@ from .core.constants import ROLE_LABEL_CN, ROLE_PRIMARY, ROLE_SECONDARY, ROLE_UN
 from .core.geochronology import age68
 from .core.constants import DEFAULT_REF_PRESET
 from .core.references import std_age, std_ref
-from .core.statistics import EXTERNAL_SCATTER_HI, EXTERNAL_SCATTER_LO
+from .core.statistics import (EXTERNAL_SCATTER_HI, EXTERNAL_SCATTER_LO,
+                              EXTERNAL_SCATTER_LO_76)
 
 # ── 等级与排序 ──
 FAIL, WARN, INFO, PASS = "fail", "warn", "info", "pass"
@@ -488,9 +489,12 @@ def _rock_of(name: str) -> str:
     """
     取"岩样名"：去掉样品名末尾的测点编号，再收掉尾部的分隔符。
 
-    `X-2-17` → `X-2`；`X--2-9` 去掉末尾 `-9` 后剩 `X-` → `X`。
+    `X-2-17` → `X-2`；`X--2-9` → `X--2`。
+    （只删末尾的「分隔符 + 数字」，**中间**的双分隔符 `--` 不动 ——
+     `strip("-_ ")` 只作用于首尾。这两个具体结果写在示例里，改 `_TAIL_INDEX`
+     时请连带核对。）
     **这里刻意不做归一化** —— 归一化的先后顺序正是要考察的东西：
-    对原名取岩样得 `{X-2, X}`（同一个岩样被拆成两个），
+    对原名取岩样得 `{X-2, X--2}`（同一个岩样被拆成两个），
     先归一化再取岩样才得 `{X-2}`。两者之差就是这个检查要报的量。
     """
     return _TAIL_INDEX.sub("", str(name).strip()).strip("-_ ")
@@ -685,9 +689,10 @@ def _check_standards(result, cfg, th, out: List[Check]) -> None:
     # 91500 的 R68=0.17928 反算回年龄是 1063.04 Ma，而库里写的 age_Ma=1062.4，
     # 差 +0.0602%。后果是**全部样品年龄一致偏老 0.0602%**，
     # 而且 QC「偏差%」有一个 +0.0602% 的固定地板。
-    # 参考值预设（见 workflow.BatchConfig.ref_preset）：选了非默认口径时，
-    # 这条自洽性检查按**所选口径**判 —— 例如选了 horstwood2016，91500 的
-    # 比值与年龄本来就自洽，这条就该变绿（这正是"换个口径"的可见后果之一）。
+    # 参考值预设（见 workflow.BatchConfig.ref_preset）：这条自洽性检查按
+    # **所选口径**判。注意 2026-09-25 起 horstwood2016 已是**默认档**，
+    # 所以默认运行它本来就该是绿的；真正会触发这条的是第一版口径 `repo`
+    # （91500 的比值与年龄在那个口径下差 +0.0602%）—— 这正是"换个口径"最直观的可见后果。
     preset = getattr(cfg, "ref_preset", DEFAULT_REF_PRESET)
     inc = {}
     for name in dict.fromkeys([cfg.primary, cfg.secondary]):
@@ -793,28 +798,35 @@ def _check_uncertainty(result, cfg, th, out: List[Check]) -> None:
     # ── σext 被上下限截断：这时它表示的**不是一个测出来的量，而是一个缺口** ──
     # `external_scatter()` 在监控标样不足 2 个时返回下限、在散度算爆时返回上限。
     # 两者都会让下游以为"外部重现性已经考虑过了"，实际是没测出来。
+    # ⚠ 两条通道的**下限不一样**（207/206 的散度天然小一个量级），必须各判各的：
+    #    曾经这里对 sd68/sd76 都拿 EXTERNAL_SCATTER_LO(0.30%) 去比，而 76 侧
+    #    的真实下限是 0.10%，于是"207/206 触到下限"永远判不出来。
     bound = []
-    for label, v in (("206/238", sd68), ("207/206", sd76)):
+    for label, v, lo_b in (("206/238", sd68, EXTERNAL_SCATTER_LO),
+                           ("207/206", sd76, EXTERNAL_SCATTER_LO_76)):
         if v is None:
             continue
-        if abs(v - EXTERNAL_SCATTER_LO) < 1e-12:
-            bound.append(f"{label} 触到下限 {EXTERNAL_SCATTER_LO:.2%}")
+        if abs(v - lo_b) < 1e-12:
+            bound.append(f"{label} 触到下限 {lo_b:.2%}")
         elif abs(v - EXTERNAL_SCATTER_HI) < 1e-12:
             bound.append(f"{label} 触到上限 {EXTERNAL_SCATTER_HI:.2%}")
     out.append(_mk(
         "uncertainty.sigma_ext_bound", WARN if bound else PASS,
         "外部重现性触到了上下限保护" if bound else "外部重现性未触边界",
         observed="; ".join(bound) if bound else "—",
-        criterion=f"不取到 {EXTERNAL_SCATTER_LO:.2%} / {EXTERNAL_SCATTER_HI:.2%} 两端",
+        criterion=f"不取到下限（206/238 {EXTERNAL_SCATTER_LO:.2%}、"
+                  f"207/206 {EXTERNAL_SCATTER_LO_76:.2%}）/ "
+                  f"上限 {EXTERNAL_SCATTER_HI:.2%}",
         detail="" if not bound else
                "触到边界说明这个数**不是测出来的**：下限来自"
-               f"「监控标样不足 2 个」（函数直接返回 {EXTERNAL_SCATTER_LO:.2%}）"
+               "「监控标样不足 2 个」（函数直接返回该通道的下限）"
                "或实测散度小于内部精度（方差相减后截到 0）；"
                f"上限来自散度算爆被截在 {EXTERNAL_SCATTER_HI:.2%}。"
                "用这种 σext 算出的误差棒只能当量级参考，不能拿来做"
                "「两个年龄在误差内一致」这类判断。",
         bound=bound, sd68=sd68, sd76=sd76,
-        lo=EXTERNAL_SCATTER_LO, hi=EXTERNAL_SCATTER_HI))
+        lo=EXTERNAL_SCATTER_LO, lo76=EXTERNAL_SCATTER_LO_76,
+        hi=EXTERNAL_SCATTER_HI))
 
     # 二次校正被施加过就一定要说 —— 它是一个乘性平移，会改变每个年龄的绝对值。
     corr = result.info.get("secondary_correction") or None
@@ -999,8 +1011,11 @@ def _check_whole_spot(result, cfg, th, out: List[Check]) -> None:
         delta_vs_bulk_pct_median=_finite(d_bulk.median())))
 
     # ② 分域之后仍报均一、但整段已经非常数 —— 只看域表发现不了的那一类
+    # 「均一」的口径必须与 pipeline 对齐：workflow 那边是 `nd <= 1` 才标
+    # "均一"，所以**域数 0 与 1 都算**。这里曾经写成 `== 1`，把"一个域都
+    # 没解出来"的测点漏在了分子与分母之外。
     n_dom = pd.to_numeric(_col(ov, "域数"), errors="coerce")
-    uni = (n_dom == 1) if n_dom is not None else pd.Series(False, index=ov.index)
+    uni = (n_dom <= 1) if n_dom is not None else pd.Series(False, index=ov.index)
     n_uni = int(uni.sum())
     bad = ov[uni & ~is_const]
     n_bad = int(len(bad))
@@ -1107,7 +1122,9 @@ def _check_handoff(result, cfg, th, out: List[Check]) -> None:
          "所有测点都能进入 ADEPT 的判坪流程"),
         observed=f"{n_drop}/{n_spots} = {frac:.1%}"
                  + (f"（老核 {n_core}、短采 {n_short}）" if n_drop else ""),
-        criterion=f"占比 ≤ 10%（可用窗口 ≥ {th.min_usable_windows} 个）",
+        # 判据是 "= 0"：只要丢了任何一个点就已经是 warn，10% 是 fail 线。
+        criterion="= 0（> 10% 判 fail）"
+                  f"（可用窗口 ≥ {th.min_usable_windows} 个）",
         detail="" if n_drop == 0 else
                "这些测点在 ADEPT 里会被判为 ok=FALSE：输出一行年龄全 NA 的空行、"
                "不画图、不报错。**统计成功率时若只数坪表，会以为它们是\"没有坪\"，"
@@ -1242,8 +1259,9 @@ def _check_claim_scope(result, cfg, th, out: List[Check]) -> None:
 
     sd68, sd76 = _finite(result.info.get("sd68")), _finite(result.info.get("sd76"))
     bound = []
-    for label, v in (("206/238", sd68), ("207/206", sd76)):
-        if v is not None and (abs(v - EXTERNAL_SCATTER_LO) < 1e-12
+    for label, v, lo_b in (("206/238", sd68, EXTERNAL_SCATTER_LO),
+                           ("207/206", sd76, EXTERNAL_SCATTER_LO_76)):
+        if v is not None and (abs(v - lo_b) < 1e-12
                               or abs(v - EXTERNAL_SCATTER_HI) < 1e-12):
             bound.append(label)
 
@@ -1308,8 +1326,10 @@ def assess_batch(result, cfg=None, thresholds: Optional[QCThresholds] = None) ->
 
     参数
     ----
-    result     : `druid.workflow.BatchResult`（鸭子类型：只要有
-                 results / qc / info / windows 四个属性即可）
+    result     : `druid.workflow.BatchResult`（鸭子类型：需要
+                 results / qc / info / windows / **overall** 五个属性。
+                 缺 `overall` 不会跳过，而是让 `samples.whole_spot` 与
+                 `samples.unresolved_structure` 两条退化成 warn）
     cfg        : `BatchConfig`，可选。给了才能知道"主标/监控标样叫什么"
                  以及阈值覆盖。缺省时从 `result.info` 里取标样名。
     thresholds : 覆盖阈值；缺省用 `cfg.qc_thresholds`，再缺省用 `QCThresholds()`。

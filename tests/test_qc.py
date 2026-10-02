@@ -186,6 +186,38 @@ def test_sigma_ext_bound_is_flagged():
     assert keyed(assess_batch(r3))["uncertainty.sigma_ext_bound"].level == PASS
 
 
+def test_sigma_ext_bound_checks_207_206_against_its_own_lower_bound():
+    """
+    ⚠ 回归：两条通道的**下限不一样** —— 206/238 是 0.30%、207/206 是 0.10%。
+
+    修复前的写法是拿同一个下限去比 sd68 与 sd76，于是 207/206 撞到自己
+    下限时判据 `abs(0.001 − 0.003) < 1e-12` 不成立 —— 这条告警**永远报不出来**。
+    它是静默失效：不报错、数字也不变，只有专门构造 sd76 = 0.001 才能发现。
+    """
+    from druid.core.statistics import EXTERNAL_SCATTER_LO_76
+
+    r = make_result(sd76=EXTERNAL_SCATTER_LO_76)
+    chk = keyed(assess_batch(r))["uncertainty.sigma_ext_bound"]
+    assert chk.level == WARN, "207/206 撞到自己下限时必须报警"
+    assert any("207/206" in b and "下限" in b for b in chk.data["bound"])
+
+
+def test_both_sigma_ext_lower_bounds_come_from_one_place():
+    """
+    两个下限只能有**一个出处**（`core/statistics.py` 的两个命名常量）。
+
+    历史上 `workflow` 给 76 侧传字面量 `lo=0.001`、`qc` 只认
+    `EXTERNAL_SCATTER_LO`，两边各写一份 —— 谁也不报错，但结论少了一条。
+    这里读源码把它钉住：改一处而忘了另一处，当场就红。
+    """
+    root = Path(__file__).resolve().parents[1]
+    wf = (root / "druid" / "workflow.py").read_text(encoding="utf-8")
+    qc = (root / "druid" / "qc.py").read_text(encoding="utf-8")
+    assert "EXTERNAL_SCATTER_LO_76" in wf, "workflow 必须引用命名常量"
+    assert "lo=0.001" not in wf, "workflow 里又出现了字面量下限"
+    assert "EXTERNAL_SCATTER_LO_76" in qc, "qc 的触界检查必须按通道取各自的常量"
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # 使用范围声明：把「这批年龄能用来干什么」写成机读的（A-13）
 #

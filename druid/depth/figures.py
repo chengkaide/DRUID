@@ -190,6 +190,14 @@ def save_depth_figure(prof, segs, title, out_path, summ=None,
 
     参数
     ----
+    prof     : 逐窗口剖面表（就是「剖面窗口」表的同一批列）
+    segs     : 年龄域下标范围，来自 depth.domains 的分段结果
+    title    : 图上方标题（一般是"序号 样品名"）
+    out_path : 图片输出路径，父目录会自动创建
+    summ     : 域汇总表；给了就在图内标注各域年龄与 MSWD
+    dpi      : 出图分辨率，默认 140
+    with_207 : 是否把 207Pb/206Pb 剖面画成第二条曲线，默认 True
+    whole    : 整段不分域的那条水平参考线（可选）
     pdf : matplotlib.backends.backend_pdf.PdfPages 对象（可选）
           传入则同时把该图追加进多页 PDF。**推荐在循环里一边画一边写入 PDF
           并立即关闭**，避免几十个 Figure 同时驻留内存。
