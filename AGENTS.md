@@ -118,6 +118,7 @@ Get Pages site failed. Error: Not Found
 |---|---|---|
 | 会装 Python 的同行 | **源码 zip**（下面那条命令） | 能自己复核、能改、能跑 `tests/` 自查；仓库里有 CI 背书 |
 | 不会用命令行的同事 | **`dist\DRUID.exe`** ＋ `使用说明.txt` | 双击即用、本机无需装 Python；2026-09-26 已重建并逐位验过（见 §7） |
+| 用 macOS 的同事 | **源码 zip** ＋ `使用说明.txt` | **`.exe` 只能在 Windows 上跑**（PyInstaller 不支持跨系统打包）。Mac 上 `python3 -m pip install -e .` 后双击 `启动数据处理工具.command` |
 | 只想"看看这是什么" | **链接**：`github.com/chengkaide/DRUID`、`chengkaide.github.io/DRUID/` | 不用传文件，也不会过期 |
 
 源码包**不要手挑文件、也不要压缩整个工作目录**，让 git 自己吐：
@@ -126,11 +127,15 @@ Get Pages site failed. Error: Not Found
 git archive --format=zip -o "../DRUID_v2.7.0_源码包.zip" HEAD   # 版本号取当前 __version__
 ```
 
-它只装**被 git 跟踪**的东西，于是天然排掉：`改进清单.md`、`进度与交接.md`、
-`.workbuddy/`（前三者在 `.git/info/exclude` 里）、`build_tmp/`、`dist/`、`结果/`、
-`*_U-Pb结果.xlsx`（走 `.gitignore`）。
+它只装**被 git 跟踪**的东西，于是天然排掉：`.workbuddy/`、`铅不均一性判读.html`
+（在 `.git/info/exclude` 里）、`build_tmp/`、`dist/`、`结果/`、`*_U-Pb结果.xlsx`（走 `.gitignore`）。
 
-2026-09-26 实测：**2.44 MB / 173 个文件**，逐项核过、无敏感文件混入；
+⚠ **2026-10-02 起 `改进清单.md` 与 `进度与交接.md` 已脱敏入库，因此它们会进源码包。**
+这是有意的：此前这两条只在 `.git/info/exclude` 里，远端**一个备份都没有**。
+其中的真实地名 / 样品号 / 批次号 / 绝对路径已全部换成中性说法，由
+`tests/test_packaging.py::test_no_identifying_strings_in_tracked_files` 盯着（连未跟踪文件一起扫）。
+
+2026-10-02 实测：**187 个文件 / 2.60 MB**，逐项核过、无敏感文件混入；
 包里的 `*.bat` 是 CRLF（`.gitattributes` 的 `eol=crlf` 在 archive 时同样生效），
 对方解压后能直接双击。
 
@@ -172,7 +177,8 @@ PY="C:/Users/<用户名>/.workbuddy/binaries/python/envs/upb/Scripts/python.exe"
 "$PY" -m druid.cli.reduce_batch --dir "<批次目录>" --out "<结果.xlsx>" --plot
 
 # 网页界面（日常用这个）
-#   双击 启动数据处理工具.bat
+#   Windows：双击 启动数据处理工具.bat
+#   macOS  ：双击 启动数据处理工具.command
 
 # 自检（不需要 pytest）
 "$PY" tests/run_all.py
@@ -428,11 +434,17 @@ workflow.py  编排层：BatchConfig 集中所有可调参数 + 十步 run_batch
   属于哪一版、怎么复现、坏了怎么修，全都无从谈起。同理它**必然**没有 9-15 之后加的
   任何东西（`--ref-preset` 口径档、`claim_scope`、后续的检查项与 sheet），
   所以它算出的年龄与文档站上写的示例数字对不上。
-  **别再往外发那一个**；要发就用 `dist\DRUID.exe`（2026-09-26 11:53 重建，51.9 MB / 54,442,251 字节，
-  与 `__version__` 同版）。顺带记住：**判 exe 新旧看时间戳与文件名，不要靠在 exe 里
+  **别再往外发那一个**；要发就用 `dist\DRUID.exe`，而且**每次改完代码都要重打包**
+  （Windows 双击 `打包成exe.bat`，约 3 分钟）—— 否则它装的就是上一版的代码。
+  规矩：**`dist\DRUID.exe` 的时间戳必须晚于最后一次改代码**。
+  最近一次重建：**2026-10-02 17:14 ／ v2.7.0 ／ 54,447,470 字节**。
+  顺带记住：**判 exe 新旧看时间戳与文件名，不要靠在 exe 里
   搜字符串** —— onefile 的 PYZ 是 zlib 压缩的，搜不到不能当"没有"的证据。
 
-  **重打包后的验收（2026-09-26 实测，约 3 分钟）**：
+  ⚠ **exe 只能在 Windows 上跑，且不能跨系统打包** —— 要 Mac 版就得在 Mac 上
+  重跑一次 PyInstaller（源码本身是跨平台的，见 §1 的机型对照表）。
+
+  **重打包后的验收（2026-09-26 首次记录、2026-10-02 复跑，约 3 分钟）**：
 
   ① 启动：`cd dist && ./DRUID.exe --port 8801 --no-browser`。onefile 首次要解压，
      约 5 s，控制台打印 `druid v<版本>` 与界面地址。
@@ -444,7 +456,8 @@ workflow.py  编排层：BatchConfig 集中所有可调参数 + 十步 run_batch
   ④ 数值：把产出的 xlsx 与基线逐位比 —— 中位 458.1074 / 5% 420.2161 / 95% 643.5834、
      91500 `1060.2176 / −0.3096%`、Ple `343.3966 / +1.8497%`（horstwood2016 口径）。
      **这一步不能跳**：①–③ 全过仍可能是旧代码，只有数字能证明 exe 里装的是这一版。
-     本次实测 48 s 跑完、48 张剖面图、以上数字全部逐位一致。
+     两步实测：2026-09-26 跑 48 s、2026-10-02 复跑 45.1 s，两次都是 48 张剖面图
+    ＋ 1 张总图 PDF，以上数字全部逐位一致。
 
   （onefile 每次启动要解压到临时目录，启动慢、杀软偶尔拦一下，都属正常。）
   从源码分发用 `git archive`，见 §1「怎么分发给别人」。

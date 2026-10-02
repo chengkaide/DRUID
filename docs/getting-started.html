@@ -230,7 +230,7 @@
       <div class="why">路径里有空格时命令行要加引号；有中文时个别老工具会踩编码问题，能避就避。</div></li>
   <li><b>跑一遍示例批次</b>　<code>python tests\run_all.py</code>，再跑 <code>python tests\check_example_batch.py</code>
       <div class="why">第二条会用自带的 85 个测点真算一遍，最后一行是 <code>✓ 全部与基线一致</code> 就说明环境完全就绪。</div></li>
-  <li><b>换成你自己的数据</b>　按 <a href="#c4">第四节</a>把数据摆成文件夹，然后双击 <code>启动数据处理工具.bat</code>
+  <li><b>换成你自己的数据</b>　按 <a href="#c4">第四节</a>把数据摆成文件夹，然后双击 <code>启动数据处理工具.bat</code>（macOS 用 <code>启动数据处理工具.command</code>）
       <div class="why">网页界面里选文件夹 → 看检查报告 → 开始处理 → 下载结果。</div></li>
 </ol>
 
@@ -479,7 +479,7 @@ Wiedenbeck et al. (1995)、由标样年龄反算的自洽值、Isoclock2.0 等�
 
   <text x="90" y="372" font-size="11.5" fill="#888780">服务只监听本机 127.0.0.1：别人的电脑打不开，这是设计如此。</text>
 
-  <text x="30" y="410" font-size="11.5" fill="#888780">双击「启动数据处理工具.bat」即可打开这个界面；关掉那个黑窗口就退出。</text>
+  <text x="30" y="410" font-size="11.5" fill="#888780">双击「启动数据处理工具」脚本（.bat / .command）即可打开这个界面；关掉窗口就退出。</text>
 </svg>
 <figcaption><b>图 4</b>　网页界面的三个动作。<b>检查报告</b>（第 ② 步）值得停一下：它会把"哪些文件缺了、哪些通道不全"在处理前就说出来，
 省掉跑到一半才失败。界面没有"停止"按钮是刻意的——Python 线程无法安全强杀，做了按钮只会变成"点了没反应"。</figcaption>
@@ -798,7 +798,7 @@ EX2022A_U-Pb结果.handoff.json ← 给程序看（质控结论 + 交接约定�
   <tr><td>看版本</td><td class="n">python -c "import druid; print(druid.__version__)"</td></tr>
   <tr><td>跑一个批次</td><td class="n">python -m druid.cli.reduce_batch --dir "批次目录" --out "结果.xlsx" --plot</td></tr>
   <tr><td>看参数</td><td class="n">python -m druid.cli.reduce_batch -h</td></tr>
-  <tr><td>开网页界面</td><td class="n">python -m druid.cli.serve_ui　（或双击 启动数据处理工具.bat）</td></tr>
+  <tr><td>开网页界面</td><td class="n">python -m druid.cli.serve_ui　（或双击 启动数据处理工具.bat / .command）</td></tr>
   <tr><td>自检</td><td class="n">python tests\run_all.py</td></tr>
   <tr><td>数值回归</td><td class="n">python tests\check_example_batch.py</td></tr>
   <tr><td>静态检查</td><td class="n">python -m pyflakes druid\</td></tr>

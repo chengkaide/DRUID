@@ -2,7 +2,9 @@
 rem =====================================================================
 rem  DRUID -- LA-ICP-MS zircon U-Pb reduction tool  (web launcher)
 rem
-rem  Usage:  double-click this file.  A browser page will open.
+rem  Usage:  double-click this file.  The page address is printed in this
+rem          window -- open that address in a browser.  (The browser is
+rem          deliberately NOT launched automatically: see --no-browser below.)
 rem          Close this black window to quit.
 rem
 rem  NOTE: All Chinese text is deliberately avoided in this .bat file.
@@ -73,7 +75,8 @@ cd /d "%~dp0"
 
 rem ---- 3. start the local web service ---------------------------------
 echo.
-echo   Starting local server... your browser will open in a moment.
+echo   Starting local server...
+echo   Copy the  http://127.0.0.1:...  address printed below into a browser.
 echo   Keep this window open while you work. Close it to stop the service.
 echo.
 "%PYEXE%" -m druid.cli.serve_ui --port 0 --no-browser 2>&1

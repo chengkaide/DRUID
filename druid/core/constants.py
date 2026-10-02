@@ -189,5 +189,17 @@ ROLE_LABEL_CN = {
 # ─────────────────────────────────────────────────────────────────────────────
 DOMAIN_SPAN_COLORS = ["#DCE9F7", "#FBE7CC", "#DDEBD3", "#F3DCE6", "#E4DCF3"]
 
-# 中文字体候选列表（Windows 优先雅黑/黑体，Linux 备选用 Noto）
-CJK_FONTS = ["Microsoft YaHei", "SimHei", "Noto Sans CJK SC", "DejaVu Sans"]
+# 中文字体候选列表，**按平台给全**。
+#
+# 为什么要列三个平台的字体：matplotlib 找不到列表里的字体时**不报错**，
+# 只是静默退回 DejaVu Sans —— 而 DejaVu 没有汉字，症状是图里中文全变
+# 「□□□」，批处理照样 exit 0。这类"静默降级"在 Windows 上开发时
+# 永远看不到（雅黑一定在），只有把结果拿到 macOS 上跑才会暴露。
+# 顺序即优先级；`DejaVu Sans` 垫底只是为了让 matplotlib 不抛找不到字体的警告。
+CJK_FONTS = [
+    "Microsoft YaHei", "SimHei",              # Windows
+    "PingFang SC", "Heiti SC",                # macOS（10.11+ 自带苹方）
+    "Arial Unicode MS",                       # macOS 装了 Office 时的备选
+    "Noto Sans CJK SC", "WenQuanYi Micro Hei",  # Linux
+    "DejaVu Sans",                            # 兜底（无汉字，仅防警告）
+]

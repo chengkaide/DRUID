@@ -10,6 +10,10 @@
 
 *.bat  text eol=crlf
 *.cmd  text eol=crlf
+# macOS/Linux 的启动脚本必须 LF —— CRLF 会让 shebang 变成 "#!/bin/bash\r"，
+# 症状是运行时直接报 "bad interpreter: No such file or directory"。
+*.command text eol=lf
+*.sh      text eol=lf
 *.spec text eol=lf
 
 # 二进制，不做任何换行转换
