@@ -125,6 +125,16 @@ def build_parser() -> argparse.ArgumentParser:
                     help="强制指定 206Pb/238U 外部重现性（相对值，如 0.007）")
     ap.add_argument("--sigma-ext76", type=float, default=None,
                     help="强制指定 207Pb/206Pb 外部重现性（相对值）")
+    ap.add_argument("--strict-sigma", action="store_true",
+                    dest="strict_sigma", default=False,
+                    # ⚠ help 串会被 argparse 拿去做 `% params` 展开 ⇒ 里面的百分号
+                    #   必须写成 `%%`，否则 `--help` 当场 ValueError（踩过一次）。
+                    help="207Pb/235U 年龄的 1σ 按**严格传播**（把 206/238 与 207/206 的"
+                         "误差相关性算进去）。旧口径只搬 206/238 那一项、**丢掉 207/206 的"
+                         "整份贡献**，而后者是本批的主项（相对 1σ 中位 4.26%% vs 1.45%%）"
+                         "⇒ 实测 207/235 的 2σ 中位偏小 2.69 倍（13.21 → 35.55 Ma）。"
+                         "**只动 σ，不动年龄**（年龄207_235 与 协和度_pct 逐位不变）。"
+                         "不加此开关即保持自 1.x 起的口径，与已发表数字可比")
     return ap
 
 
@@ -185,6 +195,7 @@ def main(argv=None) -> int:
         win=args.win,
         step=args.step,
         overlap_correct=args.overlap_correct,
+        strict_sigma=args.strict_sigma,
         bulk=args.bulk,
         sigma_ext68=args.sigma_ext68,
         sigma_ext76=args.sigma_ext76,

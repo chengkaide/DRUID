@@ -28,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import numpy as np                                              # noqa: E402
 
 from druid.core.statistics import (chi2_sf, overlap_factor,      # noqa: E402
+                                   relative_sigma_product,
                                    robust_mask, weighted_mean)
 
 
@@ -144,6 +145,47 @@ def test_overlap_factor_and_weighted_mean_correction():
     assert abs(se1 - se0 * math.sqrt(overlap_factor(4, 0.25))) < 1e-14
     # 显式传"不重叠"与不传参数，结果一致
     assert weighted_mean(x, s, step_over_win=1.0)[1] == se0
+
+
+def test_relative_sigma_product_needs_the_covariance_term():
+    """两个比值相乘：交叉项在 ρ=0 时退化成 hypot，ρ≠0 时必须体现出来。"""
+    # ρ = 0 且内外同基 ⇒ 就是 hypot（"假设无关"正是近似口径的前提，但它只是假设）
+    assert abs(relative_sigma_product(0.01, 0.04, 0.01, 0.04, 0.0)
+               - math.hypot(0.01, 0.04)) < 1e-15
+
+    # 正相关抬高、负相关压低（两个因子 σ 相同，便于只看符号）
+    base = relative_sigma_product(0.01, 0.04, 0.01, 0.04, 0.0)
+    assert relative_sigma_product(0.01, 0.04, 0.01, 0.04, 0.5) > base
+    assert relative_sigma_product(0.01, 0.04, 0.01, 0.04, -0.5) < base
+    # ρ = ±1 且内外同基时，取值就是 c_x ± c_y
+    assert abs(relative_sigma_product(0.01, 0.04, 0.01, 0.04, 1.0) - 0.05) < 1e-12
+    assert abs(relative_sigma_product(0.01, 0.04, 0.01, 0.04, -1.0) - 0.03) < 1e-12
+
+    # ρ 越界要钳住，不许返回 nan；方差理论上非负，浮点误差也不许开成 nan
+    assert abs(relative_sigma_product(0.01, 0.04, 0.01, 0.04, 9.9) - 0.05) < 1e-12
+    assert relative_sigma_product(0.0, 0.0, 0.0, 0.0, -0.3) == 0.0
+
+
+def test_relative_sigma_product_is_only_correlated_through_the_internal_part():
+    """★ 交叉项只能用**内部**分量：外部分量是批级标定项，不参与逐点相关。
+
+    这是最容易做错的一步，也是 `判读细目.md` §二.2 那条"σ 与 ρ 必须同基"。
+    用一个合成量（内部 1% ⊕ 外部 3% ⇒ 合成 ≈3.16%）配 ρ = −0.12 演示：
+    """
+    a = 0.010                     # 内部相对 1σ
+    c = math.hypot(0.010, 0.030)  # 合成相对 1σ（内部 ⊕ 外部）
+    rho = -0.12
+
+    proper = relative_sigma_product(c, c, a, a, rho)     # 交叉项用内部 a
+    wrong = relative_sigma_product(c, c, c, c, rho)      # 误用合成 c
+    indep = relative_sigma_product(c, c, a, a, 0.0)      # 假设无关
+
+    # 负相关 ⇒ 严格式**小于**假设无关（把 −0.12 记成 +0.12 会反向）
+    assert proper < indep
+    # 外部占了大头（3% vs 1%）⇒ 误用合成基会把交叉项放大 10 倍，
+    # 同一个负号于是被推得更远。两种做法的差**远大于**"内外同基"这一项本身
+    assert wrong < proper
+    assert abs(indep - wrong) > 5.0 * abs(indep - proper)
 
 
 def test_robust_mask_unchanged():

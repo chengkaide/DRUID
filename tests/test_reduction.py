@@ -195,6 +195,50 @@ def test_rho_is_always_a_valid_correlation():
         assert -1.0 <= d["rho"] <= 1.0, (seed, d["rho"])
 
 
+def test_build_results_exports_rho_and_strict_sigma_is_opt_in():
+    """★ A-23：ρ 必须随结果表输出；严格 σ 必须**只动 `s75_2sig`**、且默认关闭。
+
+    背景：`reduce_interval` 从第一版起就在算 ρ，而**四张公开表一张都不带它**
+    （`剖面窗口` 按 ADEPT Format 4 挑列，只有 R68、没有 R76，也画不出 TW 椭圆）
+    ⇒ ρ 曾经没有任何出口。同时 `207/235` 的 σ 走 `sa75 ≈ sa68 × a75/a68`，
+    只搬了 206/238 那一项，**把 207/206 的整份贡献丢掉** ——
+    而本批相对 1σ 中位 4.26%（207/206）vs 1.45%（206/238），被丢的是主项。
+
+    ⚠ 这两条**门禁都抓不到**：`check_example_batch` 比对的是标样偏差 /
+    样品协和度 / 首屏数字，**不含 `s75_2sig`，也不看结果表的新增列**。
+    """
+    from druid.reduction.trace import Tra
+    from druid.workflow import BatchConfig, build_results
+
+    n = 30
+    net = _synth(n=n, seed=7, noise=1000.0)
+    r = reduce_interval(net, _mask(n))
+    tr = Tra(idx=0, sample="S01", role="unknown", path="B_1.csv",
+             t=np.arange(float(n)), net=net)
+
+    def run(strict: bool):
+        cfg = BatchConfig(data_dir=".", plot=False, strict_sigma=strict)
+        return build_results([(tr, r)], np.array([0.0]), [1.0], [1.0],
+                             [r["R68"]], [r["R76"]], 0.011, 0.036, cfg)
+
+    off, on = run(False), run(True)
+
+    # ① ρ 终于有出口：列在，且就是刀切那一份（内部基）
+    assert "rho_68_76" in off.columns, "结果表没有 rho_68_76 —— ρ 又没有出口了"
+    assert off["rho_68_76"].iloc[0] == r["rho"]
+
+    # ② 严格档**只动 s75_2sig**，其他列逐位不变
+    assert list(off.columns) == list(on.columns)
+    diff = [c for c in off.columns if not off[c].equals(on[c])]
+    assert diff == ["s75_2sig"], f"严格档动了不该动的列：{diff}"
+
+    # ③ 方向：207/206 被补回来 ⇒ 严格式只会更大
+    assert on["s75_2sig"].iloc[0] > off["s75_2sig"].iloc[0]
+
+    # ④ 默认档 = 自 1.x 起的旧口径（不动已发表数字），要严格必须显式打开
+    assert BatchConfig(data_dir=".", plot=False).strict_sigma is False
+
+
 def test_noiseless_input_gives_a_degenerate_rho_not_a_meaningful_one():
     """
     ⚠ 一个**必须知道**的数值陷阱：无噪声时 ρ 会算成 ±1。

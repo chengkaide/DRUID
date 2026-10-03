@@ -53,7 +53,8 @@ from .core.constants import (
 from .core.geochronology import age68, age75, age76
 from .core.references import std_age, std_alias, std_ref
 from .core.statistics import (EXTERNAL_SCATTER_LO_76, external_scatter,
-                              robust_mask, weighted_mean)
+                              relative_sigma_product, robust_mask,
+                              weighted_mean)
 from .depth.domains import (merge_close, refine_domains, segment,
                             summarize_segments, whole_spot_stats)
 from .depth.fractionation import bracket_F, profile_ages
@@ -111,6 +112,27 @@ class BatchConfig:
     # （CLI 的 `--no-overlap-correct`）；窗口不重叠（step = win）时 K ≡ 1，
     # 校正在几何上自动失效，此开关无影响。
     overlap_correct: bool = True
+
+    # 207Pb/235U 年龄的 1σ 是否**严格传播**（把 206/238 ↔ 207/206 的误差相关性算进去）。
+    #
+    # 为什么必须算两项：207/235 = (206/238)×(207/206)×(238U/235U)，是两个**测出来的**
+    # 比值的乘积。旧口径 `sa75 ≈ sa68 × a75/a68` 只搬了 206/238 那一项，
+    # **把 207/206 的整份贡献丢掉了**。而本批实测 207/206 的相对 1σ 中位
+    # **4.26%** 远大于 206/238 的 **1.45%** ⇒ 被丢掉的是**主项**，不是修正项。
+    # 实测：207/235 的 2σ 中位 **13.21 → 35.55 Ma（2.69×）**。
+    #
+    # ⚠ **σ 与 ρ 必须同基**（`判读细目.md` §二.2）。对角线用**合成**相对 1σ
+    # （内部 ⊕ 外部），交叉项只能用**内部**分量配内部 ρ —— 外部分量是批级标定项，
+    # 与逐点噪声无关，不该参与相关：
+    #     rel75 = sqrt(c68² + c76² + 2·a·b·ρ)
+    # c ＝ 合成相对 1σ；a、b ＝ 对应的内部分量；ρ ＝ 内部（刀切）相关系数。
+    # ρ(206/238, 207/206) 实测中位 **−0.12**（负号是构造性的：206Pb 在前者分子、
+    # 后者分母），折算到 (207/235, 206/238) 是 **+0.29**。两个口径别混用。
+    #
+    # 默认 False = 保持自 1.x 起的口径，**以免已发表的 207/235 不确定度发生
+    # 无解释的变动**（README「已知限制」与论文都按旧口径写的）。CLI 的
+    # `--strict-sigma` 打开。**只动 σ**：`年龄207_235` 与 `协和度_pct` 逐位不变。
+    strict_sigma: bool = False
 
     # ── 整段比值方法 ──
     #   "simple"：整段用单一校正因子（本批次实测更准，默认）
@@ -537,9 +559,15 @@ def build_results(spots, pidx, F68, F76, b68, b76, sd68, sd76, cfg: BatchConfig)
         # 校正后的比值
         R68 = b68[k] * f68
         R76 = b76[k] * f76
-        # 不确定度：内部误差也随同一个 F 缩放；外部误差是相对量，乘校正后的比值
-        s68 = float(np.hypot(r["s68"] * f68, sd68 * R68))
-        s76 = float(np.hypot(r["s76"] * f76, sd76 * R76))
+        # 不确定度：内部误差也随同一个 F 缩放；外部误差是相对量，乘校正后的比值。
+        # ★ 两个分量**分开留着**：严格传播 207/235 时，交叉项只能用**内部**分量
+        #   配**内部** ρ（σ 与 ρ 必须同基，见 `判读细目.md` §二.2 与 BatchConfig.strict_sigma）。
+        #   外部分量是批级标定项（本批 206/238 = 1.11%、207/206 = 3.59%），
+        #   逐点之间同增同减，本来就不该参与"逐点噪声"的相关。
+        s68_in = float(r["s68"]) * f68
+        s76_in = float(r["s76"]) * f76
+        s68 = float(np.hypot(s68_in, sd68 * R68))
+        s76 = float(np.hypot(s76_in, sd76 * R76))
 
         # 207Pb/235U 由另外两个比值换算（不直接测）
         R75 = R76 * R68 * U238_U235
@@ -554,12 +582,32 @@ def build_results(spots, pidx, F68, F76, b68, b76, sd68, sd76, cfg: BatchConfig)
         # 207Pb/206Pb 的年龄方程没有解析导数，用有限差分近似 σ
         sa76 = float(abs(age76(R76 + s76) - age76(R76 - s76)) / 2.0)
 
-        # 207Pb/235U 的年龄不确定度是**近似**，不是独立传播出来的：
-        # 这里把 206Pb/238U 的相对不确定度原样搬到 207/235 上（两者共享同一个
-        # 206Pb/238U 测量项），而不是从 R76 与 R68 的协方差严格传播。
-        # 保持自 1.x 起的口径，以免已发表的数字发生无解释的变动；
-        # 若要严格化，需要 ratios.reduce_interval 额外输出 R68-R76 的相关系数。
-        sa75_approx = sa68 * (a75 / max(a68, 1e-9))
+        # 207Pb/235U 的年龄不确定度。
+        #
+        # 旧口径（≤ 2.8.0）：`sa75 ≈ sa68 × a75/a68` —— 把 206/238 的相对不确定度
+        # 原样搬过来。它只算了 207/235 = (206/238)×(207/206) 里的**一个因子**，
+        # **丢掉了 207/206 的整份贡献**；而本批实测 207/206 的相对 1σ 中位 4.26%
+        # 远大于 206/238 的 1.45% ⇒ 被丢掉的恰是**主项**。
+        # （旧注释写着"若要严格化，需要 reduce_interval 额外输出相关系数" ——
+        #   那句话是陈旧的：ρ 从第一版起就在 `r["rho"]` 里，只是从没被接出去。）
+        #
+        # 严格式按 `判读细目.md` §二.2（**σ 与 ρ 同基**：交叉项只用内部分量
+        # 配内部 ρ，对角线用合成相对 1σ）：
+        #     rel75 = sqrt(c68² + c76² + 2·a·b·ρ)
+        # 实测：207/235 的 2σ 中位 **13.21 → 35.55 Ma（2.69×）**。
+        # 由 `--strict-sigma` 打开；不加开关即保持自 1.x 起、与已发表数字
+        # 可比的口径。**只动 σ**：`年龄207_235` 与 `协和度_pct` 逐位不变。
+        if cfg.strict_sigma:
+            # σ 与 ρ 同基：对角线用合成相对 1σ，交叉项只用**内部**分量配内部 ρ
+            rel75 = relative_sigma_product(
+                s68 / R68, s76 / R76,          # 合成相对 1σ
+                s68_in / R68, s76_in / R76,    # 对应的内部分量
+                float(r["rho"]))
+            # 207/235 的年龄方程没有解析导数，用有限差分（与 sa76 同一做法）
+            sa75 = float(abs(age75(R75 * (1.0 + rel75))
+                             - age75(R75 * (1.0 - rel75))) / 2.0)
+        else:
+            sa75 = sa68 * (a75 / max(a68, 1e-9))
 
         rows.append(dict(
             序号=int(tr.idx) + 1,
@@ -572,9 +620,15 @@ def build_results(spots, pidx, F68, F76, b68, b76, sd68, sd76, cfg: BatchConfig)
             f206_pct=r["f206"] * 100,
             Pb206_238U=R68, s68_pct=s68 / R68 * 100,
             Pb207_206Pb=R76, s76_pct=s76 / R76 * 100,
+            # ★ 206/238 与 207/206 的**误差相关系数**（内部/刀切基）。
+            #   这两个比值共用同一个 206Pb 测量值，ρ ≠ 0 是构造性的
+            #   （实测中位 −0.12：206Pb 涨 ⇒ 206/238 涨、207/206 跌）。
+            #   画协和曲线的误差椭圆要用它；`剖面窗口` 表按 ADEPT Format 4
+            #   对齐、只有 R68 没有 R76，所以这是**唯一**能拿到它的出口。
+            rho_68_76=float(r["rho"]),
             Pb207_235U=R75,
             年龄206_238=a68, s68_1sig=sa68, s68_2sig=2 * sa68,
-            年龄207_235=a75, s75_2sig=2 * sa75_approx,
+            年龄207_235=a75, s75_2sig=2 * sa75,
             年龄207_206=a76, s76_2sig=2 * sa76,
             协和度_pct=a75 / a68 * 100 if a68 > 0 else np.nan,
         ))

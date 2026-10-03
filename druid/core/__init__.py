@@ -27,7 +27,8 @@ from .constants import (
 from .geochronology import age68, age75, age76, r68_of_age, r75_from, r76_of_age
 from .common_lead import stacey_kramers
 from .references import std_age, std_alias, std_ref
-from .statistics import external_scatter, robust_mask, weighted_mean
+from .statistics import (external_scatter, relative_sigma_product,
+                         robust_mask, weighted_mean)
 from .deadtime import correct_channels, correct_rate
 
 __all__ = [
@@ -44,7 +45,7 @@ __all__ = [
     # 参考值
     "std_ref", "std_age", "std_alias",
     # 统计
-    "weighted_mean", "robust_mask", "external_scatter",
+    "weighted_mean", "robust_mask", "external_scatter", "relative_sigma_product",
     # 死时间（可选）
     "correct_rate", "correct_channels",
 ]

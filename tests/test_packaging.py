@@ -377,6 +377,21 @@ def test_every_submodule_imports():
     assert not broken, broken
 
 
+def test_cli_help_renders():
+    """两个 CLI 的 `--help` 都必须能**打印出来**，而不是当场抛异常。
+
+    ⚠ 这条不是凑数。argparse 的 help 串会被拿去做 `% params` 展开，
+    所以 help 里写一个裸的百分号（例如"中位 4.26%"）会让 `--help`
+    直接 `ValueError: unsupported format character` —— 而且**只在用户敲
+    `--help` 时才炸**，pyflakes 与所有其它测试都看不见。加 A-23 的
+    `--strict-sigma` 时就这么踩过一次，所以补上这条守住它。
+    """
+    from druid.cli import reduce_batch, serve_ui
+    for mod in (reduce_batch, serve_ui):
+        text = mod.build_parser().format_help()
+        assert text.strip(), f"{mod.__name__} 的 --help 是空的"
+
+
 def test_public_api_is_where_it_is_documented():
     """
     `druid/__init__.py` 的文档里点名了这几个地方是"对外用法"，
@@ -546,7 +561,16 @@ def test_landing_page_states_the_real_selfcheck_count():
     与上面 `test_bat_files_are_crlf_on_disk` 互为镜像。174 是 CI 加 macOS
     job 时补「中文字体真的可用」与「reveal/list_drives 三平台分支」两条 ——
     macOS 的代码路径在这台 Windows 开发机上一行都执行不到，只能这么测。
-    现为 175：A-22 补「窗口重叠 → 均值的 1σ 按 √K 放大」，只动 se、MSWD 不动。）
+    现为 179：A-23（`--strict-sigma`）补四条 —— ① 两个比值相乘时交叉项的必要性
+    （`relative_sigma_product` 在 ρ=0 时退化成 hypot）、② ★ 交叉项只能用
+    **内部**分量这一条（外部分量是批级标定项，混用会把 −0.12 与 −1.2 倍的差别
+    算反）、③ `build_results` 的契约：结果表必须带 `rho_68_76`，
+    且严格档**只许动 `s75_2sig`** 一列、④ 两个 CLI 的 `--help` 必须能打印
+    （argparse 用 `%` 展开 help ⇒ 裸百分号会让 `--help` 当场 ValueError，
+    而 pyflakes 与其它测试都看不见；这是**同轮真踩到**的坑）。
+    ⚠ 前两条数学契约门禁抓不到（`check_example_batch` 不含 `s75_2sig`，
+    也不看结果表新增列），只能靠单测。
+    之前 175：A-22 补「窗口重叠 → 均值的 1σ 按 √K 放大」，只动 se、MSWD 不动。
     """
     import ast
     n = 0
