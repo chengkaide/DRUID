@@ -105,7 +105,59 @@ def chi2_sf(x: float, df: int) -> float:
     return float(min(max(_gammq_cf(a, xx), 0.0), 1.0))
 
 
-def weighted_mean(x, s):
+def overlap_factor(n: int, step_over_win: float) -> float:
+    """
+    滑动窗口重叠造成的**方差膨胀因子**。
+
+    问题
+    ----
+    加权平均假定各观测互相独立，于是 `se = 1/sqrt(Σw)`。深度剖面却是用
+    **滑动窗口**（`win` 宽、`step` 步）切出来的：相邻两窗共用 `win − step` 秒
+    的计数。win = 4 s / step = 1 s 时，相邻窗共享 3/4 的数据、隔一窗共享 1/2、
+    隔两窗 1/4，再远才真正独立。把这些窗口当独立观测，**均值的不确定度会被
+    低估** —— 合成数据实测：域级 1σ 偏乐观 2.4~2.9 倍（论文 §3.10）。
+
+    模型
+    ----
+    取两个窗口的**数据重叠比例**作为它们的相关系数。这是几何给出的一阶估计，
+    不含任何需要标定的参数：
+
+        ρ_d = max(0, 1 − d·step/win)          d = 窗口序号之差
+
+    各 σ 相近时
+
+        Var(加权均值) = (σ²/n)·[1 + (2/n)·Σ_{d=1}^{n−1}(n−d)·ρ_d]
+
+    方括号即本函数返回的 K，`se` 应按 `sqrt(K)` 放大。
+
+    量级
+    ----
+    step/win = 1/4 时 Σ(n−d)ρ_d = 1.5n − 2.5 ⇒ **K → 4，即 se 放大 2 倍**，
+    且几乎与 n 无关；窗口不重叠（step = win）时 ρ_d ≡ 0、K ≡ 1，校正自动关闭。
+
+    ⚠ 这只解释了"重叠"这一项。若实测偏乐观的倍数明显大于 2，多出来的部分
+    来自别的来源（例如整段共用同一个 204 校正系数带来的全局相关），本函数
+    不管那一项 —— 别把它当万能缩放。
+
+    参数
+    ----
+    n              参与平均的观测数（**剔除坏点之后**的点数）
+    step_over_win  滑动步长 ÷ 窗口宽度；≤ 0 或 ≥ 1 一律视为不重叠
+
+    返回
+    ----
+    方差膨胀因子 K ≥ 1（n < 2 或 r ≥ 1 时返回 1）
+    """
+    n = int(n)
+    r = float(step_over_win)
+    if n < 2 or r <= 0.0 or r >= 1.0:
+        return 1.0
+    d = np.arange(1.0, n, dtype=float)
+    rho = np.maximum(0.0, 1.0 - d * r)
+    return float(1.0 + (2.0 / n) * float(((n - d) * rho).sum()))
+
+
+def weighted_mean(x, s, step_over_win=None):
     """
     反比方差加权平均，同时给出 MSWD。
 
@@ -113,11 +165,16 @@ def weighted_mean(x, s):
     ----
     x : 观测值数组
     s : 每个观测值的 **1σ** 标准误数组（不是 2σ！传 2σ 会让 MSWD 缩小 4 倍）
+    step_over_win : 仅当这批观测是**滑动窗口**切出来的才传（步长 ÷ 窗宽）。
+        传了就对均值的 1σ 做重叠校正（见 `overlap_factor`）。
+        **MSWD 不动**：重叠同样会把 MSWD 压小，但那个方向是"漏杀非错杀"，
+        属刻意的宽松（AGENTS.md §7），改它要另立论证。
+        默认 None = 按独立观测，与加这个参数之前**逐位一致**。
 
     返回
     ----
     (均值, 均值的1σ标准误, MSWD, 有效点数)
-        均值的1σ = 1 / sqrt(Σwᵢ)
+        均值的1σ = 1 / sqrt(Σwᵢ) × sqrt(overlap_factor)
 
     边界处理
     --------
@@ -137,6 +194,9 @@ def weighted_mean(x, s):
     w = 1.0 / s ** 2                          # 权重 = 方差的倒数
     mu = float((w * x).sum() / w.sum())       # 加权均值
     se = float(1.0 / np.sqrt(w.sum()))        # 加权均值的标准误
+    if step_over_win is not None:
+        # 滑动窗口互相重叠 ⇒ 有效自由度小于 n，上式的 se 偏小
+        se *= math.sqrt(overlap_factor(n, float(step_over_win)))
     mswd = float((w * (x - mu) ** 2).sum() / (n - 1)) if n > 1 else np.nan
     return mu, se, mswd, n
 

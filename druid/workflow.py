@@ -102,6 +102,15 @@ class BatchConfig:
     # ── 深度剖面 ──
     win: float = 4.0                    # 滑动窗口宽度 (s)
     step: float = 1.0                   # 滑动步长 (s)
+    # 域级 / 整段年龄的 1σ 是否按**窗口重叠**校正。窗口是滑动的，相邻窗共用
+    # win−step 秒的计数，当独立观测会低估 1σ（合成数据实测偏乐观 2.4~2.9 倍）。
+    # 默认 True（2026-10-03 起）：1σ 按 sqrt(K) 放大，K 由
+    # `core.statistics.overlap_factor` 从 win/step 几何算出，不含待定参数
+    # （win=4 / step=1 ⇒ K→4，即 ×2）。**只动 1σ，MSWD 不动**（AGENTS.md §7）。
+    # 置 False = 退化为"按独立观测"，用于与 2026-10-03 之前的历史输出逐位对齐
+    # （CLI 的 `--no-overlap-correct`）；窗口不重叠（step = win）时 K ≡ 1，
+    # 校正在几何上自动失效，此开关无影响。
+    overlap_correct: bool = True
 
     # ── 整段比值方法 ──
     #   "simple"：整段用单一校正因子（本批次实测更准，默认）
@@ -575,6 +584,18 @@ def build_results(spots, pidx, F68, F76, b68, b76, sd68, sd76, cfg: BatchConfig)
 # ═════════════════════════════════════════════════════════════════════════════
 # ⑨ 深度剖面年龄域判别
 # ═════════════════════════════════════════════════════════════════════════════
+def _overlap_ratio(cfg: BatchConfig):
+    """窗口几何 → `weighted_mean` 要的 step/win；开关关着或没有窗口时返回 None。
+
+    None 与 1.0 在 `overlap_factor` 里同样得到 K=1，但语义不同：None 表示
+    "按独立观测"，走的是**完全没有校正**的代码路径（历史输出逐位不变），
+    1.0 表示"窗口不重叠"。
+    """
+    if not cfg.overlap_correct or cfg.win <= 0.0:
+        return None
+    return float(cfg.step) / float(cfg.win)
+
+
 def analyse_depth_spot(tr: Tra, r: dict, brack, ref68: float, sd68: float,
                        cfg: BatchConfig):
     """
@@ -606,7 +627,7 @@ def analyse_depth_spot(tr: Tra, r: dict, brack, ref68: float, sd68: float,
     segs = refine_domains(prof, segs) if segs else [(0, len(prof))]
     segs = merge_close(prof, segs, n_sigma=cfg.merge_n_sigma,
                        min_frac=cfg.merge_min_frac)
-    summ = summarize_segments(prof, segs)
+    summ = summarize_segments(prof, segs, step_over_win=_overlap_ratio(cfg))
 
     nd = int((summ["flag"] == "age domain").sum())
     tag = "均一" if nd <= 1 else f"多域({nd})"
@@ -673,7 +694,7 @@ def run_depth_analysis(spots, brack_for, ref68, sd68, cfg: BatchConfig):
         # ── 不分域：整段当作一个域，与域级完全同一口径 ──
         # 刻意在分域结果之前算、且不读 segs/summ 任何一个数：它要回答的就是
         # "不做分域会得到什么"，沾一点分域的信息就不再是那个问题的答案了。
-        ws = whole_spot_stats(prof)
+        ws = whole_spot_stats(prof, step_over_win=_overlap_ratio(cfg))
         dom = summ[summ["flag"] == "age domain"]
         nd = len(dom)
         if nd:

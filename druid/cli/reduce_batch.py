@@ -107,6 +107,13 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--win", type=float, default=4.0, help="滑动窗口宽度 (s)")
     ap.add_argument("--step", type=float, default=1.0, help="滑动步长 (s)")
     ap.add_argument("--no-depth", action="store_true", help="跳过深度剖面年龄域判别")
+    ap.add_argument("--no-overlap-correct", action="store_false",
+                    dest="overlap_correct", default=True,
+                    help="关闭域级与整段年龄 1σ 的**滑动窗口重叠**校正。窗口是滑动的，"
+                         "相邻窗共用 win−step 秒的计数，当成独立观测会低估 1σ"
+                         "（合成数据实测偏乐观 2.4~2.9 倍）。**默认开启**（2026-10-03 起）："
+                         "1σ 按窗口几何放大（win=4 / step=1 ⇒ ×2）；加此开关则退化为"
+                         "按独立观测，与 2026-10-03 之前的历史输出逐位一致")
 
     # ── 整段比值方法 ──
     ap.add_argument("--bulk", choices=["simple", "ftau"], default="simple",
@@ -177,6 +184,7 @@ def main(argv=None) -> int:
         deadtime_ns=args.deadtime_ns,
         win=args.win,
         step=args.step,
+        overlap_correct=args.overlap_correct,
         bulk=args.bulk,
         sigma_ext68=args.sigma_ext68,
         sigma_ext76=args.sigma_ext76,

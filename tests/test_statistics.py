@@ -27,7 +27,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import numpy as np                                              # noqa: E402
 
-from druid.core.statistics import chi2_sf, robust_mask, weighted_mean   # noqa: E402
+from druid.core.statistics import (chi2_sf, overlap_factor,      # noqa: E402
+                                   robust_mask, weighted_mean)
 
 
 # (df, mswd, P(χ²_df > mswd·df))，参考值取自 R 的 pf(mswd, df, Inf, lower.tail=FALSE)
@@ -113,6 +114,36 @@ def test_weighted_mean_unchanged():
     # n = 0 与 n = 1
     assert weighted_mean([], [])[3] == 0
     assert math.isnan(weighted_mean([5.0], [1.0])[2])
+
+
+def test_overlap_factor_and_weighted_mean_correction():
+    """滑动窗口重叠 → 均值的 1σ 按 sqrt(K) 放大；默认路径逐位不变。
+
+    背景：深度剖面用 win=4 s / step=1 s 的滑动窗口，相邻窗共用 3/4 的计数。
+    把它们当独立观测会低估域级 1σ（合成数据实测偏乐观 2.4~2.9 倍，论文 §3.10）。
+    """
+    # 不重叠（step ≥ win）与点数不足：K = 1，校正自动关闭
+    assert overlap_factor(40, 1.0) == 1.0
+    assert overlap_factor(40, 1.5) == 1.0
+    assert overlap_factor(1, 0.25) == 1.0
+    assert overlap_factor(0, 0.25) == 1.0
+
+    # r = 1/4 ⇒ Σ(n−d)(1−d/4) = 1.5n − 2.5 ⇒ K = 4 − 5/n（与 n 几乎无关）
+    for n in (8, 20, 40):
+        assert abs(overlap_factor(n, 0.25) - (4.0 - 5.0 / n)) < 1e-12
+
+    # 重叠越多 K 越大；n 大时趋于 4（即 1σ 放大 2 倍）
+    assert 1.0 < overlap_factor(40, 0.5) < overlap_factor(40, 0.25) < 4.0
+
+    x = np.array([100.0, 102.0, 98.0, 101.0])
+    s = np.array([2.0, 2.0, 2.0, 2.0])
+    mu0, se0, mswd0, _ = weighted_mean(x, s)
+    mu1, se1, mswd1, _ = weighted_mean(x, s, step_over_win=0.25)
+    # **只动 se**：均值与 MSWD 一位不变（MSWD 的宽松方向是刻意的）
+    assert mu0 == mu1 and mswd0 == mswd1
+    assert abs(se1 - se0 * math.sqrt(overlap_factor(4, 0.25))) < 1e-14
+    # 显式传"不重叠"与不传参数，结果一致
+    assert weighted_mean(x, s, step_over_win=1.0)[1] == se0
 
 
 def test_robust_mask_unchanged():

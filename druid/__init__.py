@@ -59,7 +59,7 @@ druid —— 激光剥蚀 ICP-MS（LA-ICP-MS）锆石 U-Pb 定年数据还原包
 """
 from __future__ import annotations
 
-__version__ = "2.7.0"
+__version__ = "2.8.0"
 
 # 版本说明
 # --------

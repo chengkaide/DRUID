@@ -543,9 +543,10 @@ def test_landing_page_states_the_real_selfcheck_count():
     同轮再涨到 171：`segment` 补一条"下标口径"的**契约回归**（D-1），
     `sample_role` 补一条"作废标记整名相等"的用例。再涨到 172：加 macOS 启动器
     `启动数据处理工具.command` 时补一条「LF 行尾 + 100755 可执行位」的守护，
-    与上面 `test_bat_files_are_crlf_on_disk` 互为镜像。现为 174：CI 加 macOS
+    与上面 `test_bat_files_are_crlf_on_disk` 互为镜像。174 是 CI 加 macOS
     job 时补「中文字体真的可用」与「reveal/list_drives 三平台分支」两条 ——
-    macOS 的代码路径在这台 Windows 开发机上一行都执行不到，只能这么测。）
+    macOS 的代码路径在这台 Windows 开发机上一行都执行不到，只能这么测。
+    现为 175：A-22 补「窗口重叠 → 均值的 1σ 按 √K 放大」，只动 se、MSWD 不动。）
     """
     import ast
     n = 0

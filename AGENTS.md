@@ -135,7 +135,7 @@ Get Pages site failed. Error: Not Found
 源码包**不要手挑文件、也不要压缩整个工作目录**，让 git 自己吐：
 
 ```bash
-git archive --format=zip -o "../DRUID_v2.7.0_源码包.zip" HEAD   # 版本号取当前 __version__
+git archive --format=zip -o "../DRUID_v2.8.0_源码包.zip" HEAD   # 版本号取当前 __version__
 ```
 
 它只装**被 git 跟踪**的东西，于是天然排掉：`.workbuddy/`、`铅不均一性判读.html`
@@ -406,6 +406,19 @@ workflow.py  编排层：BatchConfig 集中所有可调参数 + 十步 run_batch
 - **窗口重叠让 MSWD 系统性偏小**（win=4 s / step=1 s，ρ=0.75，n_eff≈n/2.5）。
   `domains.py` 的判据 `1 + α√(2/(k−1))` 因此偏**宽松**约 0.3（k=30 给 1.53，按 k_eff=12 应 1.85）。
   方向是**漏杀混合窗口，不会错杀**。
+  ⇒ **同一个成因也会让域级 / 整段的 1σ 偏小**，而那一个是**要报告出去**的数，
+  不能只当"判据宽松"了事。2026-10-03 起**默认开启**校正
+  （`BatchConfig.overlap_correct = True`，走 `core.statistics.overlap_factor`）：
+  按窗口几何取 ρ_d = max(0, 1 − d·step/win)，把 1σ 放大 √K（win=4 / step=1 ⇒ K→4，即 ×2）。
+  合成数据验收（450 Ma 两域剖面、30 种子）：
+  **只加计数统计时 偏乐观 2.16 → 1.14**（理想 1.00）。
+  要复现 2026-10-03 之前的历史输出，加 `--no-overlap-correct`（逐位一致）。
+  ⚠ **MSWD 一律不动**：上面那条的宽松是刻意的（漏杀非错杀），校正只改 se、不改任何判据。
+  ⚠ 该模型只解释"重叠"这一项。全套条件（漂移 + 分馏 + 普通铅）下 3.14 → 1.66，
+  **残余的 1.66 来自别的来源**（那些效应自身的散布），别拿它当万能缩放。
+  ⚠ **基线测不到这个量**：`check_example_batch` 比对的是标样偏差、样品协和度与首屏数字，
+  全是跨测点 / 比例量，**不含滑动窗口的 se** ⇒ **改这个默认值不会让门禁变红**。
+  守它的只有单测 `test_overlap_factor_and_weighted_mean_correction`，改动必须自己造对照。
 - **「整段非常数」≠「有两个年龄域」。** 不分域的 MSWD 只做**统计**判定
   （整段是否与常数年龄模型相容），而分域流程还额外要求**地质显著**
   （`merge_close` 的 ≥5% 判据，见 `depth/domains.py`）。所以必然出现

@@ -291,7 +291,8 @@ def merge_close(prof: pd.DataFrame,
 # ─────────────────────────────────────────────────────────────────────────────
 def summarize_segments(prof: pd.DataFrame,
                        segs: Sequence[Tuple[int, int]],
-                       mixed_max_frac: float = 0.20) -> pd.DataFrame:
+                       mixed_max_frac: float = 0.20,
+                       step_over_win: float | None = None) -> pd.DataFrame:
     """
     把分割结果汇总成一张"年龄域表"。
 
@@ -306,6 +307,13 @@ def summarize_segments(prof: pd.DataFrame,
     核→边的几何关系决定了：过渡带只可能出现在两个端元之间，
     不可能出现在最浅或最深的位置。中间一个只有 2~3 个窗口的短段，
     几乎必然是跨越边界的混合信号，而不是第三期地质事件。
+
+    参数
+    ----
+    step_over_win : 滑动步长 ÷ 窗宽。传了就把**窗口重叠**对域均值 1σ 的
+        影响算进去（`core.statistics.overlap_factor`）—— 窗口是滑动的，
+        相邻窗共用数据，不校正会低估 1σ。MSWD **不动**（方向为漏杀非错杀，
+        AGENTS.md §7）。默认 None，与加这个参数之前逐位一致。
 
     返回
     ----
@@ -330,7 +338,7 @@ def summarize_segments(prof: pd.DataFrame,
     nseg = len(segs)
 
     for j, (lo, hi) in enumerate(segs):
-        mu, se, mswd, k = weighted_mean(a[lo:hi], s[lo:hi])
+        mu, se, mswd, k = weighted_mean(a[lo:hi], s[lo:hi], step_over_win)
         crit = mswd_acceptance(k)
         interior = 0 < j < nseg - 1                      # 是否为中间段
         mixed = (interior and (k <= mixed_max_frac * n_tot or mswd > crit)) or (k < 3)
@@ -359,7 +367,8 @@ def summarize_segments(prof: pd.DataFrame,
 # ─────────────────────────────────────────────────────────────────────────────
 # 五、不分域：把整段当作一个域
 # ─────────────────────────────────────────────────────────────────────────────
-def whole_spot_stats(prof: pd.DataFrame, alpha: float = 2.0) -> dict:
+def whole_spot_stats(prof: pd.DataFrame, alpha: float = 2.0,
+                     step_over_win: float | None = None) -> dict:
     """
     **不分域**的整段年龄 —— 刻意不做 BIC 分割、不做边界精修、不做伪域合并，
     把全部窗口当作一个域，用与域级**完全相同的口径**（反比方差加权平均 +
@@ -391,6 +400,8 @@ def whole_spot_stats(prof: pd.DataFrame, alpha: float = 2.0) -> dict:
     ----
     prof  : window_profile 结果，需含 age68 / s_age68（即已经过 F(τ) 校正）
     alpha : 相容判据的倍数，含义同 refine_domains，默认 2
+    step_over_win : 滑动步长 ÷ 窗宽；传了就给 se_1sig 加上窗口重叠校正
+        （与域级表同一口径，两边仍然可直接相减）。默认 None。
 
     返回
     ----
@@ -407,7 +418,7 @@ def whole_spot_stats(prof: pd.DataFrame, alpha: float = 2.0) -> dict:
     """
     a = prof["age68"].to_numpy(float)
     s = prof["s_age68"].to_numpy(float)
-    mu, se, mswd, k = weighted_mean(a, s)
+    mu, se, mswd, k = weighted_mean(a, s, step_over_win)
     crit = mswd_acceptance(k, alpha)
     ok = bool(np.isfinite(mswd) and mswd <= crit)
     # ADEPT 用 pf(mswd, k-1, Inf, lower.tail=FALSE)，等价于 chi2_sf(mswd*(k-1), k-1)
