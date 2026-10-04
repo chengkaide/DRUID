@@ -297,6 +297,62 @@ def test_passthrough_fields():
     assert abs(d["R82"] - net[208][:13].mean() / net[232][:13].mean()) < 1e-12
 
 
+# ═════════════════════════════════════════════════════════════════════════════
+# 2026-10-04：普通铅迭代的「是否收敛」必须是个能查的字段
+# ═════════════════════════════════════════════════════════════════════════════
+def test_common_lead_iteration_reports_whether_it_converged():
+    """
+    ★ 原先只有"用没用校正"这一个布尔，**未收敛与已收敛共用同一条输出路径** ——
+    下游无从区分"算出来的"和"猜出来的"。代码注释还写着
+    「这个迭代是压缩映射，3~4 次必收敛」，而那是**错的**：
+    实测该映射导数在"老样品 + 高 f206"区 |d(map)/dt| ≈ 4.0（发散不是慢收敛），
+    而且 `stacey_kramers` 把 t 钳在 [0, 4570] Ma、`age76` 在 5000 Ma 饱和
+    ⇒ 存在**伪吸引不动点**：sk 不再随 t 变、r76 也不再变、|Δt| 精确为 0
+    ⇒ 被判成"收敛"。实测真值 2000 Ma、f206=0.85 报出 5223 Ma（偏 2.6 倍）。
+
+    要造成实质数值损害需 f206 ≳ 0.4，所以**边界不宽、真正的缺陷是静默**。
+    现在 `sk_converged` 透出；把它变成判据（超限就标为不可用）属
+    「会不会改论文数字」那一类，需人工拍板。
+    """
+    # 常规样品的普通铅（f206 不高）应当收敛
+    d = reduce_interval(_synth(n=20, seed=3, excess204=2.0, noise=0.5), _mask(20, 13))
+    assert d["sk_converged"] is True, "常规样品应当收敛"
+    assert d["common_lead_applied"] is True
+    # `fix` 模式借用整段的 sk、自己不做迭代 ⇒ 恒为 True
+    d2 = reduce_interval(_synth(n=20, seed=3, excess204=2.0, noise=0.5),
+                         _mask(20, 13), fix=(0.01, (18.7, 15.6, 38.8)))
+    assert d2["sk_converged"] is True, "fix 模式不迭代，恒为已收敛"
+
+
+def test_common_lead_flags_say_whether_the_correction_really_happened():
+    """
+    ★ `i204_significant` 原先写 `bool(sig204)`，**与校正是否真的生效脱钩**：
+    迭代中途 `r76 <= 0` 会 `use = False` 走"不扣"路线，而 `i204` 变量仍
+    留着非零的 `i204_raw` ⇒ 输出对外宣称「204 显著、i204=41.1 cps」，
+    而 `f206` 是 0.0000。任何靠它判断"是否检测到**并扣除了**普通铅"的
+    下游质控都会得到相反的结论。
+
+    现在两个字段分工明确：`i204_significant` 说"有没有检出 204"，
+    `common_lead_applied` 说"有没有真的扣"。
+    """
+    # 无普通铅：检出为 False、也没扣。
+    # ⚠ 这里**不加噪声**：噪声会给 204 通道带来 ±1 cps 的残余，
+    #   那个量级本身就会越过显著性门槛（`n_sigma_common_pb=2`），
+    #   于是"无普通铅"这个前提在有噪声时不成立 —— 那是数据构造问题，
+    #   不是本条要测的东西。
+    d = reduce_interval(_synth(n=20, seed=4, excess204=0.0, noise=0.0), _mask(20, 13))
+    assert d["i204_significant"] is False, "204 只有 Hg 本底，不该判为检出"
+    assert d["common_lead_applied"] is False
+    assert d["i204"] == 0.0, "没检出就不该留着一个非零的 i204"
+    # 有普通铅：两者都 True，且 f206 > 0
+    d2 = reduce_interval(_synth(n=20, seed=4, excess204=20.0, noise=0.3), _mask(20, 13))
+    assert d2["i204_significant"] is True
+    assert d2["common_lead_applied"] is True
+    assert d2["f206"] > 0.0
+    # 恒等式：真扣了 ⇒ f206 非零；没扣 ⇒ f206 为零
+    assert (d2["f206"] > 0) == d2["common_lead_applied"]
+
+
 def _run_standalone() -> int:
     """见 tests/_selftest.py —— 让这个文件不装 pytest 也能直接跑。"""
     sys.path.insert(0, str(Path(__file__).resolve().parent))

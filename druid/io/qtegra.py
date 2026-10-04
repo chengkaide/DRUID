@@ -38,7 +38,18 @@ import numpy as np
 MASS_RE = re.compile(r"(202|204|206|207|208|232|235|238)")
 
 
-def read_qtegra(path) -> Tuple[str, np.ndarray, Dict[int, np.ndarray], list]:
+def read_qtegra(path) -> Tuple[str, np.ndarray, Dict[int, np.ndarray], list, dict]:
+    """
+    读一个 Qtegra/iCAP 导出的 cps 时间序列。
+
+    返回
+    ----
+    (title, t, data, columns, info)
+        `info` 是本次读取的**如实记录**（`skipped_short_rows` 等），
+        供上层写进 `Tr.note` 让人看得见。
+        ⚠ 2026-10-04 起第 5 个返回值是**新增**的：以前"有行被丢掉"
+        这件事只体现在结果里（少了某个通道），没人知道发生过。
+    """
     """
     解析单个 Qtegra CSV 文件。
 
@@ -48,15 +59,20 @@ def read_qtegra(path) -> Tuple[str, np.ndarray, Dict[int, np.ndarray], list]:
 
     返回
     ----
-    (title, t, data, columns)
+    (title, t, data, columns, info)
         title   : 第 1 行冒号前截取出的样品名（如 "SRM 612"）
         t       : 时间轴数组，单位秒 (s)
         data    : {质量数(int): cps 数组}
         columns : 原始列名列表（便于回溯，比如想知道第几个元素是什么）
+        info    : 本次读取的**如实记录**，`skipped_short_rows` 是
+                  「字段数不足而被丢弃的行数」。上层把它写进 `Tr.note`，
+                  这样"某个通道不见了"不再是一个只能靠猜的谜。
 
     异常
     ----
     ValueError : 空文件 / 找不到 Time 表头 / 找不到任何有效数据行
+
+    ⚠ 2026-10-04 起第 5 个返回值是**新增**的（增字段，属兼容扩展）。
     """
     path = Path(path)
     # errors="replace"：万一元数据里混了非 UTF-8 字节也不至于整个崩掉
@@ -85,22 +101,34 @@ def read_qtegra(path) -> Tuple[str, np.ndarray, Dict[int, np.ndarray], list]:
 
     # ── 3. 逐行读取数值 ──
     rows = []
+    n_short = 0
     for line in lines[header_idx + 1:]:
         line = line.strip().rstrip(",")
         if not line:                       # 空行直接跳过
             continue
+        parts = line.split(",")
+        # ★ 字段数不足的行**单独剔掉**（2026-10-04 修的真缺陷）。
+        #   原实现用 `min(...)` 取各行最短长度，于是**任意一行**少一个字段，
+        #   整张表都被截到那个长度：仪器写到一半断电、或 Excel 另存丢尾时，
+        #   `238U`（U-Pb 年龄的分母）会**从字典里静默消失**，
+        #   而文件"看起来读成功了"（行数对、时间轴完整），
+        #   故障点被推迟到很远处以另一种错误形式暴露。
+        #   这里改成：长度不足的行直接丢弃并计数，不牵连其他行。
+        if len(parts) < len(columns):
+            n_short += 1
+            continue
         try:
             # 单位行的第一个字段为空字符串 → float("") 抛 ValueError → 被跳过
             # 这就是"无需显式跳行"的技巧
-            rows.append([float(x) for x in line.split(",")])
+            rows.append([float(x) for x in parts[:len(columns)]])
         except ValueError:
             continue
     if not rows:
         raise ValueError(f"无有效数据行: {path}")
 
     # ── 4. 对齐列数与行数 ──
-    # 有些行末尾可能多出字段，取各行列数的最小值，保证能构成规整矩阵
-    ncols = min(len(columns), min(len(r) for r in rows))
+    # 只截**末尾多出**的字段（`r[:ncols]`），不再用 min() 缩短整表。
+    ncols = len(columns)
     arr = np.asarray([r[:ncols] for r in rows], dtype=float)
     columns = columns[:ncols]
 
@@ -116,4 +144,4 @@ def read_qtegra(path) -> Tuple[str, np.ndarray, Dict[int, np.ndarray], list]:
             # setdefault：若同名质量数出现了多次（罕见），保留第一次读到的
             data.setdefault(mass, arr[:, j])
 
-    return title, t, data, columns
+    return title, t, data, columns, {"skipped_short_rows": int(n_short)}

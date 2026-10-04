@@ -110,7 +110,7 @@ def measure(batch: pathlib.Path | None = None) -> dict:
         path = spot_csv_path(cfg.data_dir, name)
         if not path.exists():
             continue
-        _, t, _, _ = read_qtegra(path)
+        _, t, _, _, _ = read_qtegra(path)
         if len(t) > 3:
             dts.append(np.diff(t))
     if not dts:

@@ -274,8 +274,34 @@ def robust_mask(v, k=3.0):
     ----
     (保留掩码 bool 数组, 中位数)
     若 MAD = 0（数据严重离散或几乎全等），无从判别，一律保留。
+
+    ⚠ NaN 的处理（2026-10-04 修的真缺陷）
+    ----------------------------------
+    本函数原先直接对含 NaN 的数组取中位数，于是 `med` 与 `mad` 全是 NaN。
+    而 **`mad <= 0` 这个守卫拦不住 NaN** —— NaN 的任何比较都是 False ——
+    于是流程落到最后一行，`np.abs(v - med) <= k * mad` 变成
+    `NaN <= NaN`，**逐元素全 False**：一个 NaN 会让**全部**数据被丢弃。
+
+    实测：`[101,102,103,104,500,nan]` 保留 0/6；
+    1000 个正常值 + 1 个 NaN 保留 **0/1001**。返回值是长度正确的全 False
+    数组，**不报错** —— 症状是"这批数据凭空消失"。
+
+    现在先把非有限值剔除再判别。这与同文件 `weighted_mean` 的做法一致
+    （它显式过滤 `np.isfinite`，且 n=0/1 时就返回 NaN）——
+    既然这个代码库本来就预期数组里会出现 NaN，离群点判别就不该比
+    加权平均更容易被 NaN 干掉。
     """
     v = np.asarray(v, float)
+    # 先剔掉非有限值：掩码按原长度返回，剔掉的位置记为 False。
+    finite = np.isfinite(v)
+    if not finite.all():
+        vv = v[finite]
+        if vv.size == 0:
+            return np.zeros(v.size, bool), np.nan
+        keep, med = robust_mask(vv, k)
+        mask = np.zeros(v.size, bool)
+        mask[finite] = keep
+        return mask, med
     med = float(np.median(v))
     # MAD = median(|x − median|)，再乘 1.4826 换算成正态等效 σ
     mad = 1.4826 * float(np.median(np.abs(v - med)))

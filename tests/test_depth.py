@@ -440,6 +440,114 @@ def test_profile_ages_76_matches_the_scalar_definition():
     assert abs(float(ag2[0]) - float(age76(R * 1.05))) < 1e-12
 
 
+# ═════════════════════════════════════════════════════════════════════════════
+# 2026-10-04 修掉的四个真缺陷的守护
+# ═════════════════════════════════════════════════════════════════════════════
+def test_merge_close_never_swallows_a_refined_hole():
+    """
+    ★ P0：`merge_close` 原先写 `out[-1][1] = hi`，**跨过空洞**把
+    `refine_domains` 刚剥掉的过渡带原样纳回 —— 那正是 `refine_domains`
+    存在的唯一理由被撤销。真实批次实测 **3/48 测点**受影响，
+    域年龄最大偏 **16.7 Ma**，有一例 MSWD 从 0.07 升到 2.74
+    （**已跨过相容上限**）却仍被标成 `age domain`。
+
+    修法：只有相邻**无空洞**（`lo == out[-1][1]`）时才允许合并。
+
+    ⚠ 判据写成**契约**而不是"某个构造数据会出现空洞"：直接给定
+    `segs`（含空洞），断言输出与输入的**并集**逐位一致。
+    早先一版用 `if holes_before:` 包着断言，而那批构造数据里
+    `refine_domains` 压根没产生空洞 ⇒ 断言整条被跳过，
+    负向测试**当场放行**（31/31 全过）。守护不能依赖"数据恰好长成那样"。
+    """
+    a = np.full(30, 300.0)
+    a[12], a[13] = 288.0, 312.0                 # 12、13 是被剥掉的过渡带
+    prof = pd.DataFrame({"age68": a, "s_age68": np.ones(30),
+                         "s68_1sig": np.ones(30), "tau": np.linspace(0, 1, 30)})
+    # 直接给带空洞的 segs：空洞 = [12, 14)
+    segs = [(0, 12), (14, 30)]
+    before = {i for lo, hi in segs for i in range(lo, hi)}
+
+    out = merge_close(prof, segs)
+    after = {i for lo, hi in out for i in range(lo, hi)}
+    assert before == after, (
+        f"merge_close 改变了窗口的归属：吞掉 {sorted(before - after)}，"
+        f"凭空多出 {sorted(after - before)}")
+    # 且空洞必须仍是**空的**（12、13 不属于任何域）
+    assert 12 not in after and 13 not in after, "过渡带被纳回了"
+
+    # 相邻无缝时合并仍然必须照旧发生（别把这条修成"永不合并"）
+    joined = merge_close(prof, [(0, 15), (15, 30)])
+    assert len(joined) == 1, f"无缝且差别小时应当合并，实得 {joined}"
+
+
+def test_bracket_F_refuses_to_extrapolate_beyond_the_standards():
+    """
+    ★ `bracket_F` 原先用 `np.interp` 外插，而 `np.interp` 在查询点超出
+    `xp` 范围时**钳到端点值、不外推**。τ=0 是坑口、τ=1 是坑底，
+    恰是漂移最大的两端（模块文档说 206Pb/238U 从坑口到坑底漂移约 20%）；
+    样品的 τ 网格由**它自己的**剥蚀时长归一化，标样的由**标样自己的**，
+    两者时长不同是常态 ⇒ **标样覆盖不到的深度段拿到了"看起来正常、
+    其实是夹出来的"分馏因子**，误差方向单一、随深度系统性变化，
+    正好造出"剖面两端弯曲"的假结构。
+
+    现在那两段显式置 nan（**不外插**），让上层决定。
+    """
+    tau = np.linspace(0.0, 1.0, 11)
+    df = pd.DataFrame({"tau": np.linspace(0.30, 0.62, 9),
+                       "R68": np.linspace(0.18, 0.14, 9)})
+    F = bracket_F(tau, [df], "R68", 0.17917)
+    inside = (tau >= 0.30 - 1e-9) & (tau <= 0.62 + 1e-9)
+    assert np.all(np.isfinite(F[inside])), "覆盖范围内必须有限"
+    outside = ~inside
+    assert np.all(np.isnan(F[outside])), "覆盖之外必须置 nan，不许夹成端点值"
+    # 而且夹出来的那种值与真外推值确实不同（否则这条测试没有对象）
+    clamped = np.interp(tau, df["tau"].to_numpy(), df["R68"].to_numpy())
+    assert abs(clamped[0] - clamped[inside][0]) < 1e-12, "端点值相同才说明夹取确实发生了"
+
+
+def test_bracket_F_one_bad_standard_does_not_poison_the_others():
+    """
+    ★ 原先用 `np.mean(vals, axis=0)`，于是**一个**标样在某个 τ 上是 NaN，
+    该 τ 的均值就是 NaN —— 一个坏标样窗口废掉一整段深度。
+    改成 `np.nanmean` 后，坏的那个被跳过，好的那个照常贡献。
+    """
+    tau = np.linspace(0.0, 1.0, 11)
+    good = pd.DataFrame({"tau": tau, "R68": np.full(tau.size, 0.10)})
+    bad = pd.DataFrame({"tau": tau, "R68": [np.nan] * 3 + [0.10] * (tau.size - 3)})
+    F = bracket_F(tau, [good, bad], "R68", 0.10)
+    assert np.all(np.isfinite(F)), "一个标样坏不该让整段变 nan"
+    # 覆盖范围取**各标样的交集**（这里都是 0~1），所以不该有 nan
+    F_narrow = bracket_F(np.array([0.05, 0.5, 0.95]),
+                         [good, bad.assign(tau=np.linspace(0.0, 1.0, 11))],
+                         "R68", 0.10)
+    assert np.all(np.isfinite(F_narrow))
+
+
+def test_refine_domains_does_not_always_strip_the_right_side_over_nan():
+    """
+    ★ `refine_domains` 原先用 `-1.0` 当"这一侧没有候选窗口"的哨兵，
+    而邻侧窗口可能是 NaN（`segment` 的 docstring 明确把"被滤掉的窗口
+    可能落在某一段的区间内"当预期契约）。NaN 的任何比较都是 False：
+    `NaN < 0` 与 `NaN >= dr` 都为 False ⇒ **恒定落进 elif 剥右侧**，
+    与实际哪侧更差无关。实测：左邻 = NaN 时连剥 8 个右侧，
+    真正该剥的坏窗口留在原地。
+
+    现在 NaN 被当作"不可比"，只在另一侧可用且更差时才剥。
+    """
+    n = 12
+    a = np.full(n, 300.0)
+    a[0] = np.nan                      # 左邻是 NaN
+    a[5] = 500.0                       # 域内一个明显的坏窗口
+    s = np.ones(n)
+    prof = pd.DataFrame({"age68": a, "s_age68": s,
+                         "s68_1sig": s, "tau": np.linspace(0, 1, n)})
+    out = refine_domains(prof, [(1, 11)])
+    # 无论剥哪边，**都必须真的剥掉几个**（旧写法恒剥右边，剥的还可能是错的那些）
+    assert 11 - sum(hi - lo for lo, hi in out) > 0, "相容性不过就该剥窗口"
+    for lo, hi in out:
+        assert lo >= 0 and hi <= n, out
+
+
 def _run_standalone() -> int:
     """见 tests/_selftest.py —— 让这个文件不装 pytest 也能直接跑。"""
     sys.path.insert(0, str(Path(__file__).resolve().parent))

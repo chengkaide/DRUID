@@ -531,7 +531,7 @@ pre:focus-visible,code:focus-visible{outline:2.5px solid var(--acc);outline-offs
     <span class="badge"><i>无 scipy</i> — 统计内核自实现</span>
     <span class="badge">网页界面 <i>纯标准库</i>，无 npm 无构建</span>
     <span class="badge">CI <i>3 系统</i> × Python 版本</span>
-    <span class="badge">自检 <i>191 项</i> + 端到端数值回归</span>
+    <span class="badge">自检 <i>199 项</i> + 端到端数值回归</span>
     <span class="badge">质控 <i>27 条检查项</i>，含机读交接文件</span>
   </div>
   <div class="cta">
@@ -674,7 +674,7 @@ pre:focus-visible,code:focus-visible{outline:2.5px solid var(--acc);outline-offs
               </svg>
               </div>
               <p class="figscroll-hint">图较宽，可左右滑动查看完整的坐标轴</p>
-          <figcaption>这就是<b>一个测点</b>给出的定量结论（整批 48 个样品测点各出一张，其中 33 个检出多年龄域）。上面这张图是示例批次 <code>examples/EX2022A</code> 的<b>真实输出</b>，不是示意图 —— 仓库里的命令跑一遍就能得到同样的数字。<b>S10 三个年龄域</b>：共 35 个滑窗，3 个域 —— D1 472.8 Ma（8 窗，MSWD 0.90） · D2 445.9 Ma（20 窗，MSWD 0.73） · D3 483.0 Ma（7 窗，MSWD 0.38）。没有一个窗口被剥掉。整段不分域给 457.2 Ma，离主域 445.9 Ma 差 <b>+11.3 Ma（+2.54%）</b>（Δ = 整段 − 主域）—— 这就是"分域"这一步带来的差别。</figcaption>
+          <figcaption>这就是<b>一个测点</b>给出的定量结论（整批 48 个样品测点各出一张，其中 36 个检出多年龄域）。上面这张图是示例批次 <code>examples/EX2022A</code> 的<b>真实输出</b>，不是示意图 —— 仓库里的命令跑一遍就能得到同样的数字。<b>S10 三个年龄域</b>：共 35 个滑窗，3 个域 —— D1 472.8 Ma（8 窗，MSWD 0.90） · D2 445.9 Ma（20 窗，MSWD 0.73） · D3 483.0 Ma（7 窗，MSWD 0.38）。没有一个窗口被剥掉。整段不分域给 457.2 Ma，离主域 445.9 Ma 差 <b>+11.3 Ma（+2.54%）</b>（Δ = 整段 − 主域）—— 这就是"分域"这一步带来的差别。</figcaption>
         </figure>
         <div class="pvside">
           <p class="pvhead">先看这三个数　<span>判据原文，不是我们另写的</span></p>
@@ -838,7 +838,7 @@ pre:focus-visible,code:focus-visible{outline:2.5px solid var(--acc);outline-offs
       <rect x="0" y="0" width="900" height="690" rx="14" class="fig-bg"/>
       <g class="case" data-spot="S43">
       <text class="fig-cap" x="78" y="29"><tspan class="fig-num">①</tspan>  S43 · 均一<tspan class="fig-cap-sub">　整段就是答案</tspan></text>
-      <text class="fig-sub" x="872" y="29" text-anchor="end">整段 MSWD 1.11 / 上限 1.49 → 整段常数</text>
+      <text class="fig-sub" x="872" y="29" text-anchor="end">整段 MSWD 1.14 / 上限 1.49 → 整段常数</text>
       <line class="fig-grid" x1="78" y1="185.4" x2="872" y2="185.4"/>
       <text class="fig-tick" x="66" y="189.4" text-anchor="end">420</text>
       <line class="fig-grid" x1="78" y1="152.9" x2="872" y2="152.9"/>
@@ -863,8 +863,6 @@ pre:focus-visible,code:focus-visible{outline:2.5px solid var(--acc);outline-offs
       <text class="fig-tick" x="872.0" y="207" text-anchor="middle">1</text>
       <clipPath id="cpCase0"><rect x="78" y="40" width="794" height="150"/></clipPath>
       <g clip-path="url(#cpCase0)">
-      <line class="fig-ebar" x1="119.0" y1="139.9" x2="119.0" y2="108.0"/>
-      <circle class="dot-D1" cx="119.0" cy="124.0" r="3.4"/>
       <line class="fig-ebar" x1="139.5" y1="132.4" x2="139.5" y2="102.3"/>
       <circle class="dot-D1" cx="139.5" cy="117.4" r="3.4"/>
       <line class="fig-ebar" x1="160.0" y1="144.7" x2="160.0" y2="116.5"/>
@@ -1156,12 +1154,12 @@ pre:focus-visible,code:focus-visible{outline:2.5px solid var(--acc);outline-offs
       <p class="figscroll-hint">图较宽，可左右滑动查看完整的坐标轴</p>
       <ul class="figlegend">
       <li class="key"><b>怎么读</b><span class="k"><i class="sw-whole"></i>整段不分域：把全部窗口当成唯一一个域</span><span class="k"><i class="sw-d1"></i><i class="sw-d2"></i><i class="sw-d3"></i>各年龄域均值（D1 / D2 / D3）</span><span class="k"><i class="sw-off"></i>没通过域内相容性检验、不进入任何域</span><span class="k">Δ 一律是「整段 − 主域」</span></li>
-      <li class="case"><b>① S43 均一 · 整段 458.7 Ma</b><em>共 35 个滑窗。整段 MSWD 1.11 &lt; 判据上限 1.49 → <b>整段就是常数</b>。域表里根本没有这个测点：没有域可拆，灰虚线就是答案。整段积分（另一种算法）给 459.3 Ma，与窗口加权差 0.15%。</em></li>
+      <li class="case"><b>① S43 均一 · 整段 458.7 Ma</b><em>共 34 个滑窗。整段 MSWD 1.14 &lt; 判据上限 1.49 → <b>整段就是常数</b>。域表里根本没有这个测点：没有域可拆，灰虚线就是答案。整段积分（另一种算法）给 459.3 Ma，与窗口加权差 0.14%。</em></li>
       <li class="case"><b>② S34 核边分明 · 整段 497.2 Ma</b><em>共 35 个滑窗。2 个域：D1 469.6 Ma（13 窗，MSWD 1.40） · D2 515.2 Ma（22 窗，MSWD 0.88）。没有一个窗口被剥掉。整段 MSWD 5.08 &gt; 上限 1.49 → 整段非常数，整段 497.2 − 主域 515.2 = <b>-18.03 Ma（-3.50%）</b>。</em></li>
       <li class="case"><b>③ S18 复杂变化 · 整段 458.8 Ma</b><em>共 35 个滑窗。3 个域：D1 471.8 Ma（7 窗，MSWD 0.15） · D2 442.5 Ma（12 窗，MSWD 0.86） · D3 474.9 Ma（8 窗，MSWD 1.96）。8 个窗口没通过域内相容性检验，被分域步骤剥掉。整段 MSWD 3.39 &gt; 上限 1.49 → 整段非常数，整段 458.8 − 主域 442.5 = <b>+16.30 Ma（+3.68%）</b>。</em></li>
       </ul>
       <figcaption>三个测点都取自示例批次 <code>examples/EX2022A</code>，上面的数字可以自行复现。
-            <b>S43</b> 整段 MSWD 1.11 低于判据上限 1.49，<b>整段就是常数</b>：域表里根本没有它，所以这里没有彩色实线，灰虚线就是答案。整段积分（另一种算法）给 459.3 Ma，与窗口加权差 0.15%。
+            <b>S43</b> 整段 MSWD 1.14 低于判据上限 1.49，<b>整段就是常数</b>：域表里根本没有它，所以这里没有彩色实线，灰虚线就是答案。整段积分（另一种算法）给 459.3 Ma，与窗口加权差 0.14%。
             <b>S34</b> 分为 <b>2 段</b>平台 469.6 / 515.2 Ma，域均值最大相差 <b>45.6 Ma（9.7%）</b>；沿坑深年龄<b>递增</b>：浅部 469.6 → 深部 515.2 Ma，是"核老边新"的常序，<b>一个窗口都没被剥掉</b>。整段不分域给 497.2 Ma，它<b>不等于任何一段</b>。
             <b>S18</b> 分为 <b>3 段</b>平台 471.8 / 442.5 / 474.9 Ma，域均值最大相差 <b>32.4 Ma（6.9%）</b>；沿坑深年龄<b>不单调</b>（471.8 → 442.5 → 474.9 Ma）—— 不能用一个"核"一个"边"解释，中间 <b>8 个空心点</b>没通过域内相容性检验，被分域步骤剥掉了。整段不分域给 458.8 Ma，它<b>不等于任何一段</b>。　注意 D1 与 D3 的年龄几乎相同（471.8 与 474.9 Ma）却是两个域 ——「域」是<b>深度上连续的一段</b>，不是"年龄相同的所有窗口"。
             ① 的灰虚线<b>就是年龄</b>（整段只有一个域，分域无事可做）；②、③ 的灰虚线只是在回答"不做分域会得到什么"，<b>不是任何一个年龄</b>。
@@ -1351,7 +1349,7 @@ python tests/check_example_batch.py</pre>
     <b>苹果电脑上怎么走，见 <a href="#mac">第 08 节</a>。</b></div>
   <div class="facts rv">
     <div class="fact"><div class="n">85</div><div class="d">示例测点随仓库发布，可复现文档中的每个数字</div></div>
-    <div class="fact"><div class="n">191</div><div class="d">项自检 + 真实批次的端到端数值回归</div></div>
+    <div class="fact"><div class="n">199</div><div class="d">项自检 + 真实批次的端到端数值回归</div></div>
     <div class="fact"><div class="n">3</div><div class="d">个系统的持续集成：Ubuntu / Windows / macOS</div></div>
   </div>
 </div></section>

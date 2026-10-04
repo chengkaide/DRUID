@@ -226,14 +226,26 @@ def refine_domains(prof: pd.DataFrame,
             if mswd <= crit:              # 通过相容性检验 → 本域 OK
                 continue
             # 看看左右边界外侧各有一个候选窗口
-            dl = abs(a[lo - 1] - mu) if lo > 0 else -1.0
-            dr = abs(a[hi] - mu) if hi < n else -1.0
-            if dl < 0 and dr < 0:         # 两侧都没有可剥的了
+            # ⚠ 邻侧窗口可能是 NaN（`segment` 的 docstring 明确把"被滤掉的
+            #   窗口可能落在某一段的区间内"当预期契约）。而 NaN 的任何比较
+            #   都是 False：原写法 `NaN < 0` 与 `NaN >= dr` 都为 False，
+            #   于是**恒定落进 elif 剥右侧** —— 与实际哪侧更差无关。
+            #   实测：左邻 = NaN、右邻 = 300.5 时连剥 8 个右侧，
+            #   真正该剥的坏窗口留在原地。现在把 NaN 当"不可比"（None），
+            #   只在**另一侧可用且更差**时才剥。
+            dl = abs(a[lo - 1] - mu) if lo > 0 else None
+            dr = abs(a[hi] - mu) if hi < n else None
+            if dl is not None and not np.isfinite(dl):
+                dl = None
+            if dr is not None and not np.isfinite(dr):
+                dr = None
+            if dl is None and dr is None:  # 两侧都没有可比的
                 continue
-            if dl >= dr and lo + 1 < hi:  # 左侧更远 → 左边界右移一格
-                segs[j][0] = lo + 1
-                changed = True
-            elif hi - 1 > lo:             # 右侧更远 → 右边界左移一格
+            if dr is None or (dl is not None and dl >= dr):
+                if lo + 1 < hi:            # 左侧更远（或只有左侧可比）→ 左边界右移
+                    segs[j][0] = lo + 1
+                    changed = True
+            elif hi - 1 > lo:               # 右侧更远 → 右边界左移一格
                 segs[j][1] = hi - 1
                 changed = True
         if not changed:                   # 一轮下来没有任何变化 → 收敛
@@ -267,6 +279,30 @@ def merge_close(prof: pd.DataFrame,
     两个锆石域相差 0.5%、尽管在统计上可能很显著（因为 σ 很小），
     但它对地质解释毫无意义 —— 那可能只是同一个岩浆房里
     结晶时间相差一二十万年的差别。**统计显著 ≠ 地质显著**。
+
+    ★★ 跨空洞时**不许**合并（2026-10-04 修的真缺陷）
+    --------------------------------------------
+    `refine_domains` 会收缩段边界，被剥掉的窗口留在**空洞**里（不属于任何段）
+    —— 那正是它存在的唯一理由。而本函数合并时原本写的是
+    `out[-1][1] = hi`，**直接跨过空洞把过渡带原样纳回**，
+    于是 `refine_domains` 刚刚识别出来的混合窗口又回到了加权平均里。
+
+    实测（示例批次 48 个样品测点全查）后果不是"多算几个窗口"那么轻：
+        · **3 个**测点的过渡带被吞回去；
+        · 域年龄最大偏 **16.7 Ma**；
+        · 有一例 MSWD 从 0.07 升到 **2.74 —— 已经跨过相容上限**，
+          按本文件自己的判据（`summarize_segments` 的 mixed）它早该是过渡带，
+          却仍被标成 `age domain` 并进入加权平均。
+
+    修法：**只有相邻无空洞时才允许合并**（`lo == out[-1][1]`）。
+    有空洞说明中间那些窗口已被判为"不属于任何年龄域"，
+    此时把两段拼起来等于替 `refine_domains` 做它明确拒绝做的判断 ——
+    那是**另一种语义**（"这两段其实是同一个域"），
+    不是本函数该做的（"这两个域差别太小，撤销这次分域"）。
+
+    为什么不用"合并后重跑 refine_domains"：那会引入手工无法预期的
+    二阶效应（剥完可能又触发新的合并），而本函数是纯函数、
+    可被单测逐位核对。**不做预测性改动**。
     """
     if len(segs) <= 1:
         return list(segs)
@@ -275,12 +311,17 @@ def merge_close(prof: pd.DataFrame,
 
     out = [list(segs[0])]
     for lo, hi in segs[1:]:
+        # ★ 相邻且无空洞才谈得上"这是同一个域的左右两半"。
+        #   有空洞时**原样保留为独立的一段**（`refine_domains` 已经表过态了）。
+        if lo != out[-1][1]:
+            out.append([lo, hi])
+            continue
         m1, s1, _, _ = weighted_mean(a[out[-1][0]:out[-1][1]], s[out[-1][0]:out[-1][1]])
         m2, s2, _, _ = weighted_mean(a[lo:hi], s[lo:hi])
         # 阈值取两条判据里 **更宽松** 的那个（max），即两条都要跨过
         crit = max(n_sigma * np.hypot(s1, s2), min_frac * abs(m1))
         if abs(m1 - m2) < crit:
-            out[-1][1] = hi        # 差别不够 → 并入前一段
+            out[-1][1] = hi        # 差别不够 → 并入前一段（此处必无空洞）
         else:
             out.append([lo, hi])
     return [tuple(x) for x in out]
@@ -292,7 +333,8 @@ def merge_close(prof: pd.DataFrame,
 def summarize_segments(prof: pd.DataFrame,
                        segs: Sequence[Tuple[int, int]],
                        mixed_max_frac: float = 0.20,
-                       step_over_win: float | None = None) -> pd.DataFrame:
+                       step_over_win: float | None = None,
+                       alpha: float = 2.0) -> pd.DataFrame:
     """
     把分割结果汇总成一张"年龄域表"。
 
@@ -339,7 +381,13 @@ def summarize_segments(prof: pd.DataFrame,
 
     for j, (lo, hi) in enumerate(segs):
         mu, se, mswd, k = weighted_mean(a[lo:hi], s[lo:hi], step_over_win)
-        crit = mswd_acceptance(k)
+        # ★ `alpha` 必须串到 `mswd_acceptance`（2026-10-04 修）。
+        #   原来这里写死默认 2.0，而 `refine_domains` 与 `whole_spot_stats`
+        #   都接受传入的 alpha —— 只要有人放宽或收紧其中一个，
+        #   汇总这一步仍按 2.0 判，**恰好制造出 `mswd_acceptance` docstring
+        #   里警告的那个矛盾**（精修时认为这个域没问题、汇总时又标成过渡带），
+        #   而且不报错。同一判据在三处就必须用同一个 alpha。
+        crit = mswd_acceptance(k, alpha)
         interior = 0 < j < nseg - 1                      # 是否为中间段
         mixed = (interior and (k <= mixed_max_frac * n_tot or mswd > crit)) or (k < 3)
         # ADEPT 用 pf(mswd, k-1, Inf, lower.tail=FALSE)，等价于

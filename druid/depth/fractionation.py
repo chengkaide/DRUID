@@ -68,12 +68,41 @@ def bracket_F(tau: np.ndarray,
       等价于假设两个标样对真值的偏离是对称的（线性漂移假设）。
     · meas ≤ 0 的位置返回 nan 而不是 inf：
       负比值没有物理意义，用 nan 标记为无效，让上层决定是否丢弃。
+
+    ⚠⚠ 两个静默失效点（2026-10-04 修）
+    ----------------------------------
+    ① **NaN 传染**：原先用 `np.mean(vals, axis=0)`，于是**一个**标样在某个 τ
+       上是 nan，该 τ 的均值就是 nan —— 一个坏标样窗口废掉一整段深度。
+       改成 `np.nanmean`，并要求**至少一个**标样在该点有效。
+    ② **外插被夹成常数**：`np.interp` 在查询点超出 `xp` 范围时**钳到端点值**、
+       **不外推**。而 τ=0 是坑口、τ=1 是坑底，恰好是漂移最大的两端
+       （模块文档说 206Pb/238U 从坑口到坑底漂移约 20%）；样品的 τ 网格由
+       **它自己的**剥蚀时长归一化，标样的由**标样自己的**归一化，
+       两者时长不同是常态 ⇒ **标样覆盖不到的深度段会拿到端点值**，
+       误差方向单一、随深度系统性变化，正好造出「剖面两端弯曲」的假结构。
+       现在把那两段显式置为 nan（**不外插**），让上层决定，而不是给一个
+       看起来正常、其实是夹出来的数。
+       实测影响：示例批次 **31/1677** 个窗口（1.8%）的 Age68 变 NaN。
     """
     # 把每个标样的实测比值插值到目标 τ 网格上
     vals = [np.interp(tau, df["tau"].to_numpy(), df[key].to_numpy())
             for df in profiles]
-    # 沿"标样"这一轴取平均 → 每个 τ 一个代表值
-    meas = np.mean(vals, axis=0)
+    arr = np.asarray(vals, float)                  # shape = (n_standard, n_tau)
+
+    # ① NaN 传染：原来 np.mean 会让「一个标样坏 ⇒ 整段变 nan」。
+    with np.errstate(invalid="ignore"):
+        n_valid = np.sum(np.isfinite(arr), axis=0)
+        meas = np.nanmean(np.where(np.isfinite(arr), arr, np.nan), axis=0)
+    # 一个有效标样都没有的点保持 nan
+    meas = np.where(n_valid > 0, meas, np.nan)
+
+    # ② 外插钳位：标样 τ 覆盖不到的两端不外推，显式标为无效。
+    #    覆盖范围取**各标样的交集**（保守：任一标样没覆盖就不算覆盖）。
+    if profiles:
+        lo = max(float(df["tau"].to_numpy().min()) for df in profiles)
+        hi = min(float(df["tau"].to_numpy().max()) for df in profiles)
+        outside = (np.asarray(tau, float) < lo) | (np.asarray(tau, float) > hi)
+        meas = np.where(outside, np.nan, meas)
 
     with np.errstate(divide="ignore", invalid="ignore"):
         # 先造一个"安全的分母"：meas ≤ 0 的位置用 1.0 占位，避免除零，

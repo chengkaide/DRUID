@@ -116,7 +116,7 @@ def load_spot(idx: int,
     path = Path(path)
 
     # ── ① 读原始文件 ──
-    _title, t, raw, _cols = read_qtegra(path)
+    _title, t, raw, _cols, rinfo = read_qtegra(path)
 
     # ── ② 通道完整性检查 ──
     # 少了任何一个关键质量数，后面的比值就无从算起，早点报错比中途 NaN 好
@@ -137,12 +137,19 @@ def load_spot(idx: int,
 
     # ── ⑥ 裁剪瞬态边缘 ──
     t0, t1 = ta0 + trim, ta1 - trim
-    note = ""
+    notes = []
     if t1 - t0 < 3.0:
         # 极短的剥蚀（可能是信号太弱被误判），此时再裁边就什么都不剩了，
         # 退回使用完整的剥蚀区间，并在备注里留下痕迹便于复核
         t0, t1 = ta0, ta1
-        note = "剥蚀窗口过短，未裁边"
+        notes.append("剥蚀窗口过短，未裁边")
+    # ★ 有行因字段数不足被丢弃时**必须留下痕迹**（2026-10-04）。
+    #   以前这件事只体现在结果里（某个通道不见了），没人知道发生过 ——
+    #   而"某个通道不见了"会让后面所有比值悄悄算错。
+    n_short = int((rinfo or {}).get("skipped_short_rows", 0) or 0)
+    if n_short:
+        notes.append(f"{n_short} 行字段数不足已跳过")
+    note = "；".join(notes)
 
     return Tra(idx=idx, sample=sample, role=role, path=str(path),
                t=t, raw=raw, net=net, blank=blank,

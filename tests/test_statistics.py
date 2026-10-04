@@ -205,6 +205,41 @@ def test_robust_mask_unchanged():
     assert keep3.all(), "MAD=0 时按文档是一律保留（宁可漏杀，不可错杀）"
 
 
+def test_robust_mask_keeps_the_finite_values_when_the_array_has_a_nan():
+    """
+    ★ 2026-10-04 修的真缺陷：`robust_mask` 原先直接对含 NaN 的数组取中位数，
+    于是 `med` 与 `mad` 全是 NaN。而 **`mad <= 0` 这个守卫拦不住 NaN**
+    （NaN 的任何比较都是 False），流程落到最后一行
+    `np.abs(v - med) <= k * mad` → `NaN <= NaN` → **逐元素全 False**：
+    一个 NaN 让**全部**数据被丢弃。实测 1000 个正常值 + 1 个 NaN
+    ⇒ 保留 **0/1001**，而返回值是长度正确的全 False 数组、**不报错**。
+
+    现在先把非有限值剔掉再判别，掩码按原长度返回（剔掉的位置记 False）。
+    这与同文件 `weighted_mean` 的做法一致（它显式过滤 `np.isfinite`，
+    且 n=0/1 时就返回 NaN）—— 既然这库本来就预期有 NaN，
+    离群点判别就不该比加权平均更容易被 NaN 干掉。
+    """
+    v = np.array([101.0, 102.0, 103.0, 104.0, 500.0, np.nan])
+    keep, med = robust_mask(v)
+    assert len(keep) == len(v), "掩码长度必须与输入一致"
+    assert keep[:5].sum() >= 4, f"5 个正常值不该被全灭，实得 {keep[:5].sum()}"
+    assert not keep[-1], "NaN 那一格必须记 False"
+    assert np.isfinite(med), "中位数必须有限"
+
+    # 1000 正常 + 1 NaN：旧写法保留 0 个
+    big = np.r_[np.full(1000, 5.0), np.nan]
+    keep2, _ = robust_mask(big)
+    assert keep2.sum() >= 990, f"一个 NaN 抹掉全部数据（保留 {int(keep2.sum())}）"
+
+    # 全 NaN 时不能崩，且必须全 False
+    keep3, med3 = robust_mask(np.array([np.nan, np.nan]))
+    assert not keep3.any() and np.isnan(med3)
+
+    # inf 同样要处理（它会让 mad 变 inf ⇒ 谁都不被剔除，同样是静默失败）
+    keep4, _ = robust_mask(np.array([1.0, 2.0, 3.0, np.inf, 2.5]))
+    assert keep4.sum() >= 3, f"inf 不该让掩码全灭，实得 {int(keep4.sum())}"
+
+
 def _run_standalone() -> int:
     """见 tests/_selftest.py —— 让这个文件不装 pytest 也能直接跑。"""
     sys.path.insert(0, str(Path(__file__).resolve().parent))

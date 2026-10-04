@@ -75,7 +75,7 @@ def _raises(exc, fn, *a, **kw) -> None:
 # ═════════════════════════════════════════════════════════════════════════════
 def test_read_qtegra_title_time_and_masses():
     p = _write_csv(CSV_TEXT)
-    title, t, data, columns = read_qtegra(p)
+    title, t, data, columns, info = read_qtegra(p)
 
     assert title == "MY SAMPLE", title
     assert columns[0] == "Time", columns[:2]
@@ -97,7 +97,7 @@ def test_read_qtegra_skips_the_unit_row():
     一旦不同批次元数据行数变了，就会把单位行或表头当数据读进来。
     """
     p = _write_csv(CSV_TEXT)
-    _, t, _, _ = read_qtegra(p)
+    _, t, _, _, _ = read_qtegra(p)
     assert t.size == 3           # 4 行数据形态（表头+单位行+3 行数值）里只有 3 行是数据
     assert not np.any(np.isnan(t))
 
@@ -105,8 +105,42 @@ def test_read_qtegra_skips_the_unit_row():
 def test_read_qtegra_tolerates_lf_line_endings():
     """CRLF 是常态，但别在 LF 上崩掉（有人会用编辑器另存一次）。"""
     p = _write_csv(CSV_TEXT, newline="")        # newline="" → 原样写出 LF
-    title, t, data, _ = read_qtegra(p)
+    title, t, data, _, _ = read_qtegra(p)
     assert title == "MY SAMPLE" and t.size == 3 and 238 in data
+
+
+def test_read_qtegra_keeps_the_other_masses_when_one_row_is_short():
+    """
+    ★ 2026-10-04 修的真缺陷：原来 `ncols = min(len(columns), min(len(r) for r in rows))`
+    —— 用 `min()` 意味着**任意一行**少一个字段，整张表都被截到那个长度。
+    实测末行缺 `238U` 时：行数对、时间轴完整、无任何警告，
+    而 **238U（U-Pb 年龄的分母）从字典里静默消失** ——
+    故障点被推迟到很远处以另一种错误形式暴露。
+
+    现在短行**单独剔掉并计数**，其余行照读，通道不再整列消失。
+    ⚠ 示例批次 85 个文件行长全部一致（29/29），所以**基线永远抓不到这条**，
+    只能靠这个合成用例 —— 这正是它必须存在的原因。
+    """
+    short = "\n".join([
+        "MY SAMPLE:03/01/2022 06:50:39 AM;",
+        "Software:Name=Qtegra;Version=2.8.3170.309;File Version=1;",
+        "",
+        "Time,29Si,232Th,204Pb,206Pb,207Pb,208Pb,238U,",
+        "0.01234,58436.27,0.5,300.0,1000.0,200.0,500.0,200000.0,",
+        "0.33125,60043.86,0.6,320.0,1100.0,210.0,510.0,210000.0,",
+        # 最后一行缺 238U（少一个字段）
+        "0.65002,54016.45,0.4,290.0,900.0,190.0,490.0,",
+    ]) + "\n"
+    _title, t, data, columns, info = read_qtegra(_write_csv(short))
+    assert 238 in data, "短行只该剔掉它自己，不该让整列消失"
+    assert 206 in data and 207 in data
+    assert t.size == 2, f"两条完整行都要读到，实得 {t.size}"
+    assert info["skipped_short_rows"] == 1, "跳过的行数必须如实报出来"
+    assert len(columns) == 8, "列名不该被截短"
+
+    # 全行都短时也不该崩，只是没数据
+    _raises(ValueError, read_qtegra, _write_csv(
+        "MY SAMPLE:x;\n\nTime,238U,\n"))
 
 
 def test_read_qtegra_rejects_malformed_input():

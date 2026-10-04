@@ -34,7 +34,6 @@ from _fixtures import FakeResult, make_result                           # noqa: 
 from druid.io.handoff import (                                       # noqa: E402
     ADEPT_INPUT, SCHEMA, build_payload, default_path, export_handoff,
 )
-from druid.io.report import age68_column                              # noqa: E402
 
 #: 顶层键集合。**增删都要同步这里**，否则 `test_top_level_keys_are_stable`
 #: 会红。但注意：`druid.handoff` 的 schema 版本**只在做破坏性改动时才升**

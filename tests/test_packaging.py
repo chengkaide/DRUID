@@ -561,7 +561,15 @@ def test_landing_page_states_the_real_selfcheck_count():
     与上面 `test_bat_files_are_crlf_on_disk` 互为镜像。174 是 CI 加 macOS
     job 时补「中文字体真的可用」与「reveal/list_drives 三平台分支」两条 ——
     macOS 的代码路径在这台 Windows 开发机上一行都执行不到，只能这么测。
-    现为 191：A-14 候选 C（handoff 稳健性字段）补七条 —— ① 剔 k% 后中位与
+    现为 199：代码审查修四个真缺陷补八条 —— ① `merge_close` 跨空洞吞回过渡带
+    （**契约式**断言：直接给定带空洞的 segs，比对窗口归属并集；早先一版用
+    `if holes_before:` 包着，而那批数据压根没产生空洞 ⇒ 负向测试当场放行），
+    ② `bracket_F` 不外插、覆盖外置 nan，③ 一个坏标样不污染其他标样，
+    ④ `refine_domains` 遇 NaN 不恒剥右侧，⑤ `robust_mask` 一个 NaN 不抹掉
+    全部数据（1000+1 → 保留 0/1001），⑥ `read_qtegra` 一行缺字段不丢整列
+    （**基线永远抓不到**，只能造合成用例），⑦ 普通铅迭代报 `sk_converged`，
+    ⑧ `i204_significant` 与 `common_lead_applied` 职责分开。
+    191：A-14 候选 C（handoff 稳健性字段）补七条 —— ① 剔 k% 后中位与
     `shift`/`shift_pct` 的**可复算**断言（基准值取 QC 校正列的真值 ×0.99，
     不是 450）、② ★ **不许报 σ 的变化**（剔除量与 σ 正相关，corr 0.822 ⇒
     「剔得越多、1σ 越小」是定义带来的，不是测量变精）、③ ★ 索引**重复**时

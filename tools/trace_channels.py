@@ -90,7 +90,7 @@ def measure(batch: pathlib.Path | None = None) -> dict:
 
     for path in files:
         try:
-            _, _, data, columns = read_qtegra(path)
+            _, _, data, columns, _info = read_qtegra(path)
         except ValueError:
             # 单个文件解析失败不该让整批统计垮掉 —— 与 load_batch 的宽容度一致
             continue
