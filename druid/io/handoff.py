@@ -100,6 +100,91 @@ def _stats(s: pd.Series) -> Dict[str, object]:
     }
 
 
+def _robustness(s: pd.Series, sig: Optional[pd.Series] = None,
+                fracs: Sequence[float] = (0.05, 0.10, 0.20)) -> Dict[str, object]:
+    """
+    「删掉最偏离的 k% 之后，中位怎么动」—— 论文那句
+    "n 大时误差被压小" 的仓库版。
+
+    为什么要有这一块
+    ----------------
+    中位数对离群点天然稳健，这既是它的优点也是它的危险之处：**看不出
+    一个"看起来很稳"的中位背后，有多少测点在拉偏**。下游若只拿到
+    `age68.median`，无从判断这个数换一批点会不会翻掉。
+
+    所以这里**不改** `age68` 那个中位（它是既有契约），另给一串
+    "剔掉 k% 之后还剩多少" 的数，让稳健性**可被机读地检查**。
+    剔除规则与 `_pooled_mswd` 保持一致：反复剔掉"离当前加权平均最远的
+    那个（按它自己的 σ 归一化）"，`fracs` 取几个固定档。
+
+    ★ 为什么**只报中位的漂移，不报 σ 的变化**
+    ---------------------------------------
+    剔除量是 |age − 中位| ⁄ σ，所以**离群点天然就是 σ 大的点** ——
+    示例批次实测 corr(|age − 中位|, σ) = **0.822**，被剔掉的 10 个点
+    平均 σ **11.96 Ma**，留下的 38 个只有 **6.68 Ma**。于是"剔得越多、
+    平均 σ 越小"是**定义带来的**，不是测量变精了。
+
+    若把 σ 的变化一并报出去，读者必然会读成"精度提高了"，那正是
+    这块数据**最容易被误读**的地方。所以这里只报中位漂移，
+    并在 `note` 里把这件事写死。真正的 σ 口径由 `age68` 那一侧的
+    描述统计给出，不受剔除影响。
+
+    附带报 `n_capped`：k% × n 要向下取整且至少留 3 个点，
+    小样本（n ≤ 4）几乎任何 k% 都剔不到一个点 ⇒ 那一档的 `n` 不变，
+    中位也不变。**这必须让下游看得见**，否则小样本上"稳健性很好"是假的。
+    """
+    x = pd.to_numeric(s, errors="coerce").dropna()
+    n0 = int(len(x))
+    out: Dict[str, object] = {
+        "n_input": n0,
+        "trim_rule": "按 |age − 当前中位| / σ 归一化排序，反复剔最远的一个",
+        "sigma_trend_note": (
+            "剔除量与 σ 正相关（示例批次实测 corr 0.822），因此『剔得越多、"
+            "平均 1σ 越小』是**定义带来的**、不代表测量变精；故本块**不报 σ 的变化**"),
+        "levels": [],
+    }
+    if n0 == 0:
+        return out
+    med0 = _f(x.median())
+    out["median_full"] = med0
+    if n0 < 2 or sig is None:
+        return out
+    e = pd.to_numeric(sig, errors="coerce")
+    # ★ 与 x **逐位重索引**，不能只按 x.index 取值再当位置用 ——
+    #   x 已经 dropna 过，len(x) 可能远小于原列长度；而下面 `cur` 里存的是
+    #   **对齐后**的位置。两种坐标系混用会在有 NaN 的列上越界（实测踩到：
+    #   `index 144 is out of bounds for axis 0 with size 144`）。
+    #   这里显式把两列摆成同一个长度的 0..n-1 坐标系。
+    e = pd.to_numeric(sig, errors="coerce").reindex(x.index).to_numpy(float)
+    xa = x.to_numpy(float)
+    ok = np.isfinite(e) & (e > 0)
+    if ok.sum() < 2:
+        return out
+
+    for frac in fracs:
+        k = int(np.floor(frac * n0))
+        k = max(0, min(k, int(ok.sum()) - 3))         # 至少留 3 个点
+        cur = list(np.nonzero(ok)[0])
+        for _ in range(k):
+            z = np.abs((xa[cur] - np.median(xa[cur])) / e[cur])
+            cur.pop(int(np.argmax(z)))
+        med = _f(np.median(xa[cur]))
+        out["levels"].append({
+            "frac": float(frac),
+            "n_dropped": int(k),
+            "n_remaining": int(len(cur)),
+            "median_Ma": med,
+            "shift_Ma": (_f(med - med0) if (med is not None and med0 is not None)
+                         else None),
+            "shift_pct": (_f((med - med0) / med0 * 100.0)
+                          if (med is not None and med0 not in (None, 0)) else None),
+        })
+    out["max_abs_shift_Ma"] = _f(max(
+        (abs(v["shift_Ma"]) for v in out["levels"] if v["shift_Ma"] is not None),
+        default=0.0))
+    return out
+
+
 def _pooled_mswd(s: pd.Series, sig: pd.Series, threshold: float = 2.5,
                  max_drop: int = 200) -> Dict[str, object]:
     """
@@ -283,6 +368,10 @@ def _block_samples(result, th: QCThresholds) -> List[Dict[str, object]]:
         d["age68_pooled_diagnostic"] = (
             _pooled_mswd(g[col], g["s68_1sig"], th.std_mswd_warn)
             if (col in g.columns and "s68_1sig" in g.columns) else {})
+        # 稳健性：剔掉最偏离的 k% 之后中位怎么动。与上面的 pooled 诊断**分开**——
+        # 那条问"这个批的散布能不能压进 MSWD≤2.5"，这条问"中位本身稳不稳"。
+        if col in g.columns and "s68_1sig" in g.columns:
+            d["age68_robustness"] = _robustness(g[col], g["s68_1sig"])
         if "协和度_pct" in g.columns:
             c = pd.to_numeric(g["协和度_pct"], errors="coerce").dropna()
             # 门槛跟 QCThresholds 走 —— 这里曾经把 90/110 写死，于是调用方一旦

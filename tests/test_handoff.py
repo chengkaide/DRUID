@@ -25,13 +25,16 @@ import sys
 import tempfile
 from pathlib import Path
 
+import pandas as pd
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _fixtures import make_result                                    # noqa: E402
+from _fixtures import FakeResult, make_result                           # noqa: E402
 from druid.io.handoff import (                                       # noqa: E402
     ADEPT_INPUT, SCHEMA, build_payload, default_path, export_handoff,
 )
+from druid.io.report import age68_column                              # noqa: E402
 
 #: 顶层键集合。**增删都要同步这里**，否则 `test_top_level_keys_are_stable`
 #: 会红。但注意：`druid.handoff` 的 schema 版本**只在做破坏性改动时才升**
@@ -44,7 +47,8 @@ TOP_KEYS = {
 
 #: 每个样品允许出现的键。**故意没有加权平均年龄** —— 见模块 docstring。
 SAMPLE_KEYS = {
-    "name", "n_spots", "age68", "age68_pooled_diagnostic", "concordance",
+    "name", "n_spots", "age68", "age68_pooled_diagnostic", "age68_robustness",
+    "concordance",
     "f206_pct_median", "u238_cps_median", "th_u_median",
     "depth_structures", "n_multi_domain",
 }
@@ -188,6 +192,166 @@ def test_pooled_mswd_is_reported_as_a_diagnostic_with_the_drop_count():
     assert d["n_spots"] == 8
     assert d["mswd"] is not None and d["mswd"] > 2.5
     assert d["n_dropped_for_threshold"] > 0
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 稳健性：剔掉最偏离的 k% 之后中位怎么动
+# ═════════════════════════════════════════════════════════════════════════════
+def test_robustness_reports_the_median_shift_at_each_trim_level():
+    """
+    这一块是论文那句"n 大时误差被压小"的仓库版：让人能机读地检查
+    "这个中位背后有多少测点在拉偏"，而不是只拿到一个看起来很稳的数。
+
+    判据是**可复算**的：给一组人为构造的数据（一个明显的离群点 + 一堆
+    紧密聚在一起的），剔掉 20% 之后离群点必然 gone、中位必须回到聚堆中心。
+    关键：**中位本身几乎不动**（中位数对单个离群点本就稳健），
+    动的是"剔了多少、还剩多少"这两个数。
+
+    ⚠ 基准值是 **445.5** 而不是 450：`age68_robustness` 与 `age68` 一样
+    走 `age68_column()`，在已校准的假数据上那是 `年龄206_238_QC校正`
+    （= 年龄 × 0.99）。这里必须用真值断言，否则改一次口径就会静默错。
+    """
+    ages = [450.0] * 9 + [800.0]                       # 10 个点，1 个离群
+    p = build_payload(None, make_result(unknown=[
+        dict(sample="SAME", age=a, s1=2.0) for a in ages]), version="2.3.0")
+    rb = p["samples"][0]["age68_robustness"]
+
+    base = 450.0 * 0.99                                # 走的是 QC 校正列
+    assert rb["n_input"] == 10
+    assert abs(rb["median_full"] - base) < 1e-9
+    lv = {v["frac"]: v for v in rb["levels"]}
+    assert set(lv) == {0.05, 0.10, 0.20}
+    # 20% ⇒ 剔 2 个；离群点(792)必在其中，中位仍是聚堆中心
+    assert lv[0.20]["n_dropped"] == 2
+    assert lv[0.20]["n_remaining"] == 8
+    assert abs(lv[0.20]["median_Ma"] - base) < 1e-9
+    assert abs(lv[0.20]["shift_Ma"]) < 1e-9, "中位对单个离群点应当不动"
+    # shift 与 shift_pct 必须自洽（下游常常只要百分比那个）
+    assert abs(lv[0.20]["shift_pct"] - lv[0.20]["shift_Ma"] / base * 100) < 1e-9
+
+
+def test_robustness_never_reports_a_sigma_change():
+    """
+    ★ 刻意**不报** σ 的变化，这是本块最容易出事的地方。
+
+    剔除量是 |age − 中位| ⁄ σ ⇒ **离群点天然就是 σ 大的点**（示例批次实测
+    corr(|age−中位|, σ) = 0.822；被剔的 10 个点平均 σ 11.96 Ma，
+    留下的 38 个只有 6.68 Ma）。所以"剔得越多、平均 1σ 越小"是**定义
+    带来的**，不是测量变精了。
+
+    一旦把 σ 的变化一并报出去，读者必然会读成"精度提高了" ——
+    那正是这块数据最容易被误读的地方。所以测试在这里把"不许报"钉死：
+    任何一层里出现 σ / sigma / se 之类的键，本条就红。
+    """
+    ages = [450.0] * 9 + [800.0]
+    p = build_payload(None, make_result(unknown=[
+        dict(sample="SAME", age=a, s1=1.0 if a < 500 else 30.0) for a in ages]),
+        version="2.3.0")
+    rb = p["samples"][0]["age68_robustness"]
+    blob = json.dumps(rb, ensure_ascii=False)
+    for bad in ("sigma_Ma", "mean_sigma", "s1_median", "sigma_change", "se_"):
+        assert bad not in blob, f"稳健性块不许报 σ 的变化，却出现了 {bad}"
+    # 但必须把这件事**写明**，否则读者仍会自己去算
+    assert "不代表测量变精" in rb["sigma_trend_note"]
+
+
+def test_robustness_survives_a_duplicated_index():
+    """
+    ★ 这条是**同轮真踩到的坑**：`x` 与 `sig` 必须落在**同一个 0..n-1 坐标系**里。
+
+    实测崩过，报 `index 144 is out of bounds for axis 0 with size 144`，
+    症状是整批崩在 `build_payload` 里，而不是安静地算错。
+
+    ⚠⚠ 触发它的**不是** NaN，而是**索引重复**：写成
+    `sig.loc[x.index]` 之后，若 `x.index` 里有重复值，返回的 Series 会
+    **按重复次数膨胀**。实测：x 30 行、索引 0..9 各重复 3 次 ⇒
+    `sig.loc[x.index]` 变成 **90 行**，而 `cur` 里的位置最大只有 29 ⇒ 越界。
+    第一版守护只造了 NaN，索引唯一 ⇒ `loc` 与 `reindex` 结果完全一样，
+    **守护抓不到**，负向测试当场放行。这条就是把那次的缺口补上。
+    """
+    rows = [dict(sample="SAME", age=450.0 + i, s1=2.0) for i in range(10)]
+    r = make_result(unknown=rows)
+    res = r.results
+    # 造重复索引：**同一行**复制三次（索引 0 会出现 3 次）。
+    # ⚠ 用 `iloc[[0,1,2]]` 那种"三行叠起来"造不出重复 —— 它们的索引是
+    #   0/1/2，本来就不同；只有复制**同一行**才会重复。
+    u = res[res["类型"] == "样品"]
+    dup = pd.concat([u.iloc[[0]], u.iloc[[0]], u.iloc[[0]]])
+    assert dup.index.duplicated().any(), "这个测试的前提就是索引重复"
+    # 只留样品行，避免标样行混进来改变形状
+    dup = dup[dup["类型"] == "样品"]
+    rb = build_payload(None, FakeResult(dup, pd.DataFrame(), dict(dup.iloc[0]),
+                                        pd.DataFrame(), pd.DataFrame()),
+                       version="2.3.0")["samples"][0]["age68_robustness"]
+    assert rb["n_input"] == 3
+    for v in rb["levels"]:
+        assert v["n_remaining"] <= rb["n_input"], "剩余点数不该超过输入点数"
+
+
+def test_robustness_counts_only_the_rows_it_actually_used():
+    """
+    索引重复时**不能**把同一行数两遍：`n_input` 必须是真正参与计算的点数。
+
+    上一条钉的是"不崩"，这条钉的是"**不虚报**" —— 崩溃修好了但把 3 行
+    报成 9 行，同样是错的，而且更安静。
+    """
+    rows = [dict(sample="SAME", age=450.0 + i, s1=2.0) for i in range(6)]
+    r = make_result(unknown=rows)
+    res = r.results
+    u = res[res["类型"] == "样品"]
+    dup = pd.concat([u.iloc[[0]], u.iloc[[0]]])
+    rb = build_payload(None, FakeResult(dup, pd.DataFrame(), dict(dup.iloc[0]),
+                                        pd.DataFrame(), pd.DataFrame()),
+                       version="2.3.0")["samples"][0]["age68_robustness"]
+    assert rb["n_input"] == 2, f"索引重复不该让 n 虚增，实得 {rb['n_input']}"
+
+
+def test_robustness_says_nothing_on_a_single_spot():
+    """
+    n = 1 时"稳健性"是个没有意义的词：任何 k% 都剔不到点。
+    这时必须给 `levels: []`，而不是给一串 shift = 0 让人以为"很稳健"。
+
+    示例批次正好就是这个情形（48 个岩样各 1 个测点），所以真实批次
+    跑出来的 48 条 `age68_robustness` 全是空的 —— 这是**如实**，
+    不是没算出来。
+    """
+    p = build_payload(None, make_result(unknown=[
+        dict(sample="A", age=450.0, s1=3.0), dict(sample="B", age=460.0, s1=3.0)]),
+        version="2.3.0")
+    for s in p["samples"]:
+        rb = s["age68_robustness"]
+        assert rb["levels"] == [], "单点样品不该有 levels"
+        assert rb["n_input"] == 1
+        assert rb["median_full"] is not None, "但仍然要给出那个中位本身"
+
+
+def test_robustness_keeps_at_least_three_spots():
+    """
+    k% × n 向下取整、且**至少留 3 个点**。小样本上"至少留 3"会盖过 k%
+    （n=4、k=20% ⇒ 本想剔 0 个；n=5、k=40% ⇒ 本想剔 2 个但只能剔 1 个）——
+    少于 3 个点的中位没有任何意义。
+
+    钉的是 `n_remaining >= 3`，不是"k% 一定剔得到 k 个"。
+    """
+    p = build_payload(None, make_result(unknown=[
+        dict(sample="SAME", age=450.0 + 40 * i, s1=1.0) for i in range(5)]),
+        version="2.3.0")
+    rb = p["samples"][0]["age68_robustness"]
+    for v in rb["levels"]:
+        assert v["n_remaining"] >= 3, v
+        assert v["n_dropped"] <= rb["n_input"] - 3, v
+
+
+def test_robustness_is_registered_in_the_sample_key_whitelist():
+    """
+    `SAMPLE_KEYS` 是**白名单**：样品块里出现未登记的键，测试就红。
+    新增字段必须登记 —— 否则下游会拿到一个没人认识、也没人保证的字段。
+    """
+    assert "age68_robustness" in SAMPLE_KEYS
+    p = build_payload(None, make_result(unknown=[
+        dict(sample="SAME", age=450.0, s1=2.0)]), version="2.3.0")
+    for s in p["samples"]:
+        assert set(s) <= SAMPLE_KEYS, sorted(set(s) - SAMPLE_KEYS)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
