@@ -278,7 +278,17 @@ def reduce_interval(net: Dict[int, np.ndarray],
     j68, j76, _, _, _ = _chain(jk[238], jk[206], jk[207], jk[208], jk[232],
                                j204v, sk, use)
 
-    fac = (n - 1) / n      # 刀切方差的标准修正因子
+    # ★ 方差修正因子必须用**实际参与计算的 replicate 数**（2026-10-04 修）。
+    #   原先写 `fac = (n - 1) / n`，`n` 是 replicate **总数**；但下面的
+    #   `np.nansum` 只累加非 NaN 项 —— 若有 m 个有效、n−m 个 NaN，
+    #   正确的系数是 (m−1)/m，不是 (n−1)/n ⇒ σ 偏大。
+    #   实测偏大幅度：n=40/m=10 时 **4.1%**，n=40/m=5 时 **10.4%**。
+    #   ⚠ 可达性极低：`_chain` 产生 NaN 需要某个 leave-one-out 均值
+    #   **精确等于 0.0**（0/0），对真实浮点 cps 几乎不可能，除非整个通道恒为 0
+    #   （死迹）。所以这是"对几乎不会发生的输入给出正确的数"，不是修 bug ——
+    #   保留它是因为代价为零，而代价不对称：σ 偏大是**保守方向**。
+    m = int(np.count_nonzero(np.isfinite(j68) | np.isfinite(j76)))
+    fac = (m - 1) / m if m >= 2 else 1.0
     # nan-aware：个别 replicate 可能因为除零产生 nan，用 nanmean 跳过它们
     s68 = float(np.sqrt(fac * np.nansum((j68 - np.nanmean(j68)) ** 2)))
     s76 = float(np.sqrt(fac * np.nansum((j76 - np.nanmean(j76)) ** 2)))

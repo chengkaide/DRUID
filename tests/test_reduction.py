@@ -353,6 +353,46 @@ def test_common_lead_flags_say_whether_the_correction_really_happened():
     assert (d2["f206"] > 0) == d2["common_lead_applied"]
 
 
+def test_results_table_gives_the_common_lead_flags_an_exit():
+    """
+    ★ 2026-10-04：`sk_converged` / `common_lead_applied` / `i204_significant`
+    一度只活�� `reduce_interval` 的返回值里 —— **下游一个都拿不到**。
+    那与当年 `rho`「算了但没有出口」是同一类坑（`test_build_results_exports_rho_
+    and_strict_sigma_is_opt_in` 就在盯那条），所以这里用同样的办法盯这三列：
+    **结果表必须带它们**，否则「未收敛的测点」这个信息永远传不出去。
+
+    守卫的是"**存在且语义正确**"，不是具体数值 ——
+    数值正确性由 `check_example_batch` 负责。
+    """
+    from druid.reduction.trace import Tra
+    from druid.workflow import BatchConfig, build_results
+
+    n = 30
+    # ⚠ 噪声要**远小于** excess204，否则 204 通道的噪声压过真实普通铅
+    #   ⇒ `i204_significant` 判 False，而本条要验的正是"检出→扣除→收敛"
+    #   这条链在**真检出**时的样子。（第一版写 noise=1000.0 就踩了这个。）
+    net = _synth(n=n, seed=7, noise=1.0, excess204=30.0)
+    r = reduce_interval(net, _mask(n))
+    assert r["i204_significant"] and r["common_lead_applied"], \
+        f"这个输入本该检出并扣除普通铅，实得 {r['i204_significant']}/" \
+        f"{r['common_lead_applied']}（噪声是否太大？）"
+    tr = Tra(idx=0, sample="S01", role="unknown", path="B_1.csv",
+             t=np.arange(float(n)), net=net)
+    cfg = BatchConfig(data_dir=".", plot=False)
+    off = build_results([(tr, r)], np.array([0.0]), [1.0], [1.0],
+                        [r["R68"]], [r["R76"]], 0.011, 0.036, cfg)
+    for col in ("i204_significant", "common_lead_applied", "sk_converged"):
+        assert col in off.columns, (
+            f"结果表没有 {col} —— 这个事实又变成「算了但没有出口」了")
+    row = off.iloc[0]
+    # 有普通铅 ⇒ 检出、扣除、收敛三者都该是 True
+    assert bool(row["i204_significant"]) is True
+    assert bool(row["common_lead_applied"]) is True
+    assert bool(row["sk_converged"]) is True
+    # 恒等式：f206 > 0 ⟺ 已扣除（`common_lead.applied` 这条质控就是查它）
+    assert (float(row["f206_pct"]) > 0) == bool(row["common_lead_applied"])
+
+
 def _run_standalone() -> int:
     """见 tests/_selftest.py —— 让这个文件不装 pytest 也能直接跑。"""
     sys.path.insert(0, str(Path(__file__).resolve().parent))

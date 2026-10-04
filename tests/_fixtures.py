@@ -99,6 +99,12 @@ def make_result(unknown=None, standards=None, mode="已校准",
             校准状态=mode,
             年龄206_238_ftau=u.get("ftau", u["age"]),
             深度结构=u.get("struct", ""),
+            # ★ 普通铅三标志（2026-10-04）。缺了它们，`common_lead.applied`
+            #   在单测里永远不产出 —— 那等于这条检查项**零测试覆盖**，
+            #   而它的全部价值恰恰是抓"三者不自洽"。
+            common_lead_applied=bool(u.get("applied", False)),
+            sk_converged=bool(u.get("converged", True)),
+            i204_significant=bool(u.get("sig204", u.get("applied", False))),
         ))
         win_plan[f"{i:02d} {name}"] = u.get("windows", [u["age"]] * 30)
         # 「不分域年龄」表的一行。列名与 workflow 的产出对齐 ——

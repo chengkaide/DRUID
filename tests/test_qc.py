@@ -465,6 +465,88 @@ def test_clean_names_pass():
 # ═════════════════════════════════════════════════════════════════════════════
 # 表观 Th/U：一条**只能报、不能判**的检查项
 # ═════════════════════════════════════════════════════════════════════════════
+def test_common_lead_flags_catches_the_three_ways_they_can_disagree():
+    """
+    ★ 2026-10-04 新增。三件事**本该一致**，但历史上脱过节：
+
+        i204_significant    204Pb 有没有**检出**
+        common_lead_applied 有没有**真的扣掉**
+        sk_converged        迭代**是否收敛**
+
+    `i204_significant` 曾经直接写 `bool(sig204)`，与校正是否生效**完全脱钩** ——
+    迭代中途放弃时它仍报 True，而比值其实走的是「不扣」这条安全路径。
+    **任何靠它判断「是否检测到并扣除了普通铅」的下游质控都会得到相反结论。**
+
+    这里逐条构造三种不自洽，并断言它们**真的被报出来** ——
+    判据是"能抓"，不是"报了什么等级"（等级由 docstring 另行规定）。
+    """
+    # ① f206 > 0 却说没扣（口径不一致）
+    r1 = make_result(unknown=[dict(sample="A", age=450.0, f206=1.5, applied=False)])
+    c1 = keyed(assess_batch(r1))["common_lead.applied"]
+    assert c1.data["n_inconsistent"] >= 1, "f206>0 却说没扣，必须报出来"
+    assert "A" in c1.data["spots_inconsistent"]
+
+    # ② 扣了却没检出（比①更难解释）
+    r2 = make_result(unknown=[dict(sample="B", age=450.0, f206=1.5,
+                                   applied=True, sig204=False)])
+    c2 = keyed(assess_batch(r2))["common_lead.applied"]
+    assert c2.data["n_inconsistent"] >= 1, "扣了却没检出，必须报出来"
+
+    # ③ 未收敛 ⇒ 点名，但**不判 fail**
+    r3 = make_result(unknown=[dict(sample="C", age=450.0, f206=1.0,
+                                   applied=True, converged=False)])
+    c3 = keyed(assess_batch(r3))["common_lead.applied"]
+    assert c3.data["n_unconverged"] == 1, "未收敛的测点必须被点名"
+    assert c3.data["spots_unconverged"] == ["C"]
+    assert c3.level != FAIL, "未收敛不判 fail —— 它物理上可解释（老样品+高普通铅）"
+
+
+def test_common_lead_reads_convergence_the_right_way_round():
+    """
+    ★ 这条是**给一个真实错误兜底**的：`sk_converged=True` 的意思是
+    「**已**收敛」，而第一版检查项写的是数 `True` 的个数当"未收敛" ——
+    于是真实批次上 48/48 全被报成「未收敛」，而实际上 48 个**全部收敛**
+    （含那 5 个真扣了普通铅的）。
+
+    症状极具迷惑性：字段名、类型、全是 True 的一切都对，
+    只有 `n_unconverged` 悄悄变成 48。**任何"看着顺眼"的测试都抓不到它**，
+    所以这里必须用**反向输入**（`converged=False`）来钉。
+    """
+    # 默认（converged=True）⇒ 未收敛数必须是 0，而不是全部
+    r_ok = make_result(unknown=[dict(sample="A", age=450.0, f206=1.0, applied=True),
+                                dict(sample="B", age=451.0, f206=0.0, applied=False)])
+    c_ok = keyed(assess_batch(r_ok))["common_lead.applied"]
+    assert c_ok.data["n_unconverged"] == 0, (
+        f"全部收敛却报 {c_ok.data['n_unconverged']} 个未收敛 —— 逻辑反了")
+    assert c_ok.data["n_inconsistent"] == 0
+    assert c_ok.level == INFO, "三者一致就该是 info"
+
+    # 反向：显式未收敛 ⇒ 必须被数出来
+    r_bad = make_result(unknown=[dict(sample="A", age=450.0, f206=1.0,
+                                      applied=True, converged=False)])
+    c_bad = keyed(assess_batch(r_bad))["common_lead.applied"]
+    assert c_bad.data["n_unconverged"] == 1
+
+
+def test_common_lead_does_not_mix_up_the_sample_and_whole_table_coordinatess():
+    """
+    ⚠ 同类错误今天已经踩过三次（`handoff._robustness` 的重复索引、
+    `qtegra` 的短行、这里）：**拿全表的列去和样品子表的列比**。
+    `results` 有 83 行（样品 48 + 标样 35），样品子表只有 48 行。
+    形状不等时 pandas 直接抛广播错误；**长度碰巧相近时则静默错位** ——
+    后者才可怕。
+
+    这里用「有标样」的假数据（默认就有 91500/Ple）跑一遍：
+    若代码从全表取标志列、从子表取 f206，本条会因形状不等而报错，
+    或者悄悄比错行。两种都该被这条抓住。
+    """
+    r = make_result(unknown=[dict(sample="A", age=450.0, f206=1.0, applied=True),
+                             dict(sample="B", age=451.0, f206=0.0, applied=False)])
+    chk = keyed(assess_batch(r))["common_lead.applied"]
+    assert chk.data["n_inconsistent"] == 0, "两个测点各自自洽，不该报不一致"
+    assert chk.data["n_unconverged"] == 0
+
+
 def test_th_u_is_info_and_never_warns_even_when_all_spots_are_extreme():
     """
     这条检查项**永远不判 warn/fail**，无论比值多离谱。
@@ -599,6 +681,7 @@ def test_check_keys_are_ascii_unique_and_stable():
         "handoff.windows", "handoff.adept_dropout", "handoff.old_core_windows",
         "samples.multi_domain", "data.skipped_files", "samples.method_difference",
         "samples.whole_spot", "samples.unresolved_structure",
+        "common_lead.applied",
     }
     missing = expected - set(k)
     extra = set(k) - expected

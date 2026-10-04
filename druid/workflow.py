@@ -631,6 +631,22 @@ def build_results(spots, pidx, F68, F76, b68, b76, sd68, sd76, cfg: BatchConfig)
             年龄207_235=a75, s75_2sig=2 * sa75,
             年龄207_206=a76, s76_2sig=2 * sa76,
             协和度_pct=a75 / a68 * 100 if a68 > 0 else np.nan,
+            # ★ 普通铅校正的**如实记录**（2026-10-04）。
+            #   之前这三个事实只活��� `reduce_interval` 的返回值里，
+            #   下游（结果表 / 交接 JSON / 质控）**一个都拿不到** ——
+            #   那等于"算了但没有出口"，与当年 `rho` 那个坑同一类。
+            #   · 普通铅204是否**检出**（显著性检验的结果）
+            #   · 普通铅是否**真的扣了**（迭代失败会放弃扣除）
+            #   · 不动点迭代**是否收敛**（`stacey_kramers` 钳在 4570 Ma +
+            #     `age76` 5000 Ma 饱和 ⇒ 存在伪吸引不动点，会被误判为收敛）
+            #   三者**故意分开**：检出 ≠ 扣了，扣了 ≠ 收敛了。
+            #   列名用 ASCII（与 `rho_68_76` 一致）：结果表的列名要能被
+            #   `qc.py` / `handoff.py` / 外部脚本按名字取，混中文名会逼所有
+            #   消费方都写一遍映射。
+            i204_significant=(bool(r["i204_significant"])
+                              if r.get("i204_significant") is not None else None),
+            common_lead_applied=bool(r.get("common_lead_applied")),
+            sk_converged=bool(r.get("sk_converged")),
         ))
     return pd.DataFrame(rows)
 

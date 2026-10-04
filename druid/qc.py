@@ -1201,6 +1201,114 @@ def _check_whole_spot(result, cfg, th, out: List[Check]) -> None:
         n_uniform=n_uni, n_unresolved=n_bad, frac=frac_bad, spots=labels))
 
 
+def _check_common_lead(result, cfg, th, out: List[Check]) -> None:
+    """
+    ⑧ **普通铅校正「检出 / 扣除 / 收敛」三件事必须对得上**。
+
+    为什么需要这一条
+    ----------------
+    `reduction/ratios.py` 内部有三个彼此独立的事实：
+
+        i204_significant    204Pb 有没有**检出**（显著性检验）
+        common_lead_applied 有没有**真的扣掉**（迭代失败会放弃扣除）
+        sk_converged        不动点迭代**是否收敛**
+
+    原先它们只活在该函数的返回值里，下游一个都拿不到 ——
+    而这三者**并不等价**：`i204_significant` 曾经直接写 `bool(sig204)`，
+    与校正是否生效**完全脱钩**。于是会出现这种自相矛盾的输出：
+    「204 显著、i204 = 41.1 cps」而 `f206 = 0.0000` ——
+    比值其实走的是"不扣"这条安全路径。**任何靠这个字段判断
+    "是否检测到并扣除了普通铅"的下游质控都会得到相反的结论。**
+
+    判据（三个都是**一致性**检查，不重新判物理）
+    --------------------------------------------
+        ① `f206 > 0` ⟺ `common_lead_applied`
+           真扣了才有普通铅份额，没扣就必须是 0。
+        ② `common_lead_applied` ⟹ `i204_significant`
+           没检出却扣了，比"检出了却没扣"更难解释。
+        ③ 报了 `sk_converged = False` 的测点**点名**（不判 fail ——
+           触发它需要 f206 ≳ 0.4，而那本身已是应剔除的测点）。
+
+    为什么**不判 fail**
+    ------------------
+    这一条是**交叉核对**两个本该一致的字段，不是重新做物理判定。
+    真出现不一致时，值不值得留要看具体测点，机器不该替人决定；
+    而"未收敛"在物理上确实是可解释的（老样品 + 高普通铅），
+    只是一条**必须被下游看见**的提示。所以最重只判 warn。
+    """
+    res = result.results
+    roles = _col(res, "类型")
+    unk = _sub(res, roles == ROLE_LABEL_CN[ROLE_UNKNOWN])
+    if getattr(unk, "empty", True):
+        return
+    # ⚠⚠ 三个标志列必须**从 unk 上取**（2026-10-04 当场踩到）。
+    #   `res` 有 83 行（样品+标样），`unk` 只有 48 行 —— 拿全表的列去和
+    #   子表的列比，形状 (83,) vs (48,) 直接广播失败；更糟的情形是
+    #   长度碰巧相近时下标**静默错位**。这与 `handoff._robustness`
+    #   那次踩的是同一类（坐标系混用）。
+    col_applied = _col(unk, "common_lead_applied")
+    f206 = _col(unk, "f206_pct")
+    sig = _col(unk, "i204_significant")
+    conv = _col(unk, "sk_converged")
+    names = _col(unk, "样品")
+    if col_applied is None:
+        return
+
+    def _flags(col):
+        """布尔列 → numpy bool 数组；<NA>（老结果表没有这一列）当 False。"""
+        if col is None:
+            return np.zeros(len(unk), bool)
+        return col.astype("boolean").fillna(False).to_numpy(dtype=bool)
+
+    def _spot(i):
+        return str(names.iloc[i]) if names is not None else str(i)
+
+    applied = _flags(col_applied)
+    # ① f206 > 0 ⟺ applied
+    bad_1 = []
+    if f206 is not None:
+        has_lead = (pd.to_numeric(f206, errors="coerce").fillna(0.0)
+                    .to_numpy() > 0)
+        bad_1 = [_spot(i) for i in np.nonzero(applied != has_lead)[0]]
+    # ② applied ⇒ significant
+    bad_2 = ([_spot(i) for i in np.nonzero(applied & ~_flags(sig))[0]]
+             if sig is not None else [])
+    # ③ 未收敛的测点（只点名，不判）。
+    #    ⚠ 这里是 `~unconv`，**不是** `unconv` —— `sk_converged=True` 的意思是
+    #    「已收敛」。第一版写成数 True 的个数，于是真实批次 48/48 全被报成
+    #    「未收敛」，而实际上 48 个测点**全部收敛**（5 个真扣了普通铅的也是）。
+    #    ⇒ 断言必须用**反向**输入来钉，否则这种错自己看不出来。
+    converged = _flags(conv)
+    unconv = ~converged
+    n_unconv = int(unconv.sum())
+    spots_unconv = [_spot(i) for i in np.nonzero(unconv)[0]]
+
+    n_bad = len(bad_1) + len(bad_2)
+    detail = ""
+    if bad_1:
+        detail += ("「f206 > 0」与「已扣除」不一致的测点：" + "、".join(bad_1[:8])
+                   + f"（共 {len(bad_1)} 个）—— 两者本该同真同假。")
+    if bad_2:
+        detail += ("「检出了却没扣除」的测点：" + "、".join(bad_2[:8])
+                   + f"（共 {len(bad_2)} 个）—— 比「没检出却扣除」更难解释。")
+    if n_unconv:
+        detail += ("普通铅不动点迭代**未收敛**的测点：" + "、".join(spots_unconv[:8])
+                   + f"（共 {n_unconv} 个）—— 它们的普通铅组成是**猜的**，"
+                     "下游若要用 f206 或 207/206，必须先看这一条。")
+    out.append(_mk(
+        "common_lead.applied",
+        WARN if n_bad else INFO,
+        "普通铅「检出 / 扣除 / 收敛」三者一致" if not n_bad
+        else "普通铅校正的三个标志不自洽",
+        observed=(f"不一致 {n_bad} 个；未收敛 {n_unconv} 个"
+                  if (n_bad or n_unconv) else "全部一致，且均已收敛"),
+        criterion="f206 > 0 ⟺ 已扣除；已扣除 ⇒ 已检出（未收敛只点名，不判）",
+        detail=detail or ("三件事都对得上：204 检出、确实扣了、迭代也收敛。"
+                          "「未收敛」在这类输入下是罕见情形（需 f206 ≳ 0.4）。"),
+        n_inconsistent=int(n_bad), spots_inconsistent=bad_1 + bad_2,
+        n_unconverged=n_unconv, spots_unconverged=spots_unconv))
+
+
 def _check_handoff(result, cfg, th, out: List[Check]) -> None:
     """
     ⑤ 交接给 ADEPT 会发生什么 —— 这一组是本模块存在的主要理由。
@@ -1531,6 +1639,7 @@ def assess_batch(result, cfg=None, thresholds: Optional[QCThresholds] = None) ->
     _check_samples(result, cfg, th, out)
     _check_th_u(result, cfg, th, out)
     _check_whole_spot(result, cfg, th, out)
+    _check_common_lead(result, cfg, th, out)
     _check_handoff(result, cfg, th, out)
     _check_process(result, cfg, th, out)
     # 放在最后：它是对前面全部事实的**派生汇总**（用途清单），自己不判事实。
