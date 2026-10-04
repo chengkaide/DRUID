@@ -463,6 +463,111 @@ def test_clean_names_pass():
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+# 表观 Th/U：一条**只能报、不能判**的检查项
+# ═════════════════════════════════════════════════════════════════════════════
+def test_th_u_is_info_and_never_warns_even_when_all_spots_are_extreme():
+    """
+    这条检查项**永远不判 warn/fail**，无论比值多离谱。
+
+    为什么把"不许判"写成测试而不是写进注释
+    ----------------------------------------
+    因为总有一天会有人觉得"这些点明显不对，顺手 warn 一下更负责"。
+    那一改就把一个**仪器因子**升级成了**地质判据**：`Th_U` 列是灵敏度未校正的
+    表观值（`ratios.py` 注释原话），与文献 Th/U 差一个未定的仪器灵敏度因子比，
+    且该比值随基体漂移（示例批次实测 corr(log Th/U, log ²³⁸U) = −0.69）。
+    拿它判 warn 等于对着仪器偏置说"这个测点有问题"。
+
+    这里的输入是**故意极端**的：主标 0.4、样品全都 0.001（比值 0.0025）。
+    若哪天有人把它改成 warn/fail，本条当场红。
+    """
+    r = make_result(unknown=[dict(sample="S01", age=450.0, thu=0.001),
+                             dict(sample="S02", age=451.0, thu=0.0015)])
+    chk = keyed(assess_batch(r))["samples.th_u"]
+    assert chk.level == INFO, "表观 Th/U 是观察项，不判好坏"
+    # 但**必须把极端的测点点名**出来 —— "不判"不等于"不看"。
+    assert chk.data["n_low"] == 2 and chk.data["spots_low"] == ["S01", "S02"]
+    assert chk.data["ratio_median"] < 0.01
+
+
+def test_th_u_is_normalised_against_the_primary_standard():
+    """
+    归一化的分母是**主标中位**，不是某个写死的数。
+
+    这么做的理由：表观 Th/U 差一个仪器灵敏度因子比，而那个因子与仪器、
+    与标样批次有关 ⇒ 任何绝对门槛都会在换仪器时失效（本批 91500 表观 0.285、
+    而公认真值约 0.35，差 −19%）。归一之后得到的是**批内相对量**，
+    这才是 Lim et al. 那种「Th/U 台阶」式筛分能可靠使用的形式。
+    """
+    # 假数据的默认主标 Th_U = 0.4（见 _fixtures.py）
+    r = make_result(unknown=[dict(sample="S01", age=450.0, thu=0.2),
+                             dict(sample="S02", age=451.0, thu=0.4),
+                             dict(sample="S03", age=452.0, thu=0.8)])
+    chk = keyed(assess_batch(r))["samples.th_u"]
+    assert abs(chk.data["primary_median"] - 0.4) < 1e-12
+    assert abs(chk.data["sample_median"] - 0.4) < 1e-12
+    assert abs(chk.data["ratio_median"] - 1.0) < 1e-12, "中位应恰好落在主标上"
+    # 0.2/0.4 = 0.5 恰好在门槛上（`>=` 侧），0.8/0.4 = 2.0 同理 ⇒ 都不点名
+    assert chk.data["n_low"] == 0 and chk.data["n_high"] == 0
+
+
+def test_th_u_needs_a_primary_standard_to_normalise_against():
+    """
+    没有主标就不产出这一条 —— 因为归一化没有分母。
+
+    这与 `calibration.mode` 判 fail 是两件事：那条说"绝对年龄不成立"，
+    这条说"批内相对比较做不了"。少报一条比报一个假比值好。
+    """
+    r = make_result(standards=[("Ple", "监控标样", 3, 337.13, 343.24, 1.00)])
+    keys = {c.key for c in assess_batch(r)}
+    assert "samples.th_u" not in keys, "没有主标就没有归一化的分母，不该产出"
+
+
+def test_th_u_says_out_loud_that_the_value_is_not_element_calibrated():
+    """
+    `detail` 必须写明两件事：① 不要套文献绝对门槛；② 标样自校准的实际偏置。
+
+    为什么钉住措辞而不只是钉住字段：这一条的全部价值就是"让人不要误用它"。
+    `data` 里有 `element_calibrated=False` 只解决机器读，**解决不了人读** ——
+    下游多半只看 `observed` 与 `detail`。少写一句，一个 −19% 的仪器偏置
+    就会被人当成 Th/U 真的偏低。
+    """
+    r = make_result(unknown=[dict(sample="S01", age=450.0, thu=0.2)])
+    chk = keyed(assess_batch(r))["samples.th_u"]
+    assert chk.data["element_calibrated"] is False
+    for kw in ("表观", "灵敏度", "不要把文献", "批内相对比较"):
+        assert kw in chk.detail, f"detail 里必须交代「{kw}」"
+    assert "0.1" in chk.detail, "必须把要避开的那个具体门槛写出来，否则劝不住人"
+    # 判据那一栏也要说明"不判 warn/fail"，否则它会被当门槛读
+    assert "不判" in chk.criterion
+
+
+def test_th_u_spots_are_aligned_with_the_rows_that_have_values():
+    """
+    点名的样品名必须与**真正有 Th/U 值的行**一一对应，不能错位。
+
+    这是本条最容易写错的地方：`Th_U` 要 `dropna()`，而样品名列**不会**跟着
+    变短。第一版就差点直接 `zip(names, ratio)` —— 那样只要有一个测点
+    缺 Th/U，后面所有点名就整体前移一位，而症状是"名单看着都像真样品名"，
+    任何数值测试都抓不到。
+    """
+    r = make_result(unknown=[dict(sample="HAS1", age=450.0, thu=0.2),
+                             dict(sample="NONE", age=451.0, thu=float("nan")),
+                             dict(sample="HAS2", age=452.0, thu=0.8)])
+    chk = keyed(assess_batch(r))["samples.th_u"]
+    assert chk.data["n_spots"] == 2, "只有两行真有 Th_U"
+    named = set(chk.data["spots_low"]) | set(chk.data["spots_high"])
+    assert "NONE" not in named, "缺值的行不该被点名"
+    assert named <= {"HAS1", "HAS2"}
+    # 再验一次：有值的行越界时，只点名它自己，**不能带上缺值那一行**
+    r2 = make_result(unknown=[dict(sample="HAS1", age=450.0, thu=0.2),
+                              dict(sample="NONE", age=451.0, thu=float("nan")),
+                              dict(sample="HAS2", age=452.0, thu=0.05)])
+    c2 = keyed(assess_batch(r2))["samples.th_u"]
+    assert c2.data["spots_low"] == ["HAS2"], \
+        "只应点名 HAS2；错位会得到 HAS1 或 ['HAS1', 'HAS2']"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 # 契约层面的不变量
 # ═════════════════════════════════════════════════════════════════════════════
 def test_check_keys_are_ascii_unique_and_stable():
@@ -490,6 +595,7 @@ def test_check_keys_are_ascii_unique_and_stable():
         "uncertainty.count_rate_match", "uncertainty.secondary_correction",
         "uncertainty.claim_scope",
         "samples.concordance", "samples.common_lead", "data.name_hygiene",
+        "samples.th_u",
         "handoff.windows", "handoff.adept_dropout", "handoff.old_core_windows",
         "samples.multi_domain", "data.skipped_files", "samples.method_difference",
         "samples.whole_spot", "samples.unresolved_structure",

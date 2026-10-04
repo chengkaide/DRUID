@@ -561,7 +561,14 @@ def test_landing_page_states_the_real_selfcheck_count():
     与上面 `test_bat_files_are_crlf_on_disk` 互为镜像。174 是 CI 加 macOS
     job 时补「中文字体真的可用」与「reveal/list_drives 三平台分支」两条 ——
     macOS 的代码路径在这台 Windows 开发机上一行都执行不到，只能这么测。
-    现为 179：A-23（`--strict-sigma`）补四条 —— ① 两个比值相乘时交叉项的必要性
+    现为 184：A-14 候选 B（表观 Th/U 只读观察项）补五条 —— ① 恒为 `info`、
+    越界也不判 warn/fail（钉住"只报不判"这条约定本身，因为总有一天会有人
+    觉得"顺手 warn 一下更负责"，而那一改等于把仪器偏置当成地质判据）、
+    ② 归一化分母必须是主标中位、不是写死的数、③ 没有主标就不产出、
+    ④ `detail` 必须写明"不要套文献绝对门槛"与标样自校准偏置（**人读的那部分**，
+    `element_calibrated=False` 只管机器读）、⑤ 点名的样品名要与真正有值的行
+    对齐（`Th_U` 要 dropna 而样品名列不会变短，第一版差点直接 zip 而错位）。
+    179 是 A-23（`--strict-sigma`）补的四条 —— ① 两个比值相乘时交叉项的必要性
     （`relative_sigma_product` 在 ρ=0 时退化成 hypot）、② ★ 交叉项只能用
     **内部**分量这一条（外部分量是批级标定项，混用会把 −0.12 与 −1.2 倍的差别
     算反）、③ `build_results` 的契约：结果表必须带 `rho_68_76`，

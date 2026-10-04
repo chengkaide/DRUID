@@ -152,6 +152,16 @@ class QCThresholds:
     #: 表不带 207/206 列，所以这些窗口对 ADEPT 而言是不可用的。
     old_age_cutoff_ma: float = 1000.0
 
+    # ── 表观 Th/U（只看，不判）──
+    # ⚠ 这两个门槛**只用来标出"值得看一眼的测点"，不是判据**。理由见
+    # `_check_th_u` 的 docstring：本工具的 `Th_U` 列是**灵敏度未校正的表观值**，
+    # 它随基体（238U 计数率）漂移，套不了文献里的绝对 Th/U 门槛。
+    #: 表观 Th/U 相对**主标中位**的比值。实测示例批次 91500 表观 0.285、
+    #: 样品 0.047–0.869 ⇒ 归一后 0.17–3.05，5–95% 是 0.27–2.39。
+    #: 低于 0.5 / 高于 2.0 只是"落在本批自身分布的尾部"，不代表有问题。
+    th_u_ratio_lo: float = 0.5
+    th_u_ratio_hi: float = 2.0
+
     # ── 对照方法差异 ──
     method_diff_warn_pct: float = 5.0        # simple 与 ftau 的相对差中位
 
@@ -968,6 +978,133 @@ def _check_samples(result, cfg, th, out: List[Check]) -> None:
             void_median_age_Ma=va, sample_median_age_Ma=sref))
 
 
+def _check_th_u(result, cfg, th, out: List[Check]) -> None:
+    """
+    ⑧ **表观 Th/U 的批内分布** —— 只报数，**不判好坏**。
+
+    为什么值得单列一条
+    ------------------
+    ① 它是**已经算出来了但从没被当判据用**的量：`reduction/ratios.py` 每个窗口
+       都在算 ThU，`io/handoff.py` 早就报了 `th_u_median`，但全仓没有任何一处
+       拿它做过判断 —— 于是"某个测点的 Th/U 是不是特别高/低"这件事，
+       下游只能自己从结果表里翻。
+    ② 它是 Lim et al. (2024, *J. Petrology* 65, egae074) 六步滤波里**唯一
+       不需要外标、本批就能算**的那类判据（该文第 ③ 步，Th/U < 0.1）。
+
+    ⚠⚠ 为什么**只能报、不能判**（这一段是本条存在的全部理由）
+    -----------------------------------------------------------
+    那个 0.1 是**文献 Th/U**（元素分馏校正后的真实比值）。本工具的 `Th_U` 列是
+    **灵敏度未校正的表观值**（`ratios.py` 自己的注释就写着"严格说是灵敏度未校正
+    的表观 Th/U"），它与文献值之间差一个**未定的仪器灵敏度因子比**，
+    而且**这个比值随基体漂移**。示例批次实测：
+
+        · 91500 主标：表观 **0.285**，RSD 仅 **5.8%**（同一基体，稳定）
+        · Ple 监控标样：表观 **0.096**，RSD 15.6%
+        · 91500 的 ²³²Th/²³⁸U **公认值 0.351**（Jeong et al. 2018 用 SHRIMP
+          标定；Wiedenbeck et al. 1995 报 Th/U 0.3444、Th 28.61 ppm、
+          U 81.2 ppm）⇒ 本批表观值**低约 19%**，是仪器因子，不是地质信号
+        · 样品侧 corr(log Th/U, log ²³⁸U) = **−0.69**：238U 计数率越高，
+          表观 Th/U 越低。**这正是基体效应**，而锆石的 Th/U 判据要判的
+          恰恰是"这个比值本身低不低"，两件事被基体效应搅在一起了
+
+    所以直接套 0.1 的后果是可算的：**示例批次 27.1%（13/48）的样品测点
+    会被误判成"低 Th/U ＝ 有隐蔽蚀变"**，而它们的年龄并没有任何异常。
+    那个 0.1 还是论文**靠 MSWD 迭代试出来**的（原文：tested through an
+    iterative approach of filtering and zircon date MSWD），
+    而论文自己就警告 MSWD 不能单独当可靠性度量 —— 循环论证。
+
+    那为什么还要报
+    --------------
+    因为**归一化之后它是好用的**。以主标中位为 1，示例批次得到的是一个
+    与仪器因子无关的**批内相对量**：样品中位 0.45、范围 0.17–3.05。
+    Lim et al. 那种"Th/U 台阶 / 分带"式的**批内对比**（同一批里哪些测点
+    偏高、哪些偏低）在这个口径下是成立的 —— 而那正是"隐蔽蚀变筛分"
+    真正要用的形式。要把它变成跨批可比的绝对判据，得先有元素灵敏度校正，
+    那是另一个工具的活（`tools/trace_channels.py` 记着这件事）。
+
+    门槛 `th_u_ratio_lo/hi` 的地位
+    ------------------------------
+    **不是判据**，只是"落在本批自身分布尾部"的提示线。所以：
+    · level 恒为 `info`，**永远不判 warn/fail**；
+    · 越过门槛的测点在 `spots_low` / `spots_high` 里点名，供人工去看；
+    · 判据那一栏必须写清它是相对量且未经元素校正，否则下���会当绝对值用。
+    """
+    res = result.results
+    roles = _col(res, "类型")
+    thu_col = _col(res, "Th_U")
+    if roles is None or thu_col is None:
+        return
+    # 标样与样品的表观 Th/U 不在同一基体上，只有归一化之后才可比 ⇒ 必须有主标。
+    if _sub(res, roles == ROLE_LABEL_CN[ROLE_PRIMARY]).empty:
+        return
+
+    def _num(sub):
+        c = _col(sub, "Th_U")
+        if c is None:
+            return pd.Series(dtype=float)
+        return pd.to_numeric(c, errors="coerce").dropna()
+
+    prim = _num(_sub(res, roles == ROLE_LABEL_CN[ROLE_PRIMARY]))
+    unk = _sub(res, roles == ROLE_LABEL_CN[ROLE_UNKNOWN])
+    if prim.empty or getattr(unk, "empty", True):
+        return
+    unk_t = _num(unk)
+    if unk_t.empty:
+        return
+
+    ref = float(prim.median())
+    ratio = unk_t / ref
+    names = _col(unk, "样品")
+    spot = ([str(x) for x in names.tolist()] if names is not None
+            else [str(i) for i in range(len(unk_t))])
+    # ⚠ `unk_t` 是 dropna 之后的短 Series，而 `names` 是整列 —— 两者下标不对齐。
+    #   所以配对必须显式按 mask 取，不能直接 zip（这一版第一版就写错了）。
+    keep = pd.to_numeric(_col(unk, "Th_U"), errors="coerce").notna()
+    spot = [s for s, k in zip(spot, keep.tolist()) if k]
+    if len(spot) != len(ratio):            # 兜底：对不上就不点名，只报数
+        spot = []
+
+    low = [s for s, v in zip(spot, ratio.tolist()) if v < th.th_u_ratio_lo]
+    high = [s for s, v in zip(spot, ratio.tolist()) if v > th.th_u_ratio_hi]
+    out.append(_mk(
+        "samples.th_u", INFO,
+        "表观 Th/U 的批内分布（相对主标归一，只作观察）",
+        observed=(f"样品中位 {ratio.median():.2f}×主标"
+                  f"（表观 {unk_t.median():.3f} vs 主标 {ref:.3f}），"
+                  f"范围 {ratio.min():.2f}–{ratio.max():.2f}×，n={len(ratio)}；"
+                  f"低于 {th.th_u_ratio_lo:g}× 的 {len(low)} 个、"
+                  f"高于 {th.th_u_ratio_hi:g}× 的 {len(high)} 个"),
+        criterion=(f"仅供定位批次内的异常测点：比值落在 "
+                   f"{th.th_u_ratio_lo:g}–{th.th_u_ratio_hi:g}× 之外才点名列出来，"
+                   f"**不判 warn/fail**"),
+        detail="这一列是**灵敏度未校正的表观 Th/U**（`ratios.py` 注释原话），"
+               "与文献 Th/U 之间差一个未定的仪器灵敏度因子比，且该比值随基体漂移"
+               "（示例批次 corr(log Th/U, log ²³⁸U) = −0.69）。"
+               "**因此不要把文献的绝对门槛（Lim et al. 2024 用 0.1）套到这一列上** —— "
+               "示例批次那样做会把 27% 的正常测点误判成「低 Th/U ＝ 有隐蔽蚀变」。"
+               "要判隐蔽蚀变，得先做元素灵敏度校正把表观值换成真比值；"
+               "现在能可靠使用的是**批内相对比较**：归一后同一批里哪些测点偏高偏低，"
+               "这正是 Th/U 台阶 / 分带式筛分要的形式。"
+               f"标样自校准：主标表观 {ref:.3f}（RSD {prim.std() / prim.mean():.1%}），"
+               "91500 的 ²³²Th/²³⁸U 公认值约 0.35（Jeong et al. 2018），"
+               "故本批表观值约有 −20% 的仪器偏置，属已知、未校正。",
+        n_spots=int(len(ratio)),
+        sample_median=_finite(unk_t.median()),
+        primary_median=_finite(ref),
+        primary_rsd_pct=_finite(prim.std() / prim.mean() * 100.0),
+        ratio_median=_finite(ratio.median()),
+        ratio_p05=_finite(ratio.quantile(0.05)),
+        ratio_p95=_finite(ratio.quantile(0.95)),
+        n_low=int(len(low)), n_high=int(len(high)),
+        spots_low=low, spots_high=high,
+        # ⚠ 键名**故意不叫** `calibrated`：那个词在 `calibration.mode` 里有
+        #   确定的含义（是否用主标归一过）。这里说的是另一件事 ——
+        #   表观 Th/U 尚未做元素灵敏度校正。混用同一个词会让人以为
+        #   "未校准"说的是主标归一，那是另一条检查项的事。
+        element_calibrated=False,
+    ))
+
+
 def _check_whole_spot(result, cfg, th, out: List[Check]) -> None:
     """
     **不分域（整段）口径**的两条检查项。
@@ -1392,6 +1529,7 @@ def assess_batch(result, cfg=None, thresholds: Optional[QCThresholds] = None) ->
     _check_standards(result, cfg, th, out)
     _check_uncertainty(result, cfg, th, out)
     _check_samples(result, cfg, th, out)
+    _check_th_u(result, cfg, th, out)
     _check_whole_spot(result, cfg, th, out)
     _check_handoff(result, cfg, th, out)
     _check_process(result, cfg, th, out)
