@@ -29,7 +29,7 @@ LA-ICP-MS 锆石 U-Pb 数据还原工具。把 Qtegra/iCAP 导出的 cps 时间�
   有测试钉着）
 - 仓库布局：`druid/` 代码 · `examples/EX2022A/` 示例批次（85 个测点，样品名
   匿名成 `S01`…`S48`，标样保留）· `tests/` 自检 · `docs/` 文档站（五份页面）·
-  `tools/` 十一个脚本（只有 `synth_batch.py` / `synth_profile.py` 会写临时批次目录，
+  `tools/` 十三个脚本（只有 `synth_batch.py` / `synth_profile.py` 会写临时批次目录，
   其余只读）—— 入口都是 `python tools/<脚本>.py --help`：
   `gen_docs_split_figure.py`（画落地页三联图并注入）·
   `gen_docs_preview.py`（画落地页首屏「一眼看到什么」那一块并注入）·
@@ -55,7 +55,12 @@ LA-ICP-MS 锆石 U-Pb 数据还原工具。把 Qtegra/iCAP 导出的 cps 时间�
   并把"软件政策（`merge_close` 的 5% 地质门槛）"与"数据信息量"分成两条曲线；
   同样写 G 盘临时目录、用完自删。⚠ 它自带 `fast_rmtree`：本机删除被
   `sitecustomize.py` 改道回收站（0.4 s/文件）⇒ 上万个临时文件必须走原生
-  `DeleteFileW`，否则实验时间全花在挪回收站上）
+  `DeleteFileW`，否则实验时间全花在挪回收站上）·
+  `spot_concordia.py`（**单点**的逐深度窗口一次给三样：坪图、Wetherill 与
+  Tera–Wasserburg 协和分布、以及「协和度–深度」—— 回答"这些窗口年龄是不是
+  同一个协和体系"。口径全部复用流水线自己的函数、一个数都不另算；
+  只读，产物写到批次目录旁。⚠ 逐窗口 `207Pb/235U` 的 2σ 比坐标轴还宽，
+  椭圆默认不画、要用 `--window-ellipse` 显式打开）
 - Python 层：**只有 numpy / pandas / matplotlib / openpyxl / xlrd**。
   **没有 scipy** —— 年龄方程的不动点迭代、二分法、卡方上尾概率都是自己实现的，
   这不是疏漏而是设计：不依赖会变的第三方行为。
