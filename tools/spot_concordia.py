@@ -70,6 +70,10 @@ c ＝ 合成相对 1σ，a ＝ 对应的内部分量，ρ ＝ `reduce_interval` 
     <序号>_<样品>_深度剖面.png   官方样式的深度剖面图（调用流水线自己的画图函数）
     <序号>_<样品>_单点总览.pdf   上述拼成一份 PDF
 
+控制台同时打两张表：域均值表，以及「相邻域判别力」表 —— 后者的四把尺子是
+z_age（年龄轴）/ z_conc（协和度轴）/ z_plane（协和平面马氏距离）/ z_ThU、z_U
+（化学台阶），全部折成同一个「等效 σ 数」口径，可以直接比谁更锋利。
+
 ⚠ 本脚本**只读**：不写结果表、不改任何数值输出、不碰 `结果/`。
 """
 from __future__ import annotations
@@ -77,6 +81,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from statistics import NormalDist
 
 import numpy as np
 
@@ -207,10 +212,13 @@ def prepare(cfg: BatchConfig, spot: str, raw_r76: bool = False):
     tau = prof["tau"].to_numpy(float)
     # 206/238：套 F(τ)。与 analyse_depth_spot 内部逐位同一条路径 ——
     # 下面这行 assert 就是钉这一点的（差一位就说明口径被改过）。
+    # ⚠ 必须带 `equal_nan=True`：cycle 不足的窗口本来就是 NaN，而
+    #   `np.array_equal` 对 NaN 一律判不等 ⇒ 实测示例批次 19/36 个多域测点
+    #   会被误报成「F(τ) 口径被改动过」。带 equal_nan 后逐位相等仍成立。
     F = bracket_F(tau, brack, "R68", ref68)
     r68 = prof["R68"].to_numpy(float) * F
     s68 = np.hypot(prof["s68"].to_numpy(float) * F, sd68 * r68)
-    if not np.array_equal(age68(r68), prof["age68"].to_numpy(float)):
+    if not np.array_equal(age68(r68), prof["age68"].to_numpy(float), equal_nan=True):
         raise AssertionError("逐窗口年龄与流水线不一致：F(τ) 口径被改动过？")
 
     # 207/206：**不**做逐窗口 F(τ) 校正，只扣一个批级常数偏置。
@@ -556,6 +564,107 @@ def draw_concordia_only(P, out_png: Path, nsigma: float, dpi: int = 160,
 # ─────────────────────────────────────────────────────────────────────────────
 # 三、控制台表
 # ─────────────────────────────────────────────────────────────────────────────
+def _sigma_ln_concordance(d, sd68, sd76):
+    """
+    域均值协和度 C = age(207/235)/age(206/238) 的相对 1σ（对 ln C 严格传播）。
+
+    记 k(r) = d ln age / d ln r；r75 = r76·r68·238/235 ⇒
+        ln C = k75·(ln r68 + ln r76) − k68·ln r68
+        σ²(ln C) = (k75−k68)²c68² + k75²c76² + 2(k75−k68)k75·a68·a76·ρ
+    对角线用**合成**相对 1σ，交叉项只用**内部**分量配内部 ρ（σ 与 ρ 必须同基，
+    与 `core/statistics.relative_sigma_product` 同一约定）。
+    """
+    def k(r):
+        return r / ((1.0 + r) * np.log1p(r))
+
+    c68, c76 = d["s68"] / d["r68"], d["s76"] / d["r76"]
+    k68 = float(k(d["r68"]))
+    k75 = float(k(d["r75"]))
+    a68 = np.sqrt(max(c68 ** 2 - sd68 ** 2, 0.0))
+    a76 = np.sqrt(max(c76 ** 2 - sd76 ** 2, 0.0))
+    var = ((k75 - k68) ** 2 * c68 ** 2 + k75 ** 2 * c76 ** 2
+           + 2.0 * (k75 - k68) * k75 * a68 * a76 * d["rho"])
+    return float(np.sqrt(max(var, 0.0)))
+
+
+def _z_equiv(d_maha):
+    """
+    2D 马氏距离 → 等尾概率的 1D σ 数（同一置信水平才好比大小）。
+
+    q = exp(−d²/2)/2 是 2D 的上尾概率；1D 的等尾 z 满足 Φ(−z) = q。
+    ⚠ d 大时 q 下溢到 0，`NormalDist.inv_cdf(1.0)` 会抛 StatisticsError
+      ⇒ 改用上尾渐近式 Φ(−z) ≈ e^{−z²/2}/(z√(2π))：
+      z² + 2 ln z = d² − ln(2π) + 2 ln 2。
+    """
+    q = 0.5 * float(np.exp(-0.5 * d_maha ** 2))
+    if not np.isfinite(q):
+        return float("nan")
+    if q < 1e-15:
+        z = max(float(d_maha), 1.0)
+        for _ in range(8):
+            z = float(np.sqrt(max(d_maha ** 2 - 0.4515827 - 2.0 * np.log(z), 1e-12)))
+        return z
+    if q >= 1.0:
+        return 0.0
+    return NormalDist().inv_cdf(1.0 - q)
+
+
+def _chem_z(arr, a, b):
+    """两个域之间的化学台阶显著性（纯内部散布 / sqrt(n)，不引外部不确定度）。"""
+    x, y = arr[a["i0"]:a["i1"]], arr[b["i0"]:b["i1"]]
+    x, y = x[np.isfinite(x)], y[np.isfinite(y)]
+    if len(x) < 2 or len(y) < 2:
+        return float("nan")
+    return abs(float(np.mean(x)) - float(np.mean(y))) / np.hypot(
+        float(np.std(x, ddof=1) / np.sqrt(len(x))),
+        float(np.std(y, ddof=1) / np.sqrt(len(y))))
+
+
+def print_domain_separation(P):
+    """
+    相邻域之间「到底分不分得开」：四把尺子各给一个等效 σ 数。
+
+    z_age   年龄轴     仓库现在用的判据
+    z_conc  协和度轴   谐和图带来的 —— 实测对「混合」结构性盲（见仓库记忆）
+    z_plane 协和平面   (206/238, 207/235) 马氏距离（含 ρ），谐和图带来的
+    z_ThU / z_U       化学台阶，纯内部散布
+    """
+    doms = P["doms"]
+    if len(doms) < 2:
+        return
+    sd68, sd76 = P["sd68"], P["sd76"]
+    prof = P["prof"]
+    thu = prof["ThU"].to_numpy(float)
+    ucp = prof["U_cps"].to_numpy(float)
+    print("-" * 100)
+    print("相邻域之间的判别力（等效 σ 数；≥3 才算真分开）")
+    print("%-11s %5s %7s %6s %7s %8s %7s %7s" %
+          ("域对", "窗数", "Δage", "z_age", "z_conc", "z_plane", "z_ThU", "z_U"))
+    for i in range(len(doms) - 1):
+        p, q = doms[i], doms[i + 1]
+        d_age = abs(p["age68"] - q["age68"])
+        z_age = d_age / np.hypot(p["age68_2s"] / 2.0, q["age68_2s"] / 2.0)
+        z_conc = (abs(p["concordance"] - q["concordance"]) / 100.0
+                  / np.hypot(_sigma_ln_concordance(p, sd68, sd76),
+                             _sigma_ln_concordance(q, sd68, sd76)))
+        cov = np.array([[
+            p["s68"] ** 2 + q["s68"] ** 2,
+            0.5 * (p["rho"] * p["s68"] * p["s75"] + q["rho"] * q["s68"] * q["s75"])],
+            [0.5 * (p["rho"] * p["s68"] * p["s75"] + q["rho"] * q["s68"] * q["s75"]),
+             p["s75"] ** 2 + q["s75"] ** 2]])
+        dv = np.array([q["r68"] - p["r68"], q["r75"] - p["r75"]])
+        try:
+            z_plane = _z_equiv(float(np.sqrt(dv @ np.linalg.inv(cov) @ dv)))
+        except np.linalg.LinAlgError:
+            z_plane = float("nan")
+        print("%-11s %5d %7.1f %6.2f %7.2f %8.2f %7.2f %7.2f" %
+              ("%s→%s" % (p["name"], q["name"]), p["n_win"] + q["n_win"], d_age,
+               z_age, z_conc, z_plane, _chem_z(thu, p, q), _chem_z(ucp, p, q)))
+    print("读法：z_age 是仓库现在用的尺子；z_conc / z_plane 是谐和图带来的；")
+    print("      z_ThU / z_U 是化学台阶。⚠ 域级 σ 实测偏乐观 2.4–2.9 倍（见 D-4）")
+    print("      ⇒ 上表的 z 若要当『真显著』用，还应先除以约 2.5。")
+
+
 def print_report(P):
     """把图上的数同时打成文字表 —— 图上读不准，表里能核。"""
     print()
@@ -591,6 +700,7 @@ def print_report(P):
               % (b["s75_legacy_ma"], b["s75_strict_ma"],
                  b["s75_strict_ma"] / b["s75_legacy_ma"]
                  if b["s75_legacy_ma"] else float("nan")))
+    print_domain_separation(P)
     print("-" * 100)
     print("读法：协和图上同一测点的窗口若沿一条斜率 1 的线分布 → 单个协和体系；")
     print("      向 207/206 高值一侧散开 → 有普通铅（或老核混入）；向低值一侧 → Pb 丢失。")
