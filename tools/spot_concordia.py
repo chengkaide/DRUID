@@ -34,8 +34,13 @@ tools/spot_concordia.py —— 单点的「逐深度坪图 + 协和分布图」�
 本脚本里只有"换算成图上的坐标"与画图。
 
     · 206/238 ：逐窗口 R68 · F68(τ)，F68 由夹逼标样在同一 τ 处给出
-    · 207/206 ：**不套 F(τ)**。Pb 同位素之间的分馏几乎相同，套 F 只会把
-                标样噪声注进样品（见 `depth/fractionation.py::profile_ages_76`）
+    · 207/206 ：**不**做逐窗口 F(τ)，只乘一个**批级常数偏置**
+                f76 = ref76 / median(夹逼标样窗口的 R76)。理由：逐窗口 F76(τ)
+                实测散布 ±12%（标样 Pb–Pb 的窗口噪声），而要修的仪器偏置只有
+                ~0.95% ⇒ 逐窗口校正是灌噪声（与 `profile_ages_76` 的说明一致）；
+                但整段（结果表）**是**归一化过的，窗口完全不校正会比它系统性
+                高 0.95%，在 TW 图上看着正好像"有普通铅" —— 那是个假结构。
+                `--raw-r76` 退回完全不校正。
     · 207/235 ：= (206/238) × (207/206) × 238U/235U，**不是直接测的**
                 ⇒ 相对 1σ 必须带协方差项（`relative_sigma_product`，
                 σ 与 ρ 同基：对角线用合成相对 1σ，交叉项只用内部分量配内部 ρ）
@@ -162,7 +167,7 @@ def _ellipse(ax, x, y, sx, sy, rho, nsigma, **kw):
 # ─────────────────────────────────────────────────────────────────────────────
 # 一、把一个测点算成图上要用的数组
 # ─────────────────────────────────────────────────────────────────────────────
-def prepare(cfg: BatchConfig, spot: str):
+def prepare(cfg: BatchConfig, spot: str, raw_r76: bool = False):
     """
     重跑批次前置步骤，取回目标测点的逐窗口数据与域划分。
 
@@ -208,9 +213,26 @@ def prepare(cfg: BatchConfig, spot: str):
     if not np.array_equal(age68(r68), prof["age68"].to_numpy(float)):
         raise AssertionError("逐窗口年龄与流水线不一致：F(τ) 口径被改动过？")
 
-    # 207/206：**不**套 F(τ)（理由见模块 docstring）
-    r76 = prof["R76"].to_numpy(float)
-    s76 = np.hypot(prof["s76"].to_numpy(float), sd76 * r76)
+    # 207/206：**不**做逐窗口 F(τ) 校正，只扣一个批级常数偏置。
+    #   ① 逐窗口 F76(τ) 实测散布 ±12%（标样 207/206 的窗口噪声），而它要修的
+    #      仪器偏置只有 ~0.95% ⇒ 逐窗口校正是灌噪声，仓库教义（不套 F(τ)）正确；
+    #   ② 但**整段（结果表）是套过归一化的**（R76 乘了标样归一化因子），
+    #      窗口若完全不校正就会比它系统性高 0.95% —— 在 TW 图上看起来
+    #      正好像"有普通铅"，是最容易被误读的假结构。
+    #   ③ 折中：把逐窗口 F76(τ) 的**中位**当成批级常数偏置（阈值内的意图就是
+    #      "扣掉仪器偏置、不扣下孔漂移"）。`--raw-r76` 可退回完全不校正。
+    r76_raw = prof["R76"].to_numpy(float)
+    if raw_r76:
+        f76_bias = 1.0
+    else:
+        pool = np.concatenate([df["R76"].to_numpy(float) for df in brack]) \
+            if brack else np.array([np.nan])
+        with np.errstate(invalid="ignore"):
+            f76_bias = float(ref76 / np.nanmedian(pool))
+        if not np.isfinite(f76_bias) or f76_bias <= 0:
+            f76_bias = 1.0
+    r76 = r76_raw * f76_bias
+    s76 = np.hypot(prof["s76"].to_numpy(float) * f76_bias, sd76 * r76)
 
     # 207/235：两个比值的乘积，相对 1σ 带协方差项（严格传播）
     rho = prof["rho"].to_numpy(float)
@@ -285,8 +307,8 @@ def prepare(cfg: BatchConfig, spot: str):
                 r68=r68, s68=s68, r76=r76, s76=s76, r75=r75, s75=s75,
                 rho_w=rho_w, rho_tw=rho_tw, doms=doms, bulk=bulk, ws=ws,
                 label=f"{int(tr.idx) + 1:02d} {tr.sample}", sample=tr.sample,
-                win=float(cfg.win), step=float(cfg.step),
-                ref68=ref68, sd68=float(sd68), sd76=float(sd76))
+                win=float(cfg.win), step=float(cfg.step), f76_bias=f76_bias,
+                ref68=ref68, ref76=ref76, sd68=float(sd68), sd76=float(sd76))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -358,7 +380,9 @@ def _panel_concordia(ax, P, plane: str, nsigma: float, mean_ellipse=False,
             if P["bulk"] else (None,) * 5
         curve = _curve_tw(_tmax_ma(P["prof"]["age68"]))
         xlab, ylab = "238U/206Pb", "207Pb/206Pb"
-        title = "Tera–Wasserburg 图（共用一个 206Pb，判普通铅的标准平面）"
+        title = ("Tera–Wasserburg 图（共用一个 206Pb，判普通铅的标准平面）"
+                 + ("" if abs(P.get("f76_bias", 1.0) - 1.0) < 1e-9
+                    else f"\n207/206 已扣批级偏置 ×{P['f76_bias']:.4f}，未套逐窗口 F(τ)"))
 
     cxx, cyy, ctt = curve
     ax.plot(cxx, cyy, color="#333333", lw=1.3, zorder=1, label="协和线")
@@ -539,6 +563,9 @@ def print_report(P):
     print(f"单点逐深度复核：{P['label']}   结构 [{P['tag']}]   "
           f"窗口 {len(P['prof'])} 个   σext(206/238) = {P['sd68'] * 100:.2f}% / "
           f"σext(207/206) = {P['sd76'] * 100:.2f}%")
+    print(f"207/206 的批级偏置因子 f76 = {P['f76_bias']:.4f}"
+          f"（= {P['ref76']:.5f} / 夹逼标样窗口 R76 中位；"
+          f"1 表示未校正，用 --raw-r76 可关闭）")
     print("=" * 100)
     print("%-5s %-11s %4s %8s %10s %8s %10s %9s %7s" %
           ("域", "τ 区间", "窗数", "age68", "±2σ", "MSWD", "age207/235", "协和度", "Th/U"))
@@ -587,6 +614,8 @@ def main(argv=None) -> int:
                     help="参考值口径（默认与流水线一致：constants.DEFAULT_REF_PRESET）")
     ap.add_argument("--list", action="store_true", help="只列出批次里的样品名后退出")
     ap.add_argument("--no-pdf", action="store_true", help="不写 PDF")
+    ap.add_argument("--raw-r76", action="store_true",
+                    help="207/206 完全不校正（连批级偏置也不扣）—— 只用于对照")
     ap.add_argument("--mean-ellipse", action="store_true",
                     help="域均值点也画椭圆（ρ 取该域窗口 ρ 的中位，属近似）")
     ap.add_argument("--window-ellipse", action="store_true",
@@ -609,7 +638,7 @@ def main(argv=None) -> int:
                                         if t.role == ROLE_UNKNOWN})))
         return 0
 
-    P = prepare(cfg, args.spot)
+    P = prepare(cfg, args.spot, raw_r76=args.raw_r76)
     out_dir = Path(args.out) if args.out else Path(args.dir).resolve().parent / "spot_concordia"
     stem = f"{P['label'].split()[0]}_{P['sample']}"
 
