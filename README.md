@@ -22,6 +22,7 @@
 |---|---|
 | 第一次拿到这个工具，想尽快跑通自己的数据 | **[docs/getting-started.html](docs/getting-started.html)** —— 上手指南：装环境四条命令、数据怎么摆、结果先看哪三个数、报错怎么定位（[在线版](https://chengkaide.github.io/DRUID/getting-started.html)） |
 | 搞懂每一步为什么这么做、做错了会往哪偏 | [docs/from-first-principles.html](docs/from-first-principles.html) |
+| 想知道"一段一段地读"比"一个测点一个年龄"多得到什么 | [docs/segmented-reading.html](docs/segmented-reading.html) |
 | 想知道 DRUID 与 ADEPT 之间到底传了什么 | [docs/druid-adept-dataflow.html](docs/druid-adept-dataflow.html) |
 | 要改代码 / 长期维护这个仓库 | [AGENTS.md](AGENTS.md) |
 | 只要一份能在实验室里照着敲的最短说明 | [使用说明.txt](使用说明.txt) |
@@ -508,6 +509,28 @@ druid/
 
 ### 2.6.0 之后（文档与只读工具，不改任何数值输出）
 
+- 新增页面 [`docs/segmented-reading.html`](docs/segmented-reading.html) ——
+  **《一段一段地读：分域之后多得到了什么》**：用示例批次的 48 个样品测点、
+  102 个年龄域，量化"分段处理"相对"一个测点一个年龄"的增量与代价。
+  结论有三条：① 分域这件事本身**没有**变锋利（协和平面并不比年龄轴强、协和度轴几乎判不出，
+  真正更锋利的是化学台阶）；② 多出来的是**域级协和度**与**协和度沿深度的单调性**
+  这两条坪图没有的轴；③ 把域当独立观测汇总会**伪造精度**（池化 1σ 缩小约 1.7 倍，
+  而 χ²/dof 中位 16.6）—— 所以"多加测点、再切细"并不等于更准。
+  **页面上展示的 σ 一律按合成数据实测的乐观倍数放大**（域级 1σ 偏窄约 1.9 倍，
+  见下一条），并同时列出工具自报口径作对照。
+  页面上的每个小数与三张图都由
+  [`tools/gen_docs_segmented.py`](tools/gen_docs_segmented.py) 从模板
+  [`tools/segmented_reading.page.html`](tools/segmented_reading.page.html) 现算注入，
+  `--check` 可与已提交页面比对（**模板与产物是两个文件**：把页面本身当模板会让
+  生成过一次之后 `--check` 永远说"一致"，那种检查比没有更糟）。
+- 新增只读工具 [`tools/synth_sigma_audit.py`](tools/synth_sigma_audit.py)：
+  量"**流水线报出的域级 1σ 到底被低估了多少倍**"。真数据没有真值，所以用
+  `tools/synth_profile.py` 造**真值已知**的两域剖面，跑完 `run_batch` 后算
+  `pull = (报回年龄 − 真值) / 报出的 1σ`。两档对照实测（2026-10-11）：
+  **只加计数统计时 pull 标准差 ≈ 1.19（这一层是诚实的）**；**全套效应（＋普通铅 5%）
+  时 pull 标准差 1.81、|pull| ≤ 1 只占 41.7%、median|pull| = 1.28** ⇒ 报出的 1σ
+  偏窄约 **1.9 倍**。这个倍数是 `SIGMA_INFLATION` 的**唯一出处**，页面直接 import 它；
+  `--check` 重算比对（±0.35）。它**不改任何数值输出**，只用于展示。
 - 新增页面 [`docs/extreme-domain-spans.html`](docs/extreme-domain-spans.html)：
   先讲清「**协和度到底是什么**」——它在年龄–年龄图上是**斜率**、等协和度是从
   原点发散的射线族，在比值空间里则是一族曲线；再逐个复核 12 个跨域跨度

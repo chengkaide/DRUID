@@ -12,7 +12,7 @@ LA-ICP-MS 锆石 U-Pb 数据还原工具。把 Qtegra/iCAP 导出的 cps 时间�
 
 一句话分工：**DRUID 测出来，ADEPT 读出来。**
 
-**文档站（`docs/`，五份正式页面 + 一份 404，都是自包含单文件，push 即上线）在动手前值得翻一下**：
+**文档站（`docs/`，六份正式页面 + 一份 404，都是自包含单文件，push 即上线）在动手前值得翻一下**：
 
 | 页面 | 什么时候看 |
 |---|---|
@@ -21,16 +21,18 @@ LA-ICP-MS 锆石 U-Pb 数据还原工具。把 Qtegra/iCAP 导出的 cps 时间�
 | `docs/from-first-principles.html` | 不确定某个算法**为什么**要这么做、或者要判断"这个参数能不能改"时。10 张图，从衰变讲到 MSWD；第 8.4 节列了**已知局限**，改代码前先确认不是在自己重新发明它 |
 | `docs/druid-adept-dataflow.html` | 要动两边接口（`剖面窗口` 表的列名、`BatchResult` 字段）时 |
 | `docs/extreme-domain-spans.html` | 想知道"跨域跨度很大的测点到底是真继承核还是普通铅污染"时。由 `tools/gen_docs_extreme_spans.py` 从全库现算生成（本地实名版 + 线上脱敏版两张图），**内容不许手改** |
+| `docs/segmented-reading.html` | 要判断"该测多少、该切多细"、或者想引用**分段处理的增量与代价**时。它回答三件事：分域本身没有更锋利（协和平面并不比年龄轴强、协和度轴几乎判不出）、多出来的是域级协和度与协和度沿深度的走向、把域当独立观测汇总会伪造精度。页面上的每个小数与三张图都由 `tools/gen_docs_segmented.py` 从模板 `tools/segmented_reading.page.html` 现算注入（`--check` 可比对），**内容不许手改**；展示用的 σ 一律按 `tools/synth_sigma_audit.py` 的实测倍数放大，并同时列出工具自报口径 |
 
-> `docs/404.html` 是错误页，**不进 `sitemap.xml`**（搜索引擎自己会排除）。数"几份页面"时以 `sitemap.xml` 里的正式页为准（现为五份）。
+> `docs/404.html` 是错误页，**不进 `sitemap.xml`**（搜索引擎自己会排除）。数"几份页面"时以 `sitemap.xml` 里的正式页为准（现为六份）。
 
 - 包名 `druid`（历史上叫 `upb`，见到旧叫法都是改名前的引用）
 - 版本在 `druid/__init__.py:__version__`（**必须与 `pyproject.toml` 一致**，
   有测试钉着）
 - 仓库布局：`druid/` 代码 · `examples/EX2022A/` 示例批次（85 个测点，样品名
-  匿名成 `S01`…`S48`，标样保留）· `tests/` 自检 · `docs/` 文档站（五份页面）·
-  `tools/` 十三个脚本（只有 `synth_batch.py` / `synth_profile.py` 会写临时批次目录，
-  其余只读）—— 入口都是 `python tools/<脚本>.py --help`：
+  匿名成 `S01`…`S48`，标样保留）· `tests/` 自检 · `docs/` 文档站（六份页面）·
+  `tools/` 十五个脚本（`synth_batch.py` / `synth_profile.py` /
+  `synth_sigma_audit.py` 会写临时批次目录、跑完自删，其余只读）——
+  入口都是 `python tools/<脚本>.py --help`：
   `gen_docs_split_figure.py`（画落地页三联图并注入）·
   `gen_docs_preview.py`（画落地页首屏「一眼看到什么」那一块并注入）·
   `window_scale_facts.py`（量窗口尺度）·
@@ -60,7 +62,20 @@ LA-ICP-MS 锆石 U-Pb 数据还原工具。把 Qtegra/iCAP 导出的 cps 时间�
   Tera–Wasserburg 协和分布、以及「协和度–深度」—— 回答"这些窗口年龄是不是
   同一个协和体系"。口径全部复用流水线自己的函数、一个数都不另算；
   只读，产物写到批次目录旁。⚠ 逐窗口 `207Pb/235U` 的 2σ 比坐标轴还宽，
-  椭圆默认不画、要用 `--window-ellipse` 显式打开）
+  椭圆默认不画、要用 `--window-ellipse` 显式打开）·
+  `gen_docs_segmented.py`（把上面那个单点工具跑遍整个示例批次，汇总成
+  《一段一段地读》那一页要用的**每一个小数**与三张图，现算后注入
+  `docs/segmented-reading.html`；`--check` 只比对不写文件。它不改 `spot_concordia.py`
+  的任何口径 —— 用 monkeypatch 把批次级步骤顶成常量，只为了把 48 次重复装载
+  省掉；口径全部来自 `prepare()`。⚠ **模板是 `tools/segmented_reading.page.html`，
+  产物是 `docs/segmented-reading.html`** —— 第一版把页面本身当模板，于是生成过一次
+  之后占位符全没了、`--check` 永远说"一致"；那种检查比没有更糟）·
+  `synth_sigma_audit.py`（量"**报出的域级 1σ 被低估了多少倍**"。真数据没有真值 ⇒
+  用 `synth_profile.py` 造真值已知的两域剖面，跑完整 `run_batch` 后算
+  `pull = (报回 − 真值)/σ`；实测**只加计数统计时 pull 标准差 1.19**（这一层诚实）、
+  **全套效应时 1.81** ⇒ `SIGMA_INFLATION = 1.9` 是它**唯一**的出处，
+  上面的页面 import 它去校正展示用的误差棒与 z；`--check` 重算比对（±0.35）。
+  ⚠ 它**不改任何数值输出**，只影响文档站上的图与表）
 - Python 层：**只有 numpy / pandas / matplotlib / openpyxl / xlrd**。
   **没有 scipy** —— 年龄方程的不动点迭代、二分法、卡方上尾概率都是自己实现的，
   这不是疏漏而是设计：不依赖会变的第三方行为。
@@ -424,6 +439,18 @@ workflow.py  编排层：BatchConfig 集中所有可调参数 + 十步 run_batch
   ⚠ **基线测不到这个量**：`check_example_batch` 比对的是标样偏差、样品协和度与首屏数字，
   全是跨测点 / 比例量，**不含滑动窗口的 se** ⇒ **改这个默认值不会让门禁变红**。
   守它的只有单测 `test_overlap_factor_and_weighted_mean_correction`，改动必须自己造对照。
+- **文档站上展示的 σ 是"校正后"的，不是工具报出的那个数。**
+  `docs/segmented-reading.html` 与它的三张图把域级 1σ（以及域级协和度的 σ、
+  逐窗口的误差棒）一律乘 `tools/synth_sigma_audit.py` 实测的乐观倍数
+  （`SIGMA_INFLATION = 1.9`），并在表里同时留一列"用自报 σ"作对照。
+  依据（合成数据、真值已知）：**只加计数统计时 pull 标准差 1.19** —— 这一层是诚实的；
+  **加齐全套效应后 1.81**、`|pull| ≤ 1` 只占 41.7%、median`|pull|` 1.28
+  ⇒ 与上面 `overlap_correct` 那条量到的是同一件事（那里报 3.14 → 1.66）。
+  ⚠ **这不是流水线的输出**：`druid/` 一个数都没改，改的只是文档站上的图与表。
+  ⚠ 它只改"够不够 3σ 显著"这类判断 —— 比值、达标率、χ²/dof、单调性都不受影响。
+  所以页面上"显著偏离协和"的域个数会从 17 掉到 4：这个差额是**误差棒宽度**造成的，
+  不是数据变了。**别把 1.9 当成万能的 σ 缩放** —— 域年龄、协和度、逐窗口、化学
+  各需要各自的合成实验，现在只是"用同一个量级把它们一起抹平"。
 - **不同比值之间的误差相关性：算了，但只有一个出口。**
   `reduction.reduce_interval` 每个窗口 / 整点都算 ρ(206/238, 207/206)（刀切协方差），
   但 `结果表`（原来根本没有这一列）、`剖面窗口`（按 ADEPT Format 4 挑列，只有 R68 没有
