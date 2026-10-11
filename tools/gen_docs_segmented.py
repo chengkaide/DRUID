@@ -10,7 +10,7 @@ tools/gen_docs_segmented.py —— 生成《一段一段地读》那页的全部
 
     · 扫描示例批次 `examples/EX2022A` 的每个样品测点（口径复用
       `tools/spot_concordia.py` 的 `prepare()`，一个数都不另算）；
-    · 汇总五把"域间判别力"尺子、域级协和度偏离、协和度沿深度的单调性，
+    · 汇总五把"域间分辨力"尺子、域级协和度偏离、协和度沿深度的单调性，
       以及"把域当独立观测"会伪造出多少精度；
     · 画三张图（matplotlib → base64，页面因此仍是自包含单文件）；
     · 把结果写进页面，并断言页面上不再有未替换的 `{{...}}`。
@@ -116,7 +116,7 @@ def build_session():
 
 
 def _pair_stats(P, a, b, sd68, sd76, k=K):
-    """相邻两域的判别力：五把尺子各给一个等效 σ 数（与工具自己的打印一致）。
+    """相邻两域的分辨力：五把尺子各给一个等效 σ 数（与工具自己的打印一致）。
 
     `k` 把域级 1σ 放大成"合成实测的诚实值"（`synth_sigma_audit.SIGMA_INFLATION`）：
     三把与 σ 有关的尺子（z_age / z_conc / z_plane）按 1/k 缩小；
@@ -157,7 +157,7 @@ def _pair_stats(P, a, b, sd68, sd76, k=K):
 
 
 def scan(sess):
-    """逐样品取回：域、域对判别力、域级协和度、逐窗口 207/235 的相对 1σ。"""
+    """逐样品取回：域、域对分辨力、域级协和度、逐窗口 207/235 的相对 1σ。"""
     cfg, sd68, sd76 = sess["cfg"], sess["sd68"], sess["sd76"]
     recs = []
     for nm in sess["names"]:
@@ -280,7 +280,7 @@ def metrics(recs):
     V["CONC_NEG"] = str(int((zdev < 0).sum()))
     # 极端个例（按校正后的 |z| 排序取前三）—— 页面正文与图 1(b) 的标注用同一份名单
     #   （图 1(b) 用的是同一个"除以 K"的口径，两处独立算、结论必然一致）
-    V["EXTREME"] = ", ".join(
+    V["EXTREME"] = "、".join(
         f"{s} {d['name']}（{d['concordance']:.1f}%，z={zk:+.1f}）"
         for _a, s, d, _z, zk in sorted(dev, key=lambda x: -abs(x[4]))[:3])
     t2 = ['<div class="tscroll"><table>',
@@ -289,14 +289,14 @@ def metrics(recs):
           "<th>z<br><span class='dim'>σ 校正后</span></th>"
           "<th>z<br><span class='dim'>用自报 σ</span></th>"
           "<th>域内 MSWD</th></tr>"]
-    for _a, s, d, z, zk in sorted(dev, key=lambda x: -x[0])[:10]:
-        cls = ' class="hi"' if abs(zk) >= 3 else ""
+    for _a, s, d, z, zk in sorted(dev, key=lambda x: -abs(x[4]))[:10]:
+        cls = " hi" if abs(zk) >= 3 else ""
         t2.append(f"<tr><td class='n'>{s}</td><td class='n'>{d['name']}</td>"
                   f"<td class='n'>{d['n_win']}</td>"
                   f"<td class='n'>{d['age68']:.1f} Ma</td>"
                   f"<td class='n'>{d['concordance']:.1f}%</td>"
                   f"<td class='n'>±{d['conc_sigma'] * K:.1f}%</td>"
-                  f"<td class='n'{cls}>{zk:+.1f}</td>"
+                  f"<td class='n{cls}'>{zk:+.1f}</td>"
                   f"<td class='n dim'>{z:+.1f}</td>"
                   f"<td class='n'>{d['mswd']:.2f}</td></tr>")
     t2.append("</table></div>")
@@ -358,7 +358,9 @@ def metrics(recs):
     V["POOL_GAIN"] = f"{np.median(med_se / pool_se):.1f}"
     V["POOL_CHI2_MED"] = f"{np.median([x[5] for x in pool]):.1f}"
     t3 = ['<div class="tscroll"><table>',
-          "<tr><th>测点</th><th>域数</th><th>单域 1σ 中位</th><th>池化后 1σ</th>"
+          "<tr><th>测点</th><th>域数</th>"
+          "<th>单域 1σ 中位<br><span class='dim'>σ 校正后</span></th>"
+          "<th>池化后 1σ<br><span class='dim'>σ 校正后</span></th>"
           "<th>看起来缩小</th><th>χ²/dof</th><th>域间跨度</th></tr>"]
     for s, k, s1, se, smin, chi2, span in sorted(pool, key=lambda x: -x[5])[:8]:
         t3.append(f"<tr><td class='n'>{s}</td><td class='n'>{k}</td>"
@@ -485,7 +487,7 @@ def figure_increment(recs, V):
     ax.set_xticklabels(labs, fontsize=8.6)
     ax.set_ylabel("相邻域之间：等效 σ 数", fontsize=10)
     ax.set_ylim(0, 14.6)
-    ax.set_title("(a) 分域这件事，谐和图没有变锋利\n"
+    ax.set_title("(a) 分域本身，分辨力并没有提高\n"
                  f"协和平面 ≈ 年龄轴（中位 {V['PLANE_OVER_AGE']}×）；"
                  f"协和度轴几乎判不出（中位 {V['Z_CONC_MED']}）", fontsize=10.5, loc="left")
     ax.grid(alpha=0.2, axis="y", lw=0.5)
@@ -679,18 +681,18 @@ def render(recs, figs_model, V):
     V = dict(V)
     V["FIG1"] = _fig_frame(
         figs_model["fig1"],
-        "<b>图 1</b>　示例批次全览（所有误差棒已按实测倍数放大）。<b>(a)</b> 相邻域对的判别力："
+        "<b>图 1</b>　示例批次全览（所有误差棒已按实测倍数放大）。<b>(a)</b> 相邻域对的分辨力："
         "五把尺子各给一个等效 σ 数（箱体=四分位、点=每个域对、虚线=3σ）。<b>(b)</b> "
         "每个正式年龄域的协和度与其自身 1σ —— 灰点为 |z|&lt;2、橙点 2–3、红点 ≥3，"
         "标注的是校正后最极端的三个域。<b>(c)</b> 三域及以上的测点，域均值协和度沿深度："
         "红线单调、蓝线非单调。<b>(d)</b> 整段积分协和度与测点年龄，红点为偏离 100% 超 10% 者。",
-        "分域之后多得到什么：五把尺子的判别力、域级协和度、协和度沿深度的走向、整段协和度")
+        "分域之后多得到什么：五把尺子的分辨力、域级协和度、协和度沿深度的走向、整段协和度")
     V["FIG2"] = _fig_frame(
         figs_model["fig2"],
         "<b>图 2</b>　同一批窗口的两条读法。<b>左</b>：域点投在 Wetherill 协和图上，"
         "菱形为域均值（±2σ），星号为整段积分。<b>右</b>：协和度沿深度，紫点为逐窗口"
-        "（带 ±2σ 误差棒）、横线为域均值。上排这个测点的协和度是“高—低—高”，"
-        "下排是一路单调升 —— 后者与“某一条混合轨迹”相容，前者只能解释成真实的结构。",
+        "（带 ±2σ 误差棒）、横线为域均值。上排这个测点的协和度是「高—低—高」，"
+        "下排是一路单调升 —— 后者与「某一条混合轨迹」相容，前者只能解释成真实的结构。",
         "两个测点的 Wetherill 协和分布与协和度沿深度对照")
     V["FIG3"] = _fig_frame(
         figs_model["fig3"],
