@@ -258,6 +258,18 @@ pip install -e ".[dev]" && python -m pytest -q
   85 个测点，占一多半），但**仍然让它单独一个 job**：它红了意味着**数字变了**，
   与矩阵里那些秒级检查的失败含义完全不同，混在一起会看不清是哪种问题。
 
+⚠️ **`README.md` 顶部那张流程图没有任何门禁看着。** 它是个 mermaid 代码块，
+由 GitHub 原生渲染：**语法写错不会让任何测试变红**，页面上只出现一个红框
+「Syntax error in text」。改完要么在 GitHub 上翻一眼，要么本地核一遍 ——
+把 `mermaid.min.js`（约 3.5 MB，CDN 取一次）与一个小 HTML 放同一目录，
+HTML 里 `mermaid.run()`，再用无头浏览器 `--dump-dom` 抓 `#err` 的文字
+（`--screenshot` 顺便看版面）。两条实测过的坑：
+① `%%{init}%%` 里的 `wrappingWidth`（默认 200px，中文一行只放得下约 12 字）
+**是生效的** —— 不调大，节点里的长句会从词中间断开（「标样夹 / 逼归一化」）；
+② `subgraph` 里的 `direction LR` **只在边指向 subgraph 本身时**才生效，
+指向它内部的节点就会被静默忽略、两个横排的方框塌成一根竖线。
+现在这张图用 `classDef` 写死了浅色，所以浅色/深色主题下都能读。
+
 写测试时注意约定：**只写 `assert`，不用任何 pytest 特性**（fixture、参数化、
 `tmp_path` 都别用），需要临时文件就用 `tempfile`。因为实验室那台机器上
 可能只有 numpy/pandas，`tests/run_all.py` 必须能跑。

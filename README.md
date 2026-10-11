@@ -31,15 +31,42 @@
 是它把每个测点当成一条**随时间（即随坑深）变化的信号**来处理——分馏按深度校正、
 年龄域按深度划分。ADEPT 负责在这条剖面之上挑坪，两者是同一条链的两端。
 
-```
-Qtegra CSV (cps)
-   │
-   ├─ DRUID ────────────────────────────────────────────┐
-   │   剥蚀区间识别 → 扣空白 → Hg干扰/普通铅校正        │
-   │   → 标样夹逼归一化 + F(τ) 深度分馏校正             │
-   │   → 整段年龄 + 逐窗口年龄剖面（含 1σ）             │
-   │                                                    ▼
-   └─ 结果.xlsx  ──[剖面窗口] 表──▶  ADEPT  ──▶  坪年龄 + MSWD
+```mermaid
+%%{init: {"flowchart": {"wrappingWidth": 400, "nodeSpacing": 26, "rankSpacing": 34}}}%%
+flowchart TD
+    IN["① 原始计数率 cps<br/>一个测点一个 Qtegra CSV"]
+
+    subgraph DRUID["DRUID —— 测出来：每个深度上的年龄是多少"]
+        direction LR
+        D2["② 净信号<br/>剥蚀区间识别 · 扣气体空白"]
+        D3["③ 校正后的比值<br/>干扰校正 · 普通铅<br/>标样夹逼归一化 · F(τ) 深度分馏"]
+        D4["④ 逐窗口年龄 ± 1σ<br/>另出整段年龄一份"]
+        D2 --> D3 --> D4
+    end
+
+    XL["结果.xlsx —— 六个工作表<br/>结果 · 标样QC · 深度剖面域<br/>不分域年龄 · 剖面窗口 · 运行参数"]
+    WIN["《剖面窗口》表<br/>Analysis · Time · Age68 · Age68_1s"]
+
+    subgraph ADEPT["ADEPT（R 包）—— 读出来：哪些区间构成真实的坪"]
+        direction LR
+        A5["⑤ 分段<br/>在窗口序列上找变点"]
+        A6["⑥ 过滤<br/>范围 · 方差 · 最短坪长 · 方向"]
+        A7["⑦ 坪年龄 + MSWD"]
+        A5 --> A6 --> A7
+    end
+
+    IN --> DRUID
+    DRUID --> XL
+    XL -->|"只交出这一张"| WIN
+    WIN --> ADEPT
+    XL -.->|"并排写出"| HJ["结果.handoff.json<br/>给程序看的质控结论<br/>判据 · 前提 · 交接风险"]
+
+    classDef tool fill:#eaf4ef,stroke:#1d5c45,stroke-width:1.4px,color:#12261f
+    classDef io fill:#f4f5f7,stroke:#8d9aa1,stroke-width:1.2px,color:#333d42
+    class D2,D3,D4,A5,A6,A7 tool
+    class IN,XL,WIN,HJ io
+    style DRUID fill:#fbfdfc,stroke:#9db8a8,color:#1d5c45
+    style ADEPT fill:#fbfdfc,stroke:#9db8a8,color:#1d5c45
 ```
 
 > **第一次接触这套方法？** 先看
