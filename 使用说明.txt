@@ -108,7 +108,7 @@ DRUID = Depth-Resolved U-Pb Isotope Data reduction
 
 三项都过，数据可用。
 
-深度剖面域里的 MSWD 怎么读（与 R 端 ADEPT 同口径，两边可直接对照）：
+深度剖面域里的 MSWD 怎么读（与 R 端 ADEPT 用的是同一套算法，两边可直接对照）：
   约 1       该域用一个年龄就能解释；
   远大于 1   可能有多个年龄混在里面，或者 σ 被低估了；
   远小于 1   σ 被高估了。

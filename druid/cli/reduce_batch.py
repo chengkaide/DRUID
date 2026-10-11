@@ -85,11 +85,11 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--primary", default="91500", help="主标（用于归一化）")
     ap.add_argument("--secondary", default="Ple", help="监控标样（用于 QC 与 σext）")
     ap.add_argument("--ref-preset", default="horstwood2016", choices=list(REFERENCE_PRESETS),
-                    help="标样参考值的口径预设（见 core.constants.REFERENCE_PRESETS）。"
+                    help="标样参考值取哪一档（见 core.constants.REFERENCE_PRESETS）。"
                          "默认 horstwood2016 = Horstwood et al. (2016) CA-ID-TIMS 推荐值；"
-                         "repo = 仓库第一版旧口径（复现历史结果用）；"
+                         "repo = 仓库第一版的取值（复现历史结果用）；"
                          "wiedenbeck1995 / self-consistent / isoclock 见源码注释。"
-                         "换口径是按同一个因子整体平移年龄，不是纠错。")
+                         "换一档是按同一个因子整体平移年龄，不是纠错。")
 
     # ── 单点还原 ──
     ap.add_argument("--trim", type=float, default=1.5,
@@ -130,11 +130,11 @@ def build_parser() -> argparse.ArgumentParser:
                     # ⚠ help 串会被 argparse 拿去做 `% params` 展开 ⇒ 里面的百分号
                     #   必须写成 `%%`，否则 `--help` 当场 ValueError（踩过一次）。
                     help="207Pb/235U 年龄的 1σ 按**严格传播**（把 206/238 与 207/206 的"
-                         "误差相关性算进去）。旧口径只搬 206/238 那一项、**丢掉 207/206 的"
+                         "误差相关性算进去）。旧算法只搬 206/238 那一项、**丢掉 207/206 的"
                          "整份贡献**，而后者是本批的主项（相对 1σ 中位 4.26%% vs 1.45%%）"
                          "⇒ 实测 207/235 的 2σ 中位偏小 2.69 倍（13.21 → 35.55 Ma）。"
                          "**只动 σ，不动年龄**（年龄207_235 与 协和度_pct 逐位不变）。"
-                         "不加此开关即保持自 1.x 起的口径，与已发表数字可比")
+                         "不加此开关即保持自 1.x 起的算法，与已发表数字可比")
     return ap
 
 

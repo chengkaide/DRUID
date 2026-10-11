@@ -26,11 +26,11 @@ tools/spot_concordia.py —— 单点的「逐深度坪图 + 协和分布图」�
   逐窗口的精度信息由 ③ 栏的误差棒与域均值点的十字棒承担。这不是偷懒 ——
   把一屏都盖住的椭圆画上去，读者只会得到"看起来什么都说不清"的印象。
 
-**口径：一个数都不另算**
+**算法：一个数都不另算**
 
 全部调用流水线自己的函数（`load_batch` → `build_bracketing` →
 `compute_bulk_ratios` → `calibrate_primary` → `estimate_external` →
-`analyse_depth_spot`），与出正式结果表时**同一套代码、同一套参考值口径**。
+`analyse_depth_spot`），与出正式结果表时**同一套代码、同一套参考值**。
 本脚本里只有"换算成图上的坐标"与画图。
 
     · 206/238 ：逐窗口 R68 · F68(τ)，F68 由夹逼标样在同一 τ 处给出
@@ -72,7 +72,7 @@ c ＝ 合成相对 1σ，a ＝ 对应的内部分量，ρ ＝ `reduce_interval` 
 
 控制台同时打两张表：域均值表，以及「相邻域分辨力」表 —— 后者的五把尺子是
 z_age（年龄轴）/ z_conc（协和度轴）/ z_plane（协和平面马氏距离）/ z_ThU、z_U
-（化学台阶），全部折成同一个「等效 σ 数」口径，可以直接比谁更有分辨力。
+（化学台阶），全部折算成同一个「等效 σ 数」，可以直接比谁更有分辨力。
 
 ⚠ 本脚本**只读**：不写结果表、不改任何数值输出、不碰 `结果/`。
 """
@@ -211,15 +211,15 @@ def prepare(cfg: BatchConfig, spot: str, raw_r76: bool = False):
 
     tau = prof["tau"].to_numpy(float)
     # 206/238：套 F(τ)。与 analyse_depth_spot 内部逐位同一条路径 ——
-    # 下面这行 assert 就是钉这一点的（差一位就说明口径被改过）。
+    # 下面这行 assert 就是钉这一点的（差一位就说明算法被改过）。
     # ⚠ 必须带 `equal_nan=True`：cycle 不足的窗口本来就是 NaN，而
     #   `np.array_equal` 对 NaN 一律判不等 ⇒ 实测示例批次 19/36 个多域测点
-    #   会被误报成「F(τ) 口径被改动过」。带 equal_nan 后逐位相等仍成立。
+    #   会被误报成「F(τ) 这条路径被改动过」。带 equal_nan 后逐位相等仍成立。
     F = bracket_F(tau, brack, "R68", ref68)
     r68 = prof["R68"].to_numpy(float) * F
     s68 = np.hypot(prof["s68"].to_numpy(float) * F, sd68 * r68)
     if not np.array_equal(age68(r68), prof["age68"].to_numpy(float), equal_nan=True):
-        raise AssertionError("逐窗口年龄与流水线不一致：F(τ) 口径被改动过？")
+        raise AssertionError("逐窗口年龄与流水线不一致：F(τ) 这条路径被改动过？")
 
     # 207/206：**不**做逐窗口 F(τ) 校正，只扣一个批级常数偏置。
     #   ① 逐窗口 F76(τ) 实测散布 ±12%（标样 207/206 的窗口噪声），而它要修的
@@ -302,7 +302,7 @@ def prepare(cfg: BatchConfig, spot: str, raw_r76: bool = False):
             rho_tw=float(_rho_tw(a68b, a76b, rhob, c68b, c76b)),
             age68=float(rr["年龄206_238"]), age75=float(rr["年龄207_235"]),
             age76=float(rr["年龄207_206"]),
-            # 旧口径（只搬 206/238 那一项）与新口径的比 —— 就是那个 2.69 倍。
+            # 旧算法（只搬 206/238 那一项）与新算法的比 —— 就是那个 2.69 倍。
             # ⚠ 两者都换成 **Ma** 再打印：比值空间的 σ 与年龄空间的 σ 差着
             #   λ·(1+R) 这个因子，混起来会得到一个荒谬的比值（第一版就踩了）。
             s75_legacy_ma=float(rr["s75_2sig"]) / 2.0,
@@ -695,7 +695,7 @@ def print_report(P):
         print("整段积分（结果表）      age68 = %.1f Ma   age75 = %.1f Ma   "
               "age76 = %.1f Ma   协和度 = %.1f%%"
               % (b["age68"], b["age75"], b["age76"], b["concordance"]))
-        print("                       207/235 的 1σ：旧口径 %.2f Ma → 严格传播 %.2f Ma"
+        print("                       207/235 的 1σ：旧算法 %.2f Ma → 严格传播 %.2f Ma"
               "（%.2f×，含 ρ 交叉项）"
               % (b["s75_legacy_ma"], b["s75_strict_ma"],
                  b["s75_strict_ma"] / b["s75_legacy_ma"]
@@ -721,7 +721,7 @@ def main(argv=None) -> int:
     ap.add_argument("--step", type=float, default=None, help="窗口步长 (s)，默认 1")
     ap.add_argument("--nsigma", type=float, default=2.0, help="椭圆/误差棒的 σ 倍数，默认 2")
     ap.add_argument("--preset", default=None,
-                    help="参考值口径（默认与流水线一致：constants.DEFAULT_REF_PRESET）")
+                    help="参考值来源（默认与流水线一致：constants.DEFAULT_REF_PRESET）")
     ap.add_argument("--list", action="store_true", help="只列出批次里的样品名后退出")
     ap.add_argument("--no-pdf", action="store_true", help="不写 PDF")
     ap.add_argument("--raw-r76", action="store_true",

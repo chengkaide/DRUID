@@ -7,7 +7,7 @@
 它出三样东西，全部来自示例批次 `examples/EX2022A` 的**真实输出**：
 
   1. 一张**逐深度年龄剖面**：某个真实测点的窗口点（含 1σ 误差棒）、各年龄域的
-     均值线，以及整段不分域口径 —— 最后那个用右侧竖直箭头标出"不分域会差多少"。
+     均值线，以及整段不分域的结果 —— 最后那个用右侧竖直箭头标出"不分域会差多少"。
      哪个测点见下面 `SPOT` 那段注释（判据是"能不能一眼看懂分域"，不是"落差最大"）。
   2. 三条核心质控判据的状态条（`standards.primary_bias` /
      `standards.secondary_bias` / `samples.concordance`），
@@ -172,7 +172,7 @@ def panel(d: dict) -> list[str]:
         P.append(f'<circle class="{cls}" cx="{x:.1f}" cy="{y:.1f}" r="3.4"/>')
     P.append('</g>')
 
-    # 灰虚线＝整段不分域口径；彩色实线＝各**年龄域**的均值
+    # 灰虚线＝整段不分域的结果；彩色实线＝各**年龄域**的均值
     P.append(f'<line class="fig-whole" x1="{ML}" y1="{Y(d["whole"]):.1f}" x2="{ML+PW}" '
              f'y2="{Y(d["whole"]):.1f}" stroke-dasharray="7 4"/>')
     P.append(f'<text class="fig-whole-t" x="{ML+4}" y="{Y(d["whole"])-7:.1f}">'
@@ -216,7 +216,7 @@ def profile_figure(d: dict) -> str:
     P.append('<desc id="figPrevD">横轴是剥蚀时间（对应坑深），纵轴是年龄。'
              '每个点是一个 4 秒滑窗，误差棒是 1σ。灰虚线是整段不分域的加权平均，'
              '两条彩色实线是两个年龄域的均值，空心点是没进入任何年龄域的窗口。'
-             '右侧竖直箭头标出整段口径与主域之差。'
+             '右侧竖直箭头标出整段（不分域）与主域之差。'
              '数据取自示例批次的公开结果表，可用仓库里的命令重新算出同样的数字。</desc>')
     P.append(f'<rect x="0" y="0" width="{W}" height="{H}" rx="14" class="fig-bg"/>')
     P.extend(panel(d))
@@ -265,7 +265,7 @@ def qc_table(qc) -> str:
                  f'<td class="{cls}">{bt}</td></tr>')
     P.append('</tbody></table>')
     P.append('<p class="qcfoot">年龄单位 Ma。偏差 = 加权平均 − 参考值'
-             '（参考值取 Horstwood et al. 2016 表 S2；参考值口径 / 归一化 / 二次校正'
+             '（参考值取 Horstwood et al. 2016 表 S2；参考值来源 / 归一化 / 二次校正'
              '三件事都写在「运行参数」表里）。</p>')
     return "\n      ".join(P)
 

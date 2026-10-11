@@ -92,15 +92,15 @@ def nice_ticks(lo: float, hi: float, want: int = 4) -> list[float]:
 
 
 def collect(res, spot: str) -> dict:
-    """把一个测点的窗口、域、整段口径全部抽出来，并核对窗口数守恒。
+    """把一个测点的窗口、域、整段结果全部抽出来，并核对窗口数守恒。
 
-    ⚠ 口径：**只用 Age68 有限的窗口**（2026-10-04）。
+    ⚠ 约定：**只用 Age68 有限的窗口**（2026-10-04）。
     `bracket_F` 改成不外插之后，标样 τ 覆盖不到的深度段 `F(τ)` 是 NaN
     ⇒ 这些窗口的 `Age68` 也是 NaN，**不参与分域**（域表只收有限年龄的窗口）。
     而 `剖面窗口` 表仍然保留它们（ADEPT 也要看到全部窗口），所以
     `res.windows` 的行数会**比域表能覆盖的多几个**。
     早先这里拿 `len(win)` 当分母，于是"域表里没有行，却有窗口落进某个域"
-    的守恒断言会误报 —— 那不是数据错，是两处口径不同。
+    的守恒断言会误报 —— 那不是数据错，是两处算法不同。
     """
     win = res.windows[res.windows["Sample"] == spot].reset_index(drop=True)
     win = win[pd.to_numeric(win["Age68"], errors="coerce").notna()] \
@@ -108,7 +108,7 @@ def collect(res, spot: str) -> dict:
     dom = res.domains[res.domains["样品"] == spot].sort_values("tau").reset_index(drop=True)
     ov = res.overall[res.overall["样品"] == spot]
     if not len(win) or not len(ov):
-        raise SystemExit(f"示例批次里找不到 {spot} 的剖面窗口或整段口径，图没法画")
+        raise SystemExit(f"示例批次里找不到 {spot} 的剖面窗口或整段结果，图没法画")
     ov = ov.iloc[0]
 
     tau = win["Tau"].to_numpy(float)
@@ -144,7 +144,7 @@ def collect(res, spot: str) -> dict:
                       "n": int(r["n_win"]), "mswd": float(r["MSWD"])})
 
     n_win = int(ov["n_win"])
-    # 空心点的口径：**没进入任何年龄域**的窗口。过渡带的窗口也算在内 ——
+    # 空心点的判定：**没进入任何年龄域**的窗口。过渡带的窗口也算在内 ——
     # 它确实不属于任何一个年龄，所以 `n_mixed` 是 `n_off` 的一个子集，不是另一堆。
     n_off = int((belong == "").sum())
     for bd in bands:
@@ -235,7 +235,7 @@ def panel(i: int, case: dict, d: dict) -> list[str]:
         P.append(f'<circle class="{cls}" cx="{x:.1f}" cy="{y:.1f}" r="3.4"/>')
     P.append('</g>')
 
-    # 灰虚线＝整段不分域口径，三个面板都画：①里它就是答案，②③里它不是任何一个域
+    # 灰虚线＝整段不分域的结果，三个面板都画：①里它就是答案，②③里它不是任何一个域
     P.append(f'<line class="fig-whole" x1="{ML}" y1="{Y(d["whole"]):.1f}" x2="{ML+PW}" '
              f'y2="{Y(d["whole"]):.1f}" stroke-dasharray="7 4"/>')
     for bd in d["bands"]:

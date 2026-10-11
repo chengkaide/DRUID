@@ -554,7 +554,7 @@ pre:focus-visible,code:focus-visible{outline:2.5px solid var(--acc);outline-offs
                   <div class="figscroll">
               <svg class="fig" viewBox="0 0 860 296" role="img" aria-labelledby="figPrevT figPrevD" aria-describedby="figPrevD">
               <title id="figPrevT">示例批次 EX2022A 的一个真实测点：逐深度年龄剖面与它的两个年龄域</title>
-              <desc id="figPrevD">横轴是剥蚀时间（对应坑深），纵轴是年龄。每个点是一个 4 秒滑窗，误差棒是 1σ。灰虚线是整段不分域的加权平均，两条彩色实线是两个年龄域的均值，空心点是没进入任何年龄域的窗口。右侧竖直箭头标出整段口径与主域之差。数据取自示例批次的公开结果表，可用仓库里的命令重新算出同样的数字。</desc>
+              <desc id="figPrevD">横轴是剥蚀时间（对应坑深），纵轴是年龄。每个点是一个 4 秒滑窗，误差棒是 1σ。灰虚线是整段不分域的加权平均，两条彩色实线是两个年龄域的均值，空心点是没进入任何年龄域的窗口。右侧竖直箭头标出整段（不分域）与主域之差。数据取自示例批次的公开结果表，可用仓库里的命令重新算出同样的数字。</desc>
               <rect x="0" y="0" width="860" height="296" rx="14" class="fig-bg"/>
               <g class="case" data-spot="S10">
               <text class="fig-cap" x="76" y="33">S10 · 三个年龄域<tspan class="fig-cap-sub">　35 个 4 秒滑窗</tspan></text>
@@ -703,7 +703,7 @@ pre:focus-visible,code:focus-visible{outline:2.5px solid var(--acc);outline-offs
               <tr><td>91500</td><td>21</td><td>1063.51</td><td><b>1060.22</b></td><td>6.69</td><td>0.51</td><td class="bias-neg">−0.31%</td></tr>
               <tr><td>Ple</td><td>14</td><td>337.16</td><td><b>343.40</b></td><td>2.50</td><td>1.00</td><td class="bias-pos">+1.85%</td></tr>
             </tbody></table>
-            <p class="qcfoot">年龄单位 Ma。偏差 = 加权平均 − 参考值（参考值取 Horstwood et al. 2016 表 S2；参考值口径 / 归一化 / 二次校正三件事都写在「运行参数」表里）。</p>
+            <p class="qcfoot">年龄单位 Ma。偏差 = 加权平均 − 参考值（参考值取 Horstwood et al. 2016 表 S2；参考值来源 / 归一化 / 二次校正三件事都写在「运行参数」表里）。</p>
         </div>
       </div>
 <!-- ==== 首屏预览结束 ==== -->
@@ -1229,8 +1229,8 @@ pre:focus-visible,code:focus-visible{outline:2.5px solid var(--acc);outline-offs
   <div class="outgrid rv">
     <div class="out"><h4>结果</h4><p>每行一个测点：计数率、三种体系年龄与 1σ/2σ、协和度、深度结构</p></div>
     <div class="out"><h4>标样QC</h4><p>主标与监控标样的加权平均年龄、MSWD、与推荐值的偏差</p></div>
-    <div class="out"><h4>深度剖面域</h4><p>BIC 检出的年龄域：τ、年龄与 MSWD（与 ADEPT 同口径）</p></div>
-    <div class="out hi"><h4>不分域年龄</h4><p>把整段剥蚀当作一个域的年龄基准，与分域主域、整段积分三种口径并排——差额正好是「分域这一步」的贡献</p></div>
+    <div class="out"><h4>深度剖面域</h4><p>BIC 检出的年龄域：τ、年龄与 MSWD（与 ADEPT 用同一套算法）</p></div>
+    <div class="out hi"><h4>不分域年龄</h4><p>把整段剥蚀当作一个域的年龄基准，与分域主域、整段积分三种算法并排——差额正好是「分域这一步」的贡献</p></div>
     <div class="out"><h4>剖面窗口</h4><p>逐窗口年龄剖面，列名按 ADEPT 输入约定对齐，可直接喂入</p></div>
     <div class="out"><h4>运行参数</h4><p>本次运行全部参数与被跳过的文件，半年后也能复现</p></div>
   </div>

@@ -8,7 +8,7 @@ tools/gen_docs_segmented.py —— 生成《一段一段地读》那页的全部
 把模板 `tools/segmented_reading.page.html` 里所有 `{{占位符}}` 与三张图，全部
 **现算**后注入，写出 `docs/segmented-reading.html`：
 
-    · 扫描示例批次 `examples/EX2022A` 的每个样品测点（口径复用
+    · 扫描示例批次 `examples/EX2022A` 的每个样品测点（算法复用
       `tools/spot_concordia.py` 的 `prepare()`，一个数都不另算）；
     · 汇总五把"域间分辨力"尺子、域级协和度偏离、协和度沿深度的单调性，
       以及"把域当独立观测"会伪造出多少精度；
@@ -243,7 +243,7 @@ def metrics(recs):
     V["AGE_WINS"] = str(int(((stat["z_age"] >= 3) & (stat["z_plane"] < 3) & ok).sum()))
 
     #   左两列 = 本页展示值（三把 σ 尺子按 1/K 校正；化学两把也按 1/K 缩放，
-    #   见 `_pair_stats` 的说明）；右两列 = 工具自报口径，留作对照。
+    #   见 `_pair_stats` 的说明）；右两列 = 工具自报的读数，留作对照。
     t1 = ['<div class="tscroll"><table>',
           "<tr><th>尺子</th><th>中位 z<br><span class='dim'>σ 校正后</span></th>"
           "<th>≥ 3 的比例<br><span class='dim'>σ 校正后</span></th>"
@@ -279,7 +279,7 @@ def metrics(recs):
     V["CONC_POS"] = str(int((zdev > 0).sum()))
     V["CONC_NEG"] = str(int((zdev < 0).sum()))
     # 极端个例（按校正后的 |z| 排序取前三）—— 页面正文与图 1(b) 的标注用同一份名单
-    #   （图 1(b) 用的是同一个"除以 K"的口径，两处独立算、结论必然一致）
+    #   （图 1(b) 用的是同一个"除以 K"的做法，两处独立算、结论必然一致）
     V["EXTREME"] = "、".join(
         f"{s} {d['name']}（{d['concordance']:.1f}%，z={zk:+.1f}）"
         for _a, s, d, _z, zk in sorted(dev, key=lambda x: -abs(x[4]))[:3])
@@ -371,7 +371,7 @@ def metrics(recs):
     t3.append("</table></div>")
     V["T3"] = "\n".join(t3)
 
-    # ── 207/235 的误差（**同一口径比**：都是相对 1σ）──
+    # ── 207/235 的误差（**同一标准比**：都是相对 1σ）──
     wr = np.array([r["win_rel75"] for r in recs], float)
     wr = wr[np.isfinite(wr)]
     V["S75_WIN_PCT"] = f"{np.median(wr) * 100:.1f}"
@@ -446,7 +446,7 @@ def _inflate(P, k):
         for key in ("s68", "s75", "s76"):
             d[key] = float(d[key]) * k
         # 图上那句 "D1 440±23 Ma" 用的是这个 2σ，得跟着一起放大，
-        # 否则同一条域均值线旁边会同时出现两个口径的误差。
+        # 否则同一条域均值线旁边会同时出现两种误差棒。
         d["age68_2s"] = float(d["age68_2s"]) * k
     if P.get("bulk"):
         for key in ("s68", "s75", "s76"):
@@ -492,13 +492,13 @@ def figure_increment(recs, V):
                  f"协和度轴几乎判不出（中位 {V['Z_CONC_MED']}）", fontsize=10.5, loc="left")
     ax.grid(alpha=0.2, axis="y", lw=0.5)
 
-    # (b) 域级协和度（误差棒按 K 放大；着色与标注用同一个口径的 z）
+    # (b) 域级协和度（误差棒按 K 放大；着色与标注用同一个 z）
     ax = fig.add_subplot(gs[0, 1])
     xs, ys, es, cs, zs, ns = [], [], [], [], [], []
     for s, d in doms:
         if not (np.isfinite(d["conc_sigma"]) and d["conc_sigma"] > 0):
             continue
-        e = d["conc_sigma"] * K                       # ← 与表里同一口径
+        e = d["conc_sigma"] * K                       # ← 与表里一致
         z = (d["concordance"] - 100.0) / e
         xs.append(d["age68"]); ys.append(d["concordance"]); es.append(e)
         zs.append(z); ns.append(f"{s} {d['name']}")
