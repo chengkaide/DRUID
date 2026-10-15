@@ -38,9 +38,33 @@ LA-ICP-MS 锆石 U-Pb 数据还原工具。把 Qtegra/iCAP 导出的 cps 时间�
   有测试钉着）
 - 仓库布局：`druid/` 代码 · `examples/EX2022A/` 示例批次（85 个测点，样品名
   匿名成 `S01`…`S48`，标样保留）· `tests/` 自检 · `docs/` 文档站（六份页面）·
-  `tools/` 十五个脚本（`synth_batch.py` / `synth_profile.py` /
+  `tools/` 十七个脚本（`synth_batch.py` / `synth_profile.py` /
   `synth_sigma_audit.py` 会写临时批次目录、跑完自删，其余只读）——
   入口都是 `python tools/<脚本>.py --help`：
+  `export_stages.py`（把流水线**每一步的中间数据**落成机器读的 CSV ＋一份
+  `manifest.json`（含每个文件的 sha256），供"从任意一段外接别的软件"用 ——
+  最底层那个 `01_traces/`（逐 cycle 的 raw / net cps）是喂给 **Isoclock** 之类
+  "从原始质谱文件自己做全套还原"的外部工具的接点；另补出了从没进过任何表的
+  `R82`、丢在 Excel 外的 `R76 / rho / t0 / t1` 等。只读、不改任何数值输出，
+  带一条"重算年龄必须与套 F(τ) 之后逐位相等"的自检）·
+  `export_isoclock.py`（把 DRUID **自动选好**的积分区间翻写成 Isoclock 的
+  `Time_setting.npy` —— 键是**磁盘文件名（含 `.csv`）**，值是
+  `[Numbers, b0, b1, s0, s1]`（秒）。目的就是让"选区间"只做一遍：Isoclock 不做
+  自动检测、要人在界面上逐点点，两边区间不一致时"算法差异"与"区间差异"就分不开。
+  写出的秒数按 Isoclock 的 `int(秒 / Timeinternal)` **反解**、取区间中点
+  （它那边是左闭右开切片，DRUID 是闭区间 ⇒ 右端要落在"末下标 + 1"那一格）；
+  带硬自检：写出的秒数按它的算术解出的 cycle 下标必须与 DRUID 的逐点相等，
+  否则**不写文件**。它的读法逐条取自 `Isoclock2.0.py` 的
+  `loaddata()/dataprocess()/check()`，见该文件头那张表。⚠ 产物要在
+  Isoclock **加载步之后**放进它的 `outputpath`，否则会被加载步覆盖。
+  **另**写两份与软件无关的标注表，好让**同一次选区**能喂给别的软件做别的运算：
+  `interval_selection.csv`（逐点：六个**自解释**的时刻名 `ablation_*_s / blank_*_s /
+  sample_*_s` ＋ 四个 cycle 下标 ＋ 四个**时间戳** ＋ τ ＋ 诊断）与
+  `interval_cycles.csv`（逐 cycle：`seg` 段标记 ＋ `tau` ＋ 三个 `in_*` 掩码）。
+  列名、口径、逐列说明由 `TIME_POINT_LEGEND` / `CONVENTIONS` / `COLUMN_LEGEND`
+  **单一出处**生成，JSON 与 README 都从它渲染、不另抄一份。⚠ 逐 cycle 表与逐点表
+  是**两条独立路径**（掩码 vs if/elif），自检 `cycles_match` 让两者互证，
+  对不上同样不写文件；`--figure` 另存一张把六个时刻画在信号上的核对图）·
   `gen_docs_split_figure.py`（画落地页三联图并注入）·
   `gen_docs_preview.py`（画落地页首屏「一眼看到什么」那一块并注入）·
   `window_scale_facts.py`（量窗口尺度）·
